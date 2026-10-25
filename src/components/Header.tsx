@@ -1,5 +1,5 @@
 import React from 'react';
-import { User, Car, Database, UserPlus, PhoneCall, ShieldAlert } from 'lucide-react';
+import { User, Car, Database, UserPlus, PhoneCall, ShieldAlert, Download } from 'lucide-react';
 
 interface HeaderProps {
   mode: 'passenger' | 'driver';
@@ -69,7 +69,18 @@ export const Header: React.FC<HeaderProps> = ({
             </button>
           </div>
 
-          {/* Data Manager & Backup (Answers user's prompt on managing AI Studio project data) */}
+          {/* Direct Zip Download Button for GitHub */}
+          <a
+            href="/safar-app.zip"
+            download="safar-app.zip"
+            title="গিটহাব ও ক্লাউডফ্লেয়ারের জন্য সম্পূর্ণ সোর্স কোড জিপ ডাউনলোড"
+            className="flex items-center gap-1.5 bg-amber-400 hover:bg-amber-300 text-slate-950 font-bold px-2.5 sm:px-3 py-1.5 rounded-lg text-xs transition shadow-sm"
+          >
+            <Download className="w-3.5 h-3.5 text-slate-950" />
+            <span className="hidden sm:inline">সোর্স কোড জিপ</span>
+          </a>
+
+          {/* Data Manager & Backup */}
           <button
             onClick={onOpenDataManager}
             title="অন্য AI Studio প্রজেক্টের সাথে ডেটা আদান-প্রদান ও ব্যাকআপ"
