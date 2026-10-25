@@ -1,6 +1,7 @@
+import fs from 'fs';
+import path from 'path';
 import tailwindcss from '@tailwindcss/vite';
 import react from '@vitejs/plugin-react';
-import path from 'path';
 import {defineConfig} from 'vite';
 import {VitePWA} from 'vite-plugin-pwa';
 
@@ -86,9 +87,20 @@ export default defineConfig(() => {
         name: 'download-zip-and-api-middleware',
         configureServer(server) {
           server.middlewares.use((req, res, next) => {
-            if (req.url && req.url.includes('safar-gafargaon-clean-source.zip')) {
-              res.setHeader('Content-Disposition', 'attachment; filename="safar-gafargaon-clean-source.zip"');
-              res.setHeader('Content-Type', 'application/zip');
+            const urlPath = req.url ? req.url.split('?')[0] : '';
+            if (urlPath === '/safar-app.zip' || urlPath === '/safar-gafargaon-clean-source.zip') {
+              const zipPath = path.resolve(process.cwd(), 'public', urlPath.slice(1));
+              if (fs.existsSync(zipPath)) {
+                const stat = fs.statSync(zipPath);
+                res.writeHead(200, {
+                  'Content-Type': 'application/zip',
+                  'Content-Length': stat.size,
+                  'Content-Disposition': `attachment; filename="${path.basename(zipPath)}"`,
+                  'Cache-Control': 'no-cache',
+                });
+                fs.createReadStream(zipPath).pipe(res);
+                return;
+              }
             }
 
             if (req.url && (req.url === '/api/live/health' || req.url.startsWith('/api/live/health?'))) {

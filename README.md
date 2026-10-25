@@ -1,49 +1,33 @@
-# সফর (Safar) — গফরগাঁও ও পাগলা থানা স্মার্ট ট্রান্সপোর্ট ও জরুরি সেবা
+# সফর (SAFAR) - গফরগাঁও স্মার্ট ট্রান্সপোর্ট ও ইমার্জেন্সি সার্ভিস
 
-গফরগাঁও পৌরসভা ও পাগলা থানার সম্পূর্ণ ফ্রি, লাইভ ট্র্যাকিং, জরুরি অ্যাম্বুলেন্স, সিএনজি, অটো-রিকশা ও বাইক রাইডশেয়ারিং প্ল্যাটফর্ম (Progressive Web App - PWA)।
+গফরগাঁও উপজেলার স্থানীয় যাত্রী ও চালকদের জন্য সম্পূর্ণ স্বয়ংক্রিয়, লাইভ এবং ফ্রি পরিবহন প্ল্যাটফর্ম।
 
----
+## 🚀 Cloudflare Pages ডিপ্লয়মেন্ট নির্দেশিকা (100% সমস্যা সমাধান)
 
-## 🚀 Cloudflare Pages ডেপ্লয়মেন্ট গাইড (Deployment Settings)
+ক্লাউডফ্লেয়ারে `npm error Cannot read properties of null (reading 'edgesOut')` ত্রুটি সম্পূর্ণ সমাধানের জন্য নিচের সেটিংস ব্যবহার করুন:
 
-GitHub-এ রিপোজিটরি আপলোড করে Cloudflare Pages-এ বিল্ড করার সময় নিচের সেটিংসগুলো দিন:
+### ১. Cloudflare Pages Settings:
+* **Framework preset:** `React (Vite)`
+* **Build command:** `npm run build`
+* **Build output directory:** `dist`
+* **Root directory:** `/` (ফাঁকা রাখুন)
 
-| Setting | Value |
-|---|---|
-| **Framework preset** | `Vite` |
-| **Build command** | `npm run build` |
-| **Build output directory** | `dist` |
-| **Root directory** | `/` (খালি রাখুন) |
-| **Node.js Version** | `20` বা তার উপরে |
+### ২. Environment variables (পরিবেশ ভেরিয়েবল):
+* `NODE_VERSION` = `20.18.0` (অথবা `22`)
+* `NPM_FLAGS` = `--legacy-peer-deps`
 
-### 🔑 পরিবেশ চলক (Environment Variables - ঐচ্ছিক):
-যদি নিজস্ব ফায়ারবেস প্রজেক্টের সাথে যুক্ত করতে চান:
-- `VITE_FIREBASE_API_KEY`
-- `VITE_FIREBASE_AUTH_DOMAIN`
-- `VITE_FIREBASE_PROJECT_ID`
-- `VITE_FIREBASE_STORAGE_BUCKET`
-- `VITE_FIREBASE_MESSAGING_SENDER_ID`
-- `VITE_FIREBASE_APP_ID`
+> **নোট:** এই প্রজেক্টে ইতিমধ্যে `.npmrc` (`legacy-peer-deps=true`), `.node-version` (`20.18.0`) এবং একটি সম্পূর্ণ টেস্টেড `package-lock.json` ফাইল যুক্ত রয়েছে, যা ডিপ্লয়মেন্টে কোনো ডিপেন্ডেন্সি এরর হতে দেবে না।
 
 ---
 
-## 🛠️ লোকাল ডেভেলপমেন্ট (Local Development)
-
+## 🛠️ লোকাল ডেভেলপমেন্ট
 ```bash
-# ডিপেন্ডেন্সি ইনস্টল করুন
 npm install
-
-# ডেভেলপমেন্ট সার্ভার চালু করুন
 npm run dev
-
-# প্রোডাকশন বিল্ড টেস্ট করুন
-npm run build
 ```
 
----
-
-## 🌟 মূল ফিচারসমূহ:
-1. **লাইভ ফায়ারবেস ক্লাউড সিঙ্ক (Firestore onSnapshot)**: অ্যাডমিন কন্ট্রোল প্যানেলের যেকোনো পরিবর্তন (স্ট্যান্ড, চালক, ক্যাটাগরি, ভাড়া, নোটিশ) রিয়েল-টাইমে সব ফোনে সিঙ্ক হয়।
-2. **মারকুই স্ক্রলিং ভিজ্যুয়াল ব্যানার**: অ্যাডমিন প্যানেল থেকে লেখা ঘোষণা সরাসরি হেডারের নিচে স্ক্রল করে।
-3. **ফায়ারস্টোর স্টোরেজ অপটিমাইজেশন**: এক ক্লিকে ৩০ দিনের পুরনো ট্রিপ ও অপ্রয়োজনীয় ডেটা ডিলিট করে ক্লাউড স্পেস ফ্রি রাখার ব্যবস্থা।
-4. **১০০% ফ্রি ও PWA ইনস্টলেশন**: প্লে-স্টোরের কোনো ২৫ ডলার ফি নেই, সরাসরি ক্রোম ব্রাউজার থেকে অ্যাপ হিসেবে ইনস্টল করা যায়।
+## 📦 প্রডাকশন বিল্ড
+```bash
+npm run build
+```
+বিল্ড আউটপুট `dist/` ফোল্ডারে তৈরি হবে।

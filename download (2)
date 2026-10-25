@@ -1,0 +1,2 @@
+# Cloudflare Pages / CI Build Dependency Resolver Configuration
+legacy-peer-deps=true
