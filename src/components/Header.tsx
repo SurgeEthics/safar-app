@@ -8,6 +8,7 @@ interface HeaderProps {
   onOpenDriverRegister: () => void;
   onOpenEmergencyDirectory: () => void;
   totalDriversCount: number;
+  onOpenDownloadModal?: () => void;
 }
 
 export const Header: React.FC<HeaderProps> = ({
@@ -16,16 +17,19 @@ export const Header: React.FC<HeaderProps> = ({
   onOpenDataManager,
   onOpenDriverRegister,
   onOpenEmergencyDirectory,
-  totalDriversCount
+  totalDriversCount,
+  onOpenDownloadModal
 }) => {
   return (
     <header className="bg-emerald-800 text-white shadow-md sticky top-0 z-40 transition-colors">
       <div className="max-w-7xl mx-auto px-3 sm:px-4 py-2.5 flex items-center justify-between gap-2 flex-wrap">
         {/* Brand identity */}
         <div className="flex items-center gap-2.5 sm:gap-3 cursor-pointer select-none">
-          <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-xl bg-white/10 border border-white/25 flex items-center justify-center font-bold text-2xl text-white shadow-inner">
-            <span className="font-serif">S</span>
-          </div>
+          <img 
+            src="/safar-logo.svg" 
+            alt="সফর লোগো" 
+            className="w-9 h-9 sm:w-10 sm:h-10 rounded-xl shadow-md border border-emerald-300/40 object-contain hover:scale-105 transition-transform" 
+          />
           <div>
             <div className="flex items-center gap-2">
               <h1 className="text-xl sm:text-2xl font-bold tracking-tight text-white leading-none">
@@ -68,17 +72,6 @@ export const Header: React.FC<HeaderProps> = ({
               <span>চালক</span>
             </button>
           </div>
-
-          {/* Direct Zip Download Button for GitHub */}
-          <a
-            href="/safar-app.zip"
-            download="safar-app.zip"
-            title="গিটহাব ও ক্লাউডফ্লেয়ারের জন্য সম্পূর্ণ সোর্স কোড জিপ ডাউনলোড"
-            className="flex items-center gap-1.5 bg-amber-400 hover:bg-amber-300 text-slate-950 font-bold px-2.5 sm:px-3 py-1.5 rounded-lg text-xs transition shadow-sm"
-          >
-            <Download className="w-3.5 h-3.5 text-slate-950" />
-            <span className="hidden sm:inline">সোর্স কোড জিপ</span>
-          </a>
 
           {/* Data Manager & Backup */}
           <button

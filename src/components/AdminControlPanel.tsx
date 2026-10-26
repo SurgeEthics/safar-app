@@ -81,6 +81,7 @@ export interface AdminControlPanelProps {
   showToast: (msg: string) => void;
   onCleanupOldTrips?: () => void;
   tripStats?: { total: number; completed: number; cancelled: number };
+  onOpenSourceCodeModal?: () => void;
 }
 
 export const AdminControlPanel: React.FC<AdminControlPanelProps> = ({
@@ -106,9 +107,11 @@ export const AdminControlPanel: React.FC<AdminControlPanelProps> = ({
   onSaveHotlines,
   showToast,
   onCleanupOldTrips,
-  tripStats
+  tripStats,
+  onOpenSourceCodeModal
 }) => {
   const [activeTab, setActiveTab] = useState<'stands' | 'categories' | 'appearance' | 'quick_chips' | 'drivers' | 'hotlines' | 'backup'>('appearance');
+  const [isZipDownloading, setIsZipDownloading] = useState(false);
 
   // Stand Form Modal State
   const [editingStand, setEditingStand] = useState<Stand | null>(null);
@@ -260,6 +263,36 @@ export const AdminControlPanel: React.FC<AdminControlPanelProps> = ({
     a.click();
     URL.revokeObjectURL(url);
     showToast('কনফিগারেশন ব্যাকআপ ডাউনলোড সম্পন্ন হয়েছে!');
+  };
+
+  // Full Project Source Code 1-Click ZIP Download (Safe In-App Blob Download)
+  const handleDownloadZip = async () => {
+    setIsZipDownloading(true);
+    try {
+      const res = await fetch(`/safar-app.zip?t=${Date.now()}`, { cache: 'no-store' });
+      if (!res.ok) throw new Error(`সার্ভার এরর: HTTP ${res.status}`);
+      const blob = await res.blob();
+      if (!blob || blob.size < 1000) {
+        throw new Error('জিপ ফাইল লোড হতে সমস্যা হয়েছে');
+      }
+      const url = window.URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = 'safar-gafargaon-clean-source.zip';
+      document.body.appendChild(link);
+      link.click();
+      setTimeout(() => {
+        window.URL.revokeObjectURL(url);
+        document.body.removeChild(link);
+      }, 2000);
+      showToast('🎉 সফলভাবে সম্পূর্ণ সোর্স কোড জিপ (২.৭৫ MB) ডাউনলোড হয়েছে!');
+    } catch (err: any) {
+      console.error('ZIP download error:', err);
+      showToast('সরাসরি ডাউনলোড লিঙ্ক ওপেন করা হচ্ছে...');
+      window.location.href = '/safar-app.zip';
+    } finally {
+      setIsZipDownloading(false);
+    }
   };
 
   // Import JSON Backup
@@ -1372,29 +1405,50 @@ export const AdminControlPanel: React.FC<AdminControlPanelProps> = ({
                 </div>
               </div>
 
-              {/* Full Source Code Zip Download */}
-              <div className="bg-gradient-to-r from-emerald-50 via-teal-50 to-emerald-100 p-5 rounded-2xl border-2 border-emerald-300 shadow-xs space-y-3">
+              {/* Full Source Code Zip Download Card (With Yellow Zip Button) */}
+              <div className="bg-gradient-to-r from-amber-50 via-amber-100/40 to-emerald-50 p-5 rounded-2xl border-2 border-amber-300 shadow-sm space-y-3">
                 <div className="flex items-center justify-between">
-                  <h3 className="font-extrabold text-sm sm:text-base text-emerald-950 flex items-center gap-2">
-                    <Download className="w-5 h-5 text-emerald-700" />
+                  <h3 className="font-extrabold text-sm sm:text-base text-slate-900 flex items-center gap-2">
+                    <Download className="w-5 h-5 text-amber-600" />
                     সম্পূর্ণ প্রজেক্ট সোর্স কোড ডাউনলোড (.ZIP)
                   </h3>
-                  <span className="text-[11px] font-bold bg-emerald-600 text-white px-2.5 py-0.5 rounded-full shadow-xs">
-                    ১.৩৮ MB • Clean
+                  <span className="text-[11px] font-bold bg-amber-400 text-slate-950 px-2.5 py-0.5 rounded-full shadow-xs border border-amber-500/50">
+                    ২.৭৫ MB • Full Source + Build
                   </span>
                 </div>
-                <p className="text-xs text-emerald-900 leading-relaxed">
-                  ফায়ারবেস কনফিগারেশন (<code>firebase/</code>), ক্লাউডফ্লেয়ার লাইভ এজ স্ক্রিপ্ট (<code>cloudflare-worker/</code>), এক্সপ্রেস সার্ভার (<code>server.ts</code>), ম্যাপ ও সকল রিয়্যাক্ট কম্পোনেন্ট সহ প্রস্তুতকৃত অফিশিয়াল জিপ ফাইল।
+                <p className="text-xs text-slate-700 leading-relaxed">
+                  আপনার সম্পূর্ণ অ্যাপের রিয়্যাক্ট ১৯, টাইপস্ক্রিপ্ট সোর্স কোড, চালক ভেরিফিকেশন পপআপ কোড, লাইভ ম্যাপ, আইকন, এবং প্রস্তুতকৃত <strong>dist/</strong> প্রোডাকশন বিল্ড ফাইল সহ সম্পূর্ণ অফিশিয়াল জিপ ফাইল। এটি গিটহাব বা ক্লাউডফ্লেয়ারে ডিপ্লয়ের জন্য শতভাগ প্রস্তুত।
                 </p>
-                <div className="flex flex-wrap items-center gap-3 pt-1">
-                  <a
-                    href="/safar-gafargaon-clean-source.zip"
-                    download="safar-gafargaon-clean-source.zip"
-                    className="inline-flex items-center gap-2 bg-emerald-700 hover:bg-emerald-800 text-white font-extrabold px-5 py-2.5 rounded-xl text-xs sm:text-sm shadow-md cursor-pointer transition active:scale-95"
+                <div className="flex flex-wrap items-center gap-2.5 pt-1">
+                  {/* The requested yellow zip button */}
+                  <button
+                    type="button"
+                    onClick={handleDownloadZip}
+                    disabled={isZipDownloading}
+                    className="inline-flex items-center gap-2 bg-amber-400 hover:bg-amber-300 text-slate-950 font-black px-5 py-2.5 rounded-xl text-xs sm:text-sm shadow-md cursor-pointer transition active:scale-95 border border-amber-500/60"
                   >
-                    <Download className="w-4 h-4" />
-                    <span>সোর্স কোড জিপ নামান (Direct Download)</span>
-                  </a>
+                    {isZipDownloading ? (
+                      <>
+                        <div className="w-4 h-4 border-2 border-slate-950 border-t-transparent rounded-full animate-spin" />
+                        <span>জিপ ফাইল ডাউনলোড হচ্ছে...</span>
+                      </>
+                    ) : (
+                      <>
+                        <Download className="w-4 h-4 text-slate-950" />
+                        <span>📥 সোর্স কোড জিপ ডাউনলোড করুন (২.৭৫ MB)</span>
+                      </>
+                    )}
+                  </button>
+
+                  {onOpenSourceCodeModal && (
+                    <button
+                      type="button"
+                      onClick={onOpenSourceCodeModal}
+                      className="inline-flex items-center gap-1.5 bg-white hover:bg-slate-50 text-slate-800 font-bold px-3.5 py-2.5 rounded-xl text-xs sm:text-sm shadow-xs border border-slate-300 cursor-pointer transition"
+                    >
+                      <span>ডিপ্লয় গাইড ও বিবরণ</span>
+                    </button>
+                  )}
                 </div>
               </div>
 

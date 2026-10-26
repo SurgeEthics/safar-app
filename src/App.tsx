@@ -56,8 +56,8 @@ import L from 'leaflet';
 import { SafarLogo } from './components/SafarLogo';
 import { VerificationGatewayModal } from './components/VerificationGatewayModal';
 import { DriverVerificationSuccessModal } from './components/DriverVerificationSuccessModal';
-import { FullVerificationGuidedModal } from './components/FullVerificationGuidedModal';
 import { PWAInstallBanner } from './components/PWAInstallBanner';
+import { SourceCodeDownloadModal } from './components/SourceCodeDownloadModal';
 import confetti from 'canvas-confetti';
 import { sounds } from './utils/audio';
 import { toBengaliNumber } from './utils/calculator';
@@ -1039,6 +1039,7 @@ export default function App() {
   const [selectedCategory, setSelectedCategory] = useState<VehicleCategory>('all');
   const [selectedStand, setSelectedStand] = useState<string>('all');
   const [searchQuery, setSearchQuery] = useState('');
+  const [showSourceCodeModal, setShowSourceCodeModal] = useState(false);
 
   // 1. Dynamic Stands State (Manageable by Admin, persisted in localStorage with Google Maps auto-migration)
   const [stands, setStands] = useState<Stand[]>(() => {
@@ -3193,7 +3194,6 @@ export default function App() {
   const [verificationGateType, setVerificationGateType] = useState<'brta' | 'wa' | 'nid' | null>(null);
   const [verifyingDriverTarget, setVerifyingDriverTarget] = useState<Driver | null>(null);
   const [successModalDriver, setSuccessModalDriver] = useState<Driver | null>(null);
-  const [guidedModalDriver, setGuidedModalDriver] = useState<Driver | null>(null);
 
   const handleOpenVerificationGate = (driver: Driver, gateType: 'brta' | 'wa' | 'nid') => {
     setVerifyingDriverTarget(driver);
@@ -3365,12 +3365,9 @@ export default function App() {
     }
   };
 
-  // 3-Pillar Full Approval Handler: Opens interactive guided review
+  // 3-Pillar Full Approval Handler: Directly execute full approval
   const handleApproveAllDriver = (driverId: string) => {
-    const drv = drivers.find(d => d.id === driverId);
-    if (drv) {
-      setGuidedModalDriver(drv);
-    }
+    handleExecuteFullApproval(driverId);
   };
 
   // Revoke All Verifications (Set Pending)
@@ -6427,6 +6424,7 @@ export default function App() {
         isOpen={showAdminDashboard}
         onClose={() => setShowAdminDashboard(false)}
         onOpenCloudflareSettings={() => setShowCloudflareModal(true)}
+        onOpenSourceCodeModal={() => setShowSourceCodeModal(true)}
         stands={stands}
         onSaveStand={(stand, isEdit) => {
           if (isEdit) {
@@ -7685,23 +7683,7 @@ export default function App() {
         />
       )}
 
-      {/* 11. GUIDED 3-PILLAR FULL VERIFICATION REVIEW MODAL */}
-      {guidedModalDriver && (
-        <FullVerificationGuidedModal
-          isOpen={Boolean(guidedModalDriver)}
-          driver={guidedModalDriver}
-          onClose={() => setGuidedModalDriver(null)}
-          onOpenSpecificGate={(drv, gate) => {
-            setGuidedModalDriver(null);
-            handleOpenVerificationGate(drv, gate);
-          }}
-          onConfirmFullApproval={(driverId) => {
-            handleExecuteFullApproval(driverId);
-          }}
-        />
-      )}
-
-      {/* 12. DRIVER VERIFICATION SUCCESS CELEBRATION MODAL WITH SENT SMS NOTIFICATION */}
+      {/* 11. DRIVER VERIFICATION SUCCESS CELEBRATION MODAL WITH SENT SMS NOTIFICATION */}
       {successModalDriver && (
         <DriverVerificationSuccessModal
           isOpen={Boolean(successModalDriver)}
@@ -7723,6 +7705,12 @@ export default function App() {
         serverType={serverState.serverType}
         activeDriversCount={serverState.drivers.length > 0 ? serverState.drivers.length : drivers.filter(d => d.isOnline).length}
         activePassengersCount={serverState.passengers.length}
+      />
+
+      {/* 14. SOURCE CODE ZIP DOWNLOAD MODAL (SAFE 1-CLICK CLIENT DOWNLOAD) */}
+      <SourceCodeDownloadModal
+        isOpen={showSourceCodeModal}
+        onClose={() => setShowSourceCodeModal(false)}
       />
 
     </div>

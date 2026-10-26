@@ -15,9 +15,9 @@ export default defineConfig(() => {
         includeAssets: ['favicon.ico', 'apple-touch-icon.png'],
         manifest: {
           id: '/',
-          name: 'সফর - গফরগাঁও স্মার্ট ট্রান্সপোর্ট ও ইমার্জেন্সি',
-          short_name: 'সফর অ্যাপ',
-          description: 'গফরগাঁওয়ের স্থানীয় যাত্রী ও চালকদের স্মার্ট ডিজিটাল প্ল্যাটফর্ম — লাইভ ম্যাপ, ভাড়ার হিসাব, নির্ভরযোগ্য চালক ও জরুরি সেবা।',
+          name: 'সফর',
+          short_name: 'সফর',
+          description: 'স্মার্ট ট্রান্সপোর্ট এন্ড ইমারজেন্সি সার্ভিস',
           theme_color: '#059669',
           background_color: '#ffffff',
           display: 'standalone',
@@ -46,6 +46,7 @@ export default defineConfig(() => {
           ],
         },
         workbox: {
+          navigateFallbackDenylist: [/^\/.*\.zip$/, /^\/api\/.*/],
           globPatterns: ['**/*.{js,css,html,ico,png,svg,woff,woff2}'],
           runtimeCaching: [
             {
@@ -88,15 +89,24 @@ export default defineConfig(() => {
         configureServer(server) {
           server.middlewares.use((req, res, next) => {
             const urlPath = req.url ? req.url.split('?')[0] : '';
-            if (urlPath === '/safar-app.zip' || urlPath === '/safar-gafargaon-clean-source.zip') {
-              const zipPath = path.resolve(process.cwd(), 'public', urlPath.slice(1));
+            if (
+              urlPath === '/safar-app.zip' || 
+              urlPath === '/safar-gafargaon-clean-source.zip' ||
+              urlPath === '/download-zip' ||
+              urlPath === '/api/download-zip'
+            ) {
+              const zipPath = path.resolve(process.cwd(), 'public', 'safar-app.zip');
               if (fs.existsSync(zipPath)) {
                 const stat = fs.statSync(zipPath);
                 res.writeHead(200, {
                   'Content-Type': 'application/zip',
                   'Content-Length': stat.size,
-                  'Content-Disposition': `attachment; filename="${path.basename(zipPath)}"`,
-                  'Cache-Control': 'no-cache',
+                  'Content-Disposition': 'attachment; filename="safar-gafargaon-clean-source.zip"',
+                  'Access-Control-Allow-Origin': '*',
+                  'Access-Control-Allow-Methods': 'GET, OPTIONS',
+                  'Cache-Control': 'no-cache, no-store, must-revalidate',
+                  'Pragma': 'no-cache',
+                  'Expires': '0',
                 });
                 fs.createReadStream(zipPath).pipe(res);
                 return;

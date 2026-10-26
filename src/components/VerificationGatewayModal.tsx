@@ -7,21 +7,16 @@ import {
   Phone,
   MessageCircle,
   Clock,
-  AlertTriangle,
-  RefreshCw,
   Send,
   Copy,
   Check,
   KeyRound,
-  ShieldAlert,
   Car,
   FileText,
   Calendar,
   Maximize2,
   Eye,
-  FileCheck,
-  Search,
-  Sparkles
+  FileCheck
 } from 'lucide-react';
 import confetti from 'canvas-confetti';
 import { sounds } from '../utils/audio';
@@ -78,15 +73,12 @@ export const VerificationGatewayModal: React.FC<VerificationGatewayModalProps> =
 
   // BRTA dual-part tab switcher ('license' | 'vehicle')
   const [brtaSubPart, setBrtaSubPart] = useState<'license' | 'vehicle'>('license');
-  const [isReceiptZoomOpen, setIsReceiptZoomOpen] = useState(false);
+  const [brtaLicenseChecked, setBrtaLicenseChecked] = useState(Boolean(driver.licenseVerified));
+  const [brtaVehicleChecked, setBrtaVehicleChecked] = useState(Boolean(driver.licenseVerified));
+  const [nidManualChecked, setNidManualChecked] = useState(Boolean(driver.nidVerified));
+
+  // Zoomed image modal
   const [zoomedImage, setZoomedImage] = useState<{ src: string; title: string } | null>(null);
-
-  // BRTA Search Query simulation states
-  const [isBrtaLicenseSearching, setIsBrtaLicenseSearching] = useState(false);
-  const [brtaLicenseSearchDone, setBrtaLicenseSearchDone] = useState(Boolean(driver.licenseVerified));
-
-  const [isBrtaVehicleSearching, setIsBrtaVehicleSearching] = useState(false);
-  const [brtaVehicleSearchDone, setBrtaVehicleSearchDone] = useState(Boolean(driver.licenseVerified));
 
   // WhatsApp & OTP specific
   const [otpCode, setOtpCode] = useState<string>('');
@@ -94,12 +86,6 @@ export const VerificationGatewayModal: React.FC<VerificationGatewayModalProps> =
   const [isOtpSent, setIsOtpSent] = useState(false);
   const [otpTimer, setOtpTimer] = useState(60);
   const [otpError, setOtpError] = useState<string | null>(null);
-  const [isOtpVerifying, setIsOtpVerifying] = useState(false);
-  const [otpVerifiedSuccess, setOtpVerifiedSuccess] = useState(Boolean(driver.phoneVerified));
-
-  // NID specific
-  const [isNidChecking, setIsNidChecking] = useState(false);
-  const [nidCheckDone, setNidCheckDone] = useState(Boolean(driver.nidVerified));
 
   // Countdown timer for OTP
   useEffect(() => {
@@ -143,23 +129,7 @@ export const VerificationGatewayModal: React.FC<VerificationGatewayModalProps> =
     }
   };
 
-  // 1. BRTA Verification Flow
-  const handleRunBrtaLicenseQuery = () => {
-    setIsBrtaLicenseSearching(true);
-    setTimeout(() => {
-      setIsBrtaLicenseSearching(false);
-      setBrtaLicenseSearchDone(true);
-    }, 1100);
-  };
-
-  const handleRunBrtaVehicleQuery = () => {
-    setIsBrtaVehicleSearching(true);
-    setTimeout(() => {
-      setIsBrtaVehicleSearching(false);
-      setBrtaVehicleSearchDone(true);
-    }, 1100);
-  };
-
+  // 1. BRTA Verification Flow (Direct Portal Approval without dummy query simulation)
   const handleConfirmBrtaApproval = () => {
     onApprove(driver.id, 'brta');
     triggerConfettiAndSuccess('brta');
@@ -176,18 +146,13 @@ export const VerificationGatewayModal: React.FC<VerificationGatewayModalProps> =
   };
 
   const handleVerifyOtp = () => {
-    setIsOtpVerifying(true);
-    setTimeout(() => {
-      setIsOtpVerifying(false);
-      if (enteredOtp.trim() === otpCode || enteredOtp.trim() === '1234') {
-        setOtpVerifiedSuccess(true);
-        onApprove(driver.id, 'wa');
-        triggerConfettiAndSuccess('wa');
-        setTimeout(() => onClose(), 800);
-      } else {
-        setOtpError('ভুল ওটিপি কোড! অনুগ্রহ করে চালকের মোবাইলে পাঠানো ৪-ডিজিটের কোড দিন।');
-      }
-    }, 600);
+    if (enteredOtp.trim() === otpCode || enteredOtp.trim() === '1234') {
+      onApprove(driver.id, 'wa');
+      triggerConfettiAndSuccess('wa');
+      onClose();
+    } else {
+      setOtpError('ভুল ওটিপি কোড! অনুগ্রহ করে চালকের মোবাইলে পাঠানো ৪-ডিজিটের কোড দিন।');
+    }
   };
 
   const handleDirectWaApproval = () => {
@@ -197,14 +162,6 @@ export const VerificationGatewayModal: React.FC<VerificationGatewayModalProps> =
   };
 
   // 3. NID Verification Flow
-  const handleRunNidQuery = () => {
-    setIsNidChecking(true);
-    setTimeout(() => {
-      setIsNidChecking(false);
-      setNidCheckDone(true);
-    }, 1200);
-  };
-
   const handleConfirmNidApproval = () => {
     onApprove(driver.id, 'nid');
     triggerConfettiAndSuccess('nid');
@@ -229,7 +186,7 @@ export const VerificationGatewayModal: React.FC<VerificationGatewayModalProps> =
         {type === 'brta' && (
           <div className="flex flex-col flex-1 overflow-hidden">
             {/* Header */}
-            <div className="bg-gradient-to-r from-emerald-800 to-teal-800 text-white p-4 sm:p-5 flex items-start justify-between shrink-0">
+            <div className="bg-emerald-800 text-white p-4 sm:p-5 flex items-start justify-between shrink-0">
               <div className="flex items-center gap-2.5">
                 <div className="w-10 h-10 rounded-2xl bg-white/10 border border-white/20 flex items-center justify-center text-emerald-200 shadow-inner">
                   <ShieldCheck className="w-6 h-6 text-emerald-300" />
@@ -244,6 +201,7 @@ export const VerificationGatewayModal: React.FC<VerificationGatewayModalProps> =
                 </div>
               </div>
               <button
+                type="button"
                 onClick={onClose}
                 className="text-white/80 hover:text-white p-1 rounded-lg hover:bg-white/10 transition cursor-pointer"
                 title="বন্ধ করুন"
@@ -252,7 +210,7 @@ export const VerificationGatewayModal: React.FC<VerificationGatewayModalProps> =
               </button>
             </div>
 
-            {/* Sub-Part Switcher */}
+            {/* Sub-Part Switcher Tabs */}
             <div className="flex items-center border-b border-slate-200 bg-slate-100/80 px-4 pt-2.5 gap-2 shrink-0">
               <button
                 type="button"
@@ -292,7 +250,9 @@ export const VerificationGatewayModal: React.FC<VerificationGatewayModalProps> =
                 <div>
                   <span className="text-slate-500 font-medium">চালক: </span>
                   <span className="font-bold text-slate-900 text-sm">{driver.name}</span>
-                  <span className="text-slate-500 ml-2">({driver.vehicleModel})</span>
+                  {driver.vehicleModel && (
+                    <span className="text-slate-500 ml-1.5">({driver.vehicleModel})</span>
+                  )}
                 </div>
                 <span className={`font-bold px-2 py-0.5 rounded text-[11px] ${
                   driver.licenseVerified ? 'bg-emerald-100 text-emerald-800' : 'bg-amber-100 text-amber-800'
@@ -306,7 +266,7 @@ export const VerificationGatewayModal: React.FC<VerificationGatewayModalProps> =
               {/* ------------------------------------------------------------------ */}
               {brtaSubPart === 'license' && (
                 <div className="space-y-3 animate-in fade-in duration-150">
-                  <div className="p-3.5 rounded-2xl border border-blue-200 bg-blue-50/70 space-y-2.5">
+                  <div className="p-3.5 rounded-2xl border border-blue-200 bg-blue-50/70 space-y-3">
                     <div className="flex items-start gap-2">
                       <span className="w-5 h-5 rounded-full bg-blue-600 text-white font-bold text-xs flex items-center justify-center shrink-0">
                         ১
@@ -316,7 +276,7 @@ export const VerificationGatewayModal: React.FC<VerificationGatewayModalProps> =
                           অফিসিয়াল ড্রাইভিং লাইসেন্স ডাটাবেস যাচাই
                         </h4>
                         <p className="text-[11px] text-blue-800 mt-0.5">
-                          বাংলাদেশ সড়ক পরিবহন কর্তৃপক্ষ (BRTA) কেন্দ্রীয় লাইসেন্স সার্ভারে তথ্য অনুসন্ধান ও সত্যতা যাচাই করুন।
+                          বাংলাদেশ সরকারি ড্রাইভিং লাইসেন্স পোর্টাল থেকে চালকের লাইসেন্স নম্বর ও ইস্যুর তারিখ দিয়ে রেকর্ড যাচাই করুন।
                         </p>
                       </div>
                     </div>
@@ -362,67 +322,36 @@ export const VerificationGatewayModal: React.FC<VerificationGatewayModalProps> =
 
                     {copiedField && (
                       <div className="p-1.5 bg-emerald-100 text-emerald-800 rounded-lg text-center text-[10.5px] font-bold animate-in fade-in">
-                        ✓ তথ্য ক্লিপবোর্ডে কপি হয়েছে!
+                        ✓ তথ্য ক্লিপবোর্ডে কপি হয়েছে! সরকারি সাইটের বক্সে পেস্ট করুন।
                       </div>
                     )}
 
-                    {/* Interactive Query Search Button */}
-                    {!brtaLicenseSearchDone ? (
-                      <button
-                        type="button"
-                        onClick={handleRunBrtaLicenseQuery}
-                        disabled={isBrtaLicenseSearching}
-                        className="w-full bg-blue-700 hover:bg-blue-800 text-white font-bold py-2.5 px-3 rounded-xl text-xs flex items-center justify-center gap-2 shadow-xs transition cursor-pointer disabled:opacity-70"
-                      >
-                        {isBrtaLicenseSearching ? (
-                          <>
-                            <RefreshCw className="w-4 h-4 animate-spin text-white" />
-                            <span>বিআরটিএ সার্ভারে তথ্য অনুসন্ধান চলছে...</span>
-                          </>
-                        ) : (
-                          <>
-                            <Search className="w-4 h-4 text-blue-200" />
-                            <span>বিআরটিএ সার্ভারে অনুসন্ধান ও যাচাই করুন</span>
-                          </>
-                        )}
-                      </button>
-                    ) : (
-                      <div className="p-3 bg-white rounded-xl border border-emerald-300 shadow-2xs space-y-2 animate-in fade-in">
-                        <div className="flex items-center gap-2 text-emerald-800 font-bold text-xs">
-                          <CheckCircle className="w-4 h-4 text-emerald-600 shrink-0" />
-                          <span>BRTA ড্রাইভিং লাইসেন্স তথ্য সফলভাবে ভেরিফাইড হয়েছে!</span>
-                        </div>
-                        <div className="grid grid-cols-2 gap-1.5 text-[11px] text-slate-700 pt-1 border-t border-slate-100">
-                          <div>
-                            <span className="text-slate-400">লাইসেন্স টাইপ:</span>{' '}
-                            <span className="font-bold text-slate-800">{driver.licenseType || 'পেশাদার (Professional)'}</span>
-                          </div>
-                          <div>
-                            <span className="text-slate-400">মেয়াদ:</span>{' '}
-                            <span className="font-bold text-emerald-700">১৫/০৪/২০২৬ (বৈধ)</span>
-                          </div>
-                          <div>
-                            <span className="text-slate-400">সার্কেল:</span>{' '}
-                            <span className="font-semibold text-slate-800">ময়মনসিংহ বিআরটিএ</span>
-                          </div>
-                          <div>
-                            <span className="text-slate-400">রেকর্ড স্ট্যাটাস:</span>{' '}
-                            <span className="font-bold text-emerald-700">সক্রিয় ও বৈধ</span>
-                          </div>
-                        </div>
-                      </div>
-                    )}
-
-                    {/* Official Portal External Link */}
+                    {/* Official Portal External Link Button */}
                     <a
                       href="https://bsp.brta.gov.bd/"
                       target="_blank"
                       rel="noopener noreferrer"
-                      className="w-full bg-slate-100 hover:bg-slate-200 text-slate-800 font-semibold py-2 px-3 rounded-xl text-xs flex items-center justify-center gap-1.5 transition border border-slate-300"
+                      className="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-2.5 px-3 rounded-xl text-xs sm:text-sm flex items-center justify-center gap-2 shadow-xs transition cursor-pointer"
                     >
-                      <ExternalLink className="w-3.5 h-3.5 text-blue-600" />
-                      <span>বিআরটিএ অফিসিয়াল সার্ভিস পোর্টাল (bsp.brta.gov.bd) ↗</span>
+                      <ExternalLink className="w-4 h-4" />
+                      <span>বিআরটিএ অফিসিয়াল সার্ভিস পোর্টাল (bsp.brta.gov.bd) ওপেন করুন ↗</span>
                     </a>
+
+                    {/* Checkbox verification card */}
+                    <label className="flex items-start gap-2.5 p-3 rounded-xl bg-white border border-blue-200 cursor-pointer hover:bg-blue-50/40 transition">
+                      <input
+                        type="checkbox"
+                        checked={brtaLicenseChecked}
+                        onChange={(e) => setBrtaLicenseChecked(e.target.checked)}
+                        className="mt-0.5 w-4 h-4 text-emerald-600 rounded border-slate-300 focus:ring-emerald-500 cursor-pointer"
+                      />
+                      <div className="text-xs">
+                        <span className="font-bold text-slate-900 block">বিআরটিএ পোর্টালে লাইসেন্স যাচাই সম্পন্ন</span>
+                        <span className="text-[11px] text-slate-600 mt-0.5 block leading-relaxed">
+                          আমি নিজে bsp.brta.gov.bd পোর্টালে এই চালকের লাইসেন্স নম্বর ও জন্ম তারিখ মিলিয়ে রেকর্ড সক্রিয় ও সঠিক পেয়েছি।
+                        </span>
+                      </div>
+                    </label>
                   </div>
                 </div>
               )}
@@ -442,7 +371,7 @@ export const VerificationGatewayModal: React.FC<VerificationGatewayModalProps> =
                           বিআরটিএ অফিসিয়াল মোটরযান ও ট্যাক্স টোকেন অনুসন্ধান
                         </h4>
                         <p className="text-[11px] text-emerald-800 mt-0.5">
-                          সরকারি মোটরযান পোর্টালে গাড়ি ভেরিফিকেশনের জন্য নিচের ৪টি আবশ্যক তথ্য দিয়ে অনুসন্ধান করুন:
+                          সরকারি মোটরযান পোর্টালে গাড়ি ভেরিফিকেশনের জন্য নিচের ৪টি আবশ্যক তথ্য কপি করে সরাসরি অনুসন্ধান করুন:
                         </p>
                       </div>
                     </div>
@@ -524,56 +453,36 @@ export const VerificationGatewayModal: React.FC<VerificationGatewayModalProps> =
 
                     {copiedField && (
                       <div className="p-1.5 bg-emerald-100 text-emerald-800 rounded-lg text-center text-[10.5px] font-bold animate-in fade-in">
-                        ✓ তথ্য ক্লিপবোর্ডে কপি হয়েছে!
+                        ✓ তথ্য ক্লিপবোর্ডে কপি হয়েছে! সরকারি সাইটের বক্সে পেস্ট করুন।
                       </div>
                     )}
 
-                    {/* Interactive Vehicle Query Search Button */}
-                    {!brtaVehicleSearchDone ? (
-                      <button
-                        type="button"
-                        onClick={handleRunBrtaVehicleQuery}
-                        disabled={isBrtaVehicleSearching}
-                        className="w-full bg-emerald-700 hover:bg-emerald-800 text-white font-bold py-2.5 px-3 rounded-xl text-xs flex items-center justify-center gap-2 shadow-xs transition cursor-pointer disabled:opacity-70"
-                      >
-                        {isBrtaVehicleSearching ? (
-                          <>
-                            <RefreshCw className="w-4 h-4 animate-spin text-white" />
-                            <span>বিআরটিএ মোটরযান তথ্য অনুসন্ধান চলছে...</span>
-                          </>
-                        ) : (
-                          <>
-                            <Search className="w-4 h-4 text-emerald-200" />
-                            <span>বিআরটিএ ডেটাবেসে মোটরযান অনুসন্ধান করুন</span>
-                          </>
-                        )}
-                      </button>
-                    ) : (
-                      <div className="p-3 bg-white rounded-xl border border-emerald-300 shadow-2xs space-y-2 animate-in fade-in">
-                        <div className="flex items-center gap-2 text-emerald-800 font-bold text-xs">
-                          <CheckCircle className="w-4 h-4 text-emerald-600 shrink-0" />
-                          <span>মোটরযান রেজিস্ট্রেশন ও ট্যাক্স টোকেন সরকারি ডাটাবেসে হালনাগাদ রয়েছে!</span>
-                        </div>
-                        <div className="grid grid-cols-2 gap-1.5 text-[11px] text-slate-700 pt-1 border-t border-slate-100">
-                          <div>
-                            <span className="text-slate-400">রেজিস্ট্রেশন:</span>{' '}
-                            <span className="font-bold text-slate-800">{driver.plateNumber}</span>
-                          </div>
-                          <div>
-                            <span className="text-slate-400">ট্যাক্স টোকেন:</span>{' '}
-                            <span className="font-bold text-emerald-700">পরিশোধিত (সক্রিয়)</span>
-                          </div>
-                          <div>
-                            <span className="text-slate-400">গাড়ির মডেল:</span>{' '}
-                            <span className="font-semibold text-slate-800">{driver.vehicleModel}</span>
-                          </div>
-                          <div>
-                            <span className="text-slate-400">ফিটনেস সনদ:</span>{' '}
-                            <span className="font-bold text-emerald-700">বৈধ</span>
-                          </div>
-                        </div>
+                    {/* Official Portal External Link Button */}
+                    <a
+                      href="https://bsp.brta.gov.bd/"
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="w-full bg-emerald-800 hover:bg-emerald-900 text-white font-bold py-2.5 px-3 rounded-xl text-xs sm:text-sm flex items-center justify-center gap-2 shadow-xs transition cursor-pointer"
+                    >
+                      <ExternalLink className="w-4 h-4" />
+                      <span>বিআরটিএ মোটরযান অনুসন্ধান পোর্টাল ওপেন করুন ↗</span>
+                    </a>
+
+                    {/* Checkbox verification card */}
+                    <label className="flex items-start gap-2.5 p-3 rounded-xl bg-white border border-emerald-200 cursor-pointer hover:bg-emerald-50/40 transition">
+                      <input
+                        type="checkbox"
+                        checked={brtaVehicleChecked}
+                        onChange={(e) => setBrtaVehicleChecked(e.target.checked)}
+                        className="mt-0.5 w-4 h-4 text-emerald-600 rounded border-slate-300 focus:ring-emerald-500 cursor-pointer"
+                      />
+                      <div className="text-xs">
+                        <span className="font-bold text-slate-900 block">মোটরযান ও ট্যাক্স টোকেন যাচাই সম্পন্ন</span>
+                        <span className="text-[11px] text-slate-600 mt-0.5 block leading-relaxed">
+                          আমি নিজে বিআরটিএ পোর্টালে এই মোটরযানের চেসিস, ইঞ্জিন ও রেজিস্ট্রেশন নম্বর মিলিয়ে ট্যাক্স ও ফিটনেস রেকর্ড সঠিক পেয়েছি।
+                        </span>
                       </div>
-                    )}
+                    </label>
 
                     {/* Tax Token Receipt Photo Section */}
                     <div className="p-2.5 rounded-xl bg-white border border-slate-200 space-y-1.5">
@@ -596,7 +505,7 @@ export const VerificationGatewayModal: React.FC<VerificationGatewayModalProps> =
                       {driver.taxTokenReceiptPhoto ? (
                         <div
                           className="relative group rounded-lg overflow-hidden border border-slate-200 bg-slate-100 cursor-pointer max-h-32 flex items-center justify-center"
-                          onClick={() => setIsReceiptZoomOpen(true)}
+                          onClick={() => setZoomedImage({ src: driver.taxTokenReceiptPhoto!, title: `${driver.name} - ট্যাক্স টোকেন রিসিট` })}
                         >
                           <img
                             src={driver.taxTokenReceiptPhoto}
@@ -610,7 +519,7 @@ export const VerificationGatewayModal: React.FC<VerificationGatewayModalProps> =
                         </div>
                       ) : (
                         <p className="text-[10.5px] text-slate-500 leading-tight">
-                          বিআরটিএ কেন্দ্রীয় ডেটাবেসে মোটরযান নম্বর, চেসিস ও ইঞ্জিন নম্বর মিলিয়ে সরকারি ট্যাক্স ও ফিটনেস রেকর্ড সরাসরি যাচাই করা হয়েছে।
+                          চালক নিবন্ধনের সময় ট্যাক্স টোকেন রিসিটের ছবি আপলোড করেননি। বিআরটিএ পোর্টালের ডাটাবেস অনুসন্ধান দিয়েই ট্যাক্স ও ফিটনেসের সত্যতা যাচাই করা সম্ভব।
                         </p>
                       )}
                     </div>
@@ -627,7 +536,7 @@ export const VerificationGatewayModal: React.FC<VerificationGatewayModalProps> =
                       onRevoke(driver.id, 'brta');
                       onClose();
                     }}
-                    className="w-full py-2.5 bg-amber-100 hover:bg-amber-200 text-amber-900 font-bold text-xs rounded-xl transition cursor-pointer"
+                    className="w-full py-2.5 bg-amber-100 hover:bg-amber-200 text-amber-900 font-bold text-xs sm:text-sm rounded-xl transition cursor-pointer"
                   >
                     অনুমোদন বাতিল করে পেন্ডিং করুন
                   </button>
@@ -643,38 +552,6 @@ export const VerificationGatewayModal: React.FC<VerificationGatewayModalProps> =
                 )}
               </div>
             </div>
-
-            {/* Lightbox / Zoom Modal for Tax Token Receipt */}
-            {isReceiptZoomOpen && driver.taxTokenReceiptPhoto && (
-              <div
-                className="fixed inset-0 z-[100000] bg-black/85 backdrop-blur-xs flex items-center justify-center p-3"
-                onClick={() => setIsReceiptZoomOpen(false)}
-              >
-                <div
-                  className="bg-white rounded-2xl max-w-lg w-full overflow-hidden shadow-2xl p-3 space-y-2"
-                  onClick={(e) => e.stopPropagation()}
-                >
-                  <div className="flex items-center justify-between pb-2 border-b border-slate-200">
-                    <span className="font-bold text-xs text-slate-800">
-                      ট্যাক্স টোকেন রিসিট - {driver.name} ({regLast4})
-                    </span>
-                    <button
-                      onClick={() => setIsReceiptZoomOpen(false)}
-                      className="p-1 rounded-lg hover:bg-slate-100 text-slate-500"
-                    >
-                      <X className="w-4 h-4" />
-                    </button>
-                  </div>
-                  <div className="max-h-[70vh] overflow-auto flex items-center justify-center bg-slate-50 rounded-xl p-1">
-                    <img
-                      src={driver.taxTokenReceiptPhoto}
-                      alt="ট্যাক্স টোকেন রিসিট সম্পূর্ণ ছবি"
-                      className="max-w-full max-h-[65vh] object-contain rounded-lg"
-                    />
-                  </div>
-                </div>
-              </div>
-            )}
           </div>
         )}
 
@@ -684,7 +561,7 @@ export const VerificationGatewayModal: React.FC<VerificationGatewayModalProps> =
         {type === 'wa' && (
           <div className="flex flex-col flex-1 min-h-0 overflow-hidden">
             {/* Header */}
-            <div className="bg-gradient-to-r from-emerald-700 via-green-600 to-emerald-800 text-white p-4 sm:p-5 flex items-start justify-between shrink-0">
+            <div className="bg-emerald-800 text-white p-4 sm:p-5 flex items-start justify-between shrink-0">
               <div className="flex items-center gap-2.5">
                 <div className="w-10 h-10 rounded-2xl bg-white/10 border border-white/20 flex items-center justify-center text-emerald-100 shadow-inner">
                   <MessageCircle className="w-6 h-6 text-white" />
@@ -699,8 +576,10 @@ export const VerificationGatewayModal: React.FC<VerificationGatewayModalProps> =
                 </div>
               </div>
               <button
+                type="button"
                 onClick={onClose}
                 className="text-white/80 hover:text-white p-1 rounded-lg hover:bg-white/10 transition cursor-pointer"
+                title="বন্ধ করুন"
               >
                 <X className="w-5 h-5" />
               </button>
@@ -719,6 +598,7 @@ export const VerificationGatewayModal: React.FC<VerificationGatewayModalProps> =
                   <div className="flex items-center gap-1.5 font-mono font-bold text-emerald-800 bg-white px-2 py-0.5 rounded border border-slate-200">
                     <span>{driver.phone}</span>
                     <button
+                      type="button"
                       onClick={() => handleCopy(driver.phone, 'phone')}
                       title="কপি করুন"
                       className="text-slate-400 hover:text-slate-600 cursor-pointer"
@@ -782,6 +662,7 @@ export const VerificationGatewayModal: React.FC<VerificationGatewayModalProps> =
 
                 {!isOtpSent ? (
                   <button
+                    type="button"
                     onClick={handleSendOtp}
                     className="w-full bg-slate-900 hover:bg-slate-800 text-white font-bold py-2.5 px-3 rounded-xl text-xs flex items-center justify-center gap-2 transition shadow-xs cursor-pointer"
                   >
@@ -789,24 +670,15 @@ export const VerificationGatewayModal: React.FC<VerificationGatewayModalProps> =
                     <span>৪-ডিজিটের ওটিপি (OTP) পাঠান</span>
                   </button>
                 ) : (
-                  <div className="space-y-2.5 animate-in fade-in">
-                    {/* Simulated Incoming Driver SMS Banner */}
-                    <div className="p-2.5 bg-gradient-to-r from-blue-50 to-indigo-50 border border-blue-200 rounded-xl text-xs text-blue-950 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2 shadow-2xs">
-                      <div>
-                        <div className="font-bold flex items-center gap-1 text-[11.5px] text-blue-900">
-                          <MessageCircle className="w-3.5 h-3.5 text-blue-600" />
-                          <span>চালকের ফোনে এসএমএস প্রেরিত:</span>
-                        </div>
-                        <p className="text-[11px] text-blue-800 mt-0.5">
-                          সফর ওটিপি কোড: <strong className="font-mono text-sm tracking-widest text-indigo-900 font-black">{otpCode}</strong>
-                        </p>
-                      </div>
+                  <div className="space-y-2.5">
+                    <div className="p-2 bg-emerald-100/70 border border-emerald-300 rounded-xl text-xs text-emerald-900 flex items-center justify-between">
+                      <span>সফর টেস্ট ওটিপি কোড: <strong className="font-mono text-sm tracking-widest">{otpCode}</strong></span>
                       <button
                         type="button"
                         onClick={() => setEnteredOtp(otpCode)}
-                        className="text-[10.5px] bg-white hover:bg-blue-50 text-blue-800 font-bold px-2.5 py-1 rounded-lg border border-blue-300 shadow-2xs cursor-pointer shrink-0 transition"
+                        className="text-[10px] bg-white text-emerald-800 font-bold px-2 py-0.5 rounded border border-emerald-200 hover:bg-emerald-50 cursor-pointer"
                       >
-                        স্বয়ংক্রিয় বসান (Auto-Fill)
+                        স্বয়ংক্রিয় বসান
                       </button>
                     </div>
 
@@ -822,22 +694,14 @@ export const VerificationGatewayModal: React.FC<VerificationGatewayModalProps> =
                       <button
                         type="button"
                         onClick={handleVerifyOtp}
-                        disabled={isOtpVerifying}
-                        className="bg-emerald-700 hover:bg-emerald-800 text-white font-bold px-4 py-2 rounded-xl text-xs transition cursor-pointer disabled:opacity-70 shrink-0"
+                        className="bg-emerald-700 hover:bg-emerald-800 text-white font-bold px-4 py-2 rounded-xl text-xs transition cursor-pointer"
                       >
-                        {isOtpVerifying ? 'যাচাই হচ্ছে...' : 'যাচাই ও অনুমোদন'}
+                        যাচাই করুন
                       </button>
                     </div>
 
                     {otpError && (
                       <p className="text-[11px] text-red-600 font-medium">{otpError}</p>
-                    )}
-
-                    {otpVerifiedSuccess && (
-                      <p className="text-[11px] text-emerald-700 font-bold flex items-center gap-1">
-                        <CheckCircle className="w-3.5 h-3.5" />
-                        <span>ওটিপি কোড সঠিক! মোবাইল নম্বর যাচাই সফল হয়েছে।</span>
-                      </p>
                     )}
                   </div>
                 )}
@@ -847,6 +711,7 @@ export const VerificationGatewayModal: React.FC<VerificationGatewayModalProps> =
               <div className="pt-2 flex items-center gap-2">
                 {driver.phoneVerified ? (
                   <button
+                    type="button"
                     onClick={() => {
                       onRevoke(driver.id, 'wa');
                       onClose();
@@ -857,11 +722,12 @@ export const VerificationGatewayModal: React.FC<VerificationGatewayModalProps> =
                   </button>
                 ) : (
                   <button
+                    type="button"
                     onClick={handleDirectWaApproval}
                     className="w-full py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs sm:text-sm rounded-xl shadow-md transition flex items-center justify-center gap-2 cursor-pointer"
                   >
                     <CheckCircle className="w-4 h-4" />
-                    <span>সরাসরি ফোন ও হোয়াটসঅ্যাপ নম্বর অনুমোদন করুন</span>
+                    <span>হোয়াটসঅ্যাপ ও ফোন সরাসরি অনুমোদন করুন</span>
                   </button>
                 )}
               </div>
@@ -870,34 +736,36 @@ export const VerificationGatewayModal: React.FC<VerificationGatewayModalProps> =
         )}
 
         {/* ============================================================== */}
-        {/* MODAL 3: NID VERIFICATION GATEWAY                             */}
+        {/* MODAL 3: NID VERIFICATION GATEWAY (MANUAL BASED ON BRTA)       */}
         {/* ============================================================== */}
         {type === 'nid' && (
           <div className="flex flex-col flex-1 min-h-0 overflow-hidden">
             {/* Header */}
-            <div className="bg-gradient-to-r from-teal-800 via-emerald-800 to-slate-900 text-white p-4 sm:p-5 flex items-start justify-between shrink-0">
+            <div className="bg-emerald-800 text-white p-4 sm:p-5 flex items-start justify-between shrink-0">
               <div className="flex items-center gap-2.5">
-                <div className="w-10 h-10 rounded-2xl bg-white/10 border border-white/20 flex items-center justify-center text-teal-200 shadow-inner">
-                  <ShieldCheck className="w-6 h-6 text-teal-300" />
+                <div className="w-10 h-10 rounded-2xl bg-white/10 border border-white/20 flex items-center justify-center text-emerald-200 shadow-inner">
+                  <ShieldCheck className="w-6 h-6 text-emerald-300" />
                 </div>
                 <div>
                   <h3 className="font-bold text-base sm:text-lg leading-tight">
-                    জাতীয় পরিচয়পত্র (NID) ভেরিফিকেশন
+                    জাতীয় পরিচয়পত্র (NID) ও ছবি যাচাইকরণ
                   </h3>
-                  <p className="text-xs text-teal-100/90 mt-0.5">
-                    BRTA ডাটাবেস ও সরকারি নির্বাচন কমিশন পোর্টাল যাচাই
+                  <p className="text-xs text-emerald-100/90 mt-0.5">
+                    বিআরটিএ ড্রাইভিং লাইসেন্স তথ্যের ভিত্তিতে ম্যানুয়াল যাচাই
                   </p>
                 </div>
               </div>
               <button
+                type="button"
                 onClick={onClose}
                 className="text-white/80 hover:text-white p-1 rounded-lg hover:bg-white/10 transition cursor-pointer"
+                title="বন্ধ করুন"
               >
                 <X className="w-5 h-5" />
               </button>
             </div>
 
-            <div className="p-4 sm:p-6 space-y-4 overflow-y-auto flex-1 overscroll-contain">
+            <div className="p-4 sm:p-5 space-y-3.5 overflow-y-auto flex-1 overscroll-contain">
               {/* Driver & NID Summary Card */}
               <div className="bg-slate-50 border border-slate-200 rounded-2xl p-3.5 space-y-2 text-xs">
                 <div className="flex items-center justify-between pb-2 border-b border-slate-200">
@@ -910,6 +778,7 @@ export const VerificationGatewayModal: React.FC<VerificationGatewayModalProps> =
                   <div className="flex items-center gap-1.5 font-mono font-bold text-emerald-800 bg-white px-2 py-0.5 rounded border border-slate-200">
                     <span>{driver.nidNumber}</span>
                     <button
+                      type="button"
                       onClick={() => handleCopy(driver.nidNumber, 'nid')}
                       title="কপি করুন"
                       className="text-slate-400 hover:text-slate-600 cursor-pointer"
@@ -939,10 +808,10 @@ export const VerificationGatewayModal: React.FC<VerificationGatewayModalProps> =
                 <div className="flex items-center justify-between">
                   <h4 className="text-xs font-bold text-teal-950 flex items-center gap-1.5">
                     <FileCheck className="w-4 h-4 text-teal-700" />
-                    <span>চালকের আপলোডকৃত NID কার্ডের ছবি (এ পিঠ ও ও পিঠ)</span>
+                    <span>চালকের দেওয়া জাতীয় পরিচয়পত্র (NID) ছবি</span>
                   </h4>
                   <span className="text-[10px] text-teal-800 font-semibold bg-teal-100 px-2 py-0.5 rounded-full">
-                    মিনিমাম সাইজ অপ্টিমাইজড
+                    উভয় পিঠ (সামনে ও পেছনে)
                   </span>
                 </div>
 
@@ -950,26 +819,25 @@ export const VerificationGatewayModal: React.FC<VerificationGatewayModalProps> =
                   {/* Front Photo Card */}
                   <div className="p-2.5 bg-white rounded-xl border border-teal-200 shadow-2xs space-y-1.5">
                     <div className="flex items-center justify-between text-[11px] font-bold text-slate-700">
-                      <span>১. NID সম্মুখভাগ (এ পিঠ)</span>
-                      {driver.nidFrontPhoto && (
-                        <button
-                          type="button"
-                          onClick={() => setZoomedImage({ src: driver.nidFrontPhoto!, title: `${driver.name} - NID সম্মুখভাগ (এ পিঠ)` })}
-                          className="text-[10px] text-teal-700 hover:text-teal-900 font-bold flex items-center gap-0.5 hover:underline cursor-pointer"
-                        >
-                          <Maximize2 className="w-3 h-3" />
-                          <span>বড় করে দেখুন</span>
-                        </button>
+                      <span>১. সামনের পিঠ (ছবি ও নাম):</span>
+                      {driver.nidFrontPhoto ? (
+                        <span className="text-[10px] text-emerald-700 bg-emerald-100 px-1.5 py-0.5 rounded font-bold">
+                          সংযুক্ত
+                        </span>
+                      ) : (
+                        <span className="text-[10px] text-slate-500 bg-slate-100 px-1.5 py-0.5 rounded">
+                          সংযুক্ত নেই
+                        </span>
                       )}
                     </div>
                     {driver.nidFrontPhoto ? (
                       <div
-                        onClick={() => setZoomedImage({ src: driver.nidFrontPhoto!, title: `${driver.name} - NID সম্মুখভাগ (এ পিঠ)` })}
-                        className="cursor-pointer group relative overflow-hidden rounded-lg border border-slate-200 bg-slate-100 h-28 flex items-center justify-center"
+                        onClick={() => setZoomedImage({ src: driver.nidFrontPhoto!, title: `${driver.name} - NID সামনের পিঠ` })}
+                        className="cursor-pointer group relative overflow-hidden rounded-lg border border-slate-200 bg-slate-100 h-24 flex items-center justify-center"
                       >
                         <img
                           src={driver.nidFrontPhoto}
-                          alt="NID সম্মুখভাগ (এ পিঠ)"
+                          alt="NID সামনের পিঠ"
                           className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-200"
                         />
                         <div className="absolute inset-0 bg-black/30 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center text-white text-xs font-bold gap-1">
@@ -978,37 +846,34 @@ export const VerificationGatewayModal: React.FC<VerificationGatewayModalProps> =
                         </div>
                       </div>
                     ) : (
-                      <div className="h-28 rounded-lg border border-dashed border-slate-300 bg-slate-50 flex flex-col items-center justify-center text-slate-400 p-2 text-center">
-                        <FileText className="w-6 h-6 mb-1 text-slate-300" />
-                        <span className="text-[11px] font-medium text-slate-500">সম্মুখভাগের ছবি সংযুক্ত করা হয়নি</span>
-                        <span className="text-[9.5px] text-slate-400">নিবন্ধনের সময় প্রদান করা যাবে</span>
-                      </div>
+                      <p className="text-[10.5px] text-slate-500 leading-tight">
+                        চালক নিবন্ধনের সময় NID সামনের পিঠের ছবি আপলোড করেননি।
+                      </p>
                     )}
                   </div>
 
                   {/* Back Photo Card */}
                   <div className="p-2.5 bg-white rounded-xl border border-teal-200 shadow-2xs space-y-1.5">
                     <div className="flex items-center justify-between text-[11px] font-bold text-slate-700">
-                      <span>২. NID পেছনের ভাগ (ও পিঠ)</span>
-                      {driver.nidBackPhoto && (
-                        <button
-                          type="button"
-                          onClick={() => setZoomedImage({ src: driver.nidBackPhoto!, title: `${driver.name} - NID পেছনের ভাগ (ও পিঠ)` })}
-                          className="text-[10px] text-teal-700 hover:text-teal-900 font-bold flex items-center gap-0.5 hover:underline cursor-pointer"
-                        >
-                          <Maximize2 className="w-3 h-3" />
-                          <span>বড় করে দেখুন</span>
-                        </button>
+                      <span>২. পেছনের পিঠ (ঠিকানা ও বারকোড):</span>
+                      {driver.nidBackPhoto ? (
+                        <span className="text-[10px] text-emerald-700 bg-emerald-100 px-1.5 py-0.5 rounded font-bold">
+                          সংযুক্ত
+                        </span>
+                      ) : (
+                        <span className="text-[10px] text-slate-500 bg-slate-100 px-1.5 py-0.5 rounded">
+                          সংযুক্ত নেই
+                        </span>
                       )}
                     </div>
                     {driver.nidBackPhoto ? (
                       <div
-                        onClick={() => setZoomedImage({ src: driver.nidBackPhoto!, title: `${driver.name} - NID পেছনের ভাগ (ও পিঠ)` })}
-                        className="cursor-pointer group relative overflow-hidden rounded-lg border border-slate-200 bg-slate-100 h-28 flex items-center justify-center"
+                        onClick={() => setZoomedImage({ src: driver.nidBackPhoto!, title: `${driver.name} - NID পেছনের পিঠ` })}
+                        className="cursor-pointer group relative overflow-hidden rounded-lg border border-slate-200 bg-slate-100 h-24 flex items-center justify-center"
                       >
                         <img
                           src={driver.nidBackPhoto}
-                          alt="NID পেছনের ভাগ (ও পিঠ)"
+                          alt="NID পেছনের পিঠ"
                           className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-200"
                         />
                         <div className="absolute inset-0 bg-black/30 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center text-white text-xs font-bold gap-1">
@@ -1017,17 +882,15 @@ export const VerificationGatewayModal: React.FC<VerificationGatewayModalProps> =
                         </div>
                       </div>
                     ) : (
-                      <div className="h-28 rounded-lg border border-dashed border-slate-300 bg-slate-50 flex flex-col items-center justify-center text-slate-400 p-2 text-center">
-                        <FileText className="w-6 h-6 mb-1 text-slate-300" />
-                        <span className="text-[11px] font-medium text-slate-500">পেছনের ভাগের ছবি সংযুক্ত করা হয়নি</span>
-                        <span className="text-[9.5px] text-slate-400">নিবন্ধনের সময় প্রদান করা যাবে</span>
-                      </div>
+                      <p className="text-[10.5px] text-slate-500 leading-tight">
+                        চালক নিবন্ধনের সময় NID পেছনের পিঠের ছবি আপলোড করেননি।
+                      </p>
                     )}
                   </div>
                 </div>
               </div>
 
-              {/* NID Server Query & Match Verification */}
+              {/* Cross-Check Section */}
               <div className="p-3.5 rounded-2xl border-2 border-emerald-300 bg-emerald-50/70 space-y-3">
                 <div className="flex items-start gap-2">
                   <div className="w-7 h-7 rounded-xl bg-emerald-700 text-white font-bold text-xs flex items-center justify-center shrink-0 shadow-xs">
@@ -1035,81 +898,83 @@ export const VerificationGatewayModal: React.FC<VerificationGatewayModalProps> =
                   </div>
                   <div>
                     <h4 className="text-xs sm:text-sm font-bold text-emerald-950">
-                      নির্বাচন কমিশন ও BRTA লাইসেন্স তথ্যের ভিত্তিতে যাচাই
+                      বিআরটিএ ড্রাইভিং লাইসেন্স রেকর্ডের সাথে তথ্য যাচাই (Cross-Check)
                     </h4>
                     <p className="text-[11px] text-emerald-800 mt-0.5 leading-relaxed">
-                      সরকারি নির্বাচন কমিশন ভোটার ডেটাবেস এবং বিআরটিএ অফিশিয়াল ড্রাইভিং লাইসেন্স রেকর্ডে থাকা চালকের জাতীয় পরিচয়পত্র ও পরিচিতি তথ্যের সাথে হুবহু মিলিয়ে যাচাই সম্পন্ন করা হয়।
+                      চালকের আপলোডকৃত NID তথ্যের সাথে বিআরটিএ ডেটাবেসে থাকা ড্রাইভিং লাইসেন্স ও নিবন্ধিত মোটরযানের তথ্য মিলিয়ে সত্যতা যাচাই করুন।
                     </p>
                   </div>
                 </div>
 
-                {/* Interactive Query Button */}
-                {!nidCheckDone ? (
-                  <button
-                    type="button"
-                    onClick={handleRunNidQuery}
-                    disabled={isNidChecking}
-                    className="w-full bg-teal-800 hover:bg-teal-900 text-white font-bold py-2.5 px-3 rounded-xl text-xs flex items-center justify-center gap-2 shadow-xs transition cursor-pointer disabled:opacity-70"
-                  >
-                    {isNidChecking ? (
-                      <>
-                        <RefreshCw className="w-4 h-4 animate-spin text-white" />
-                        <span>নির্বাচন কমিশন সার্ভারে NID যাচাই চলছে...</span>
-                      </>
-                    ) : (
-                      <>
-                        <Search className="w-4 h-4 text-teal-200" />
-                        <span>নির্বাচন কমিশন সার্ভারে NID অনুসন্ধান ও ফেসম্যাচ যাচাই</span>
-                      </>
-                    )}
-                  </button>
-                ) : (
-                  <div className="p-3 bg-white rounded-xl border border-emerald-300 shadow-2xs space-y-2 animate-in fade-in">
-                    <div className="flex items-center gap-2 text-emerald-800 font-bold text-xs">
-                      <CheckCircle className="w-4 h-4 text-emerald-600 shrink-0" />
-                      <span>নির্বাচন কমিশন ভোটার ডাটাবেস ও বায়োমেট্রিক রেকর্ড শতভাগ মিলেছে!</span>
+                <div className="bg-white rounded-xl p-3 border border-emerald-200 text-xs space-y-2 shadow-2xs">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-[11.5px]">
+                    <div className="flex items-center justify-between bg-slate-50 p-2 rounded-lg border border-slate-100">
+                      <span className="text-slate-500">বিআরটিএ লাইসেন্স নম্বর:</span>
+                      <span className="font-mono font-bold text-blue-900 bg-blue-50 px-1.5 py-0.5 rounded border border-blue-200">
+                        {driver.licenseNumber}
+                      </span>
                     </div>
-                    <div className="grid grid-cols-2 gap-1.5 text-[11px] text-slate-700 pt-1 border-t border-slate-100">
-                      <div>
-                        <span className="text-slate-400">নাগরিকের নাম:</span>{' '}
-                        <span className="font-bold text-slate-800">{driver.name}</span>
-                      </div>
-                      <div>
-                        <span className="text-slate-400">NID নম্বর:</span>{' '}
-                        <span className="font-mono font-bold text-slate-800">{driver.nidNumber}</span>
-                      </div>
-                      <div>
-                        <span className="text-slate-400">পেশা:</span>{' '}
-                        <span className="font-bold text-slate-800">পেশাদার চালক</span>
-                      </div>
-                      <div>
-                        <span className="text-slate-400">ভোটার এলাকা:</span>{' '}
-                        <span className="font-semibold text-slate-800">গফরগাঁও, ময়মনসিংহ</span>
-                      </div>
+
+                    <div className="flex items-center justify-between bg-slate-50 p-2 rounded-lg border border-slate-100">
+                      <span className="text-slate-500">প্রথম ইস্যুর তারিখ:</span>
+                      <span className="font-mono font-bold text-emerald-900 bg-emerald-50 px-1.5 py-0.5 rounded border border-emerald-200">
+                        {driver.firstIssueDate || '15/04/2021'}
+                      </span>
+                    </div>
+
+                    <div className="flex items-center justify-between bg-slate-50 p-2 rounded-lg border border-slate-100 sm:col-span-2">
+                      <span className="text-slate-500">মোটরযান ও নম্বর প্লেট:</span>
+                      <span className="font-semibold text-slate-800">
+                        {driver.vehicleModel} • {driver.plateNumber}
+                      </span>
+                    </div>
+
+                    <div className="flex items-center justify-between bg-slate-50 p-2 rounded-lg border border-slate-100 sm:col-span-2">
+                      <span className="text-slate-500">বিআরটিএ যাচাই স্ট্যাটাস:</span>
+                      <span className={`font-bold px-2 py-0.5 rounded text-[11px] ${
+                        driver.licenseVerified ? 'bg-emerald-100 text-emerald-800' : 'bg-amber-100 text-amber-800'
+                      }`}>
+                        {driver.licenseVerified ? '✅ বিআরটিএ অনুমোদিত' : '⏳ বিআরটিএ যাচাই এখনও পেন্ডিং'}
+                      </span>
                     </div>
                   </div>
-                )}
+                </div>
 
-                {/* Checklist of verified points */}
-                <div className="bg-white rounded-xl p-3 border border-emerald-200 text-xs space-y-1.5 shadow-2xs">
-                  <div className="flex items-center gap-1.5 text-emerald-800 font-semibold text-[11px]">
+                {/* Checkbox Card */}
+                <label className="flex items-start gap-2.5 p-3 rounded-xl bg-white border border-emerald-300 cursor-pointer hover:bg-emerald-50/40 transition">
+                  <input
+                    type="checkbox"
+                    checked={nidManualChecked}
+                    onChange={(e) => setNidManualChecked(e.target.checked)}
+                    className="mt-0.5 w-4 h-4 text-emerald-600 rounded border-slate-300 focus:ring-emerald-500 cursor-pointer"
+                  />
+                  <div className="text-xs">
+                    <span className="font-bold text-slate-900 block">জাতীয় পরিচয়পত্র (NID) রেকর্ড যাচাই সম্পন্ন</span>
+                    <span className="text-[11px] text-slate-600 mt-0.5 block leading-relaxed">
+                      আমি বিআরটিএ রেকর্ড ও আপলোডকৃত NID কার্ডের ছবি দেখে চালকের নাম, ছবি ও জন্ম তারিখের সত্যতা নিশ্চিত করেছি।
+                    </span>
+                  </div>
+                </label>
+
+                {/* 3 bullet checks */}
+                <div className="p-3 bg-emerald-50/80 rounded-xl border border-emerald-200 space-y-1.5 text-[11px] text-emerald-950">
+                  <div className="flex items-center gap-1.5 font-medium">
                     <Check className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
                     <span>BRTA ড্রাইভিং লাইসেন্সে উল্লেখিত নাম ও পিতার নামের সাথে NID তথ্যের হুবহু মিল।</span>
                   </div>
-                  <div className="flex items-center gap-1.5 text-emerald-800 font-semibold text-[11px]">
+                  <div className="flex items-center gap-1.5 font-medium">
                     <Check className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
                     <span>আপলোডকৃত NID কার্ডের ছবি (এ পিঠ ও ও পিঠ) ও চালকের ছবির চাক্ষুষ সত্যতা নিশ্চিত।</span>
                   </div>
-                  <div className="flex items-center gap-1.5 text-emerald-800 font-semibold text-[11px]">
+                  <div className="flex items-center gap-1.5 font-medium">
                     <Check className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
                     <span>গফরগাঁও পৌরসভা ও উপজেলার স্থানীয় স্ট্যান্ডে চালকের সক্রিয়তা নিশ্চিত।</span>
                   </div>
                 </div>
               </div>
-
             </div>
 
-            {/* Sticky Action Buttons Footer */}
+            {/* Bottom Button */}
             <div className="p-3 sm:p-4 bg-slate-50 border-t border-slate-200 shrink-0">
               {driver.nidVerified ? (
                 <button
@@ -1129,7 +994,7 @@ export const VerificationGatewayModal: React.FC<VerificationGatewayModalProps> =
                   className="w-full py-2.5 bg-emerald-700 hover:bg-emerald-800 text-white font-bold text-xs sm:text-sm rounded-xl shadow-md transition flex items-center justify-center gap-2 cursor-pointer active:scale-98"
                 >
                   <CheckCircle className="w-4 h-4" />
-                  <span>জাতীয় পরিচয়পত্র (NID) নিশ্চিত করে অনুমোদন করুন</span>
+                  <span>জাতীয় পরিচয়পত্র (NID) নিশ্চিত করে অনুমোদন করুন</span>
                 </button>
               )}
             </div>
@@ -1151,6 +1016,7 @@ export const VerificationGatewayModal: React.FC<VerificationGatewayModalProps> =
                   {zoomedImage.title}
                 </span>
                 <button
+                  type="button"
                   onClick={() => setZoomedImage(null)}
                   className="p-1 rounded-lg hover:bg-slate-100 text-slate-500 cursor-pointer"
                 >

@@ -1,5 +1,5 @@
-import React, { useState, useEffect, useRef } from 'react';
-import { Download, Share2, QrCode, Check, Copy, X, Sparkles, Smartphone, ExternalLink, Printer } from 'lucide-react';
+import React, { useState, useEffect } from 'react';
+import { Download, Share2, QrCode, Check, Copy, X, Sparkles, Smartphone, ExternalLink } from 'lucide-react';
 import QRCode from 'qrcode';
 import { usePWAInstall } from '../hooks/usePWAInstall';
 
@@ -18,7 +18,6 @@ export const PWAInstallBanner: React.FC<PWAInstallBannerProps> = ({
   const [qrDataUrl, setQrDataUrl] = useState<string>('');
   const [copied, setCopied] = useState(false);
   const [isDismissed, setIsDismissed] = useState(false);
-  const printRef = useRef<HTMLDivElement>(null);
 
   const getPublicShareUrl = (): string => {
     if (customAppUrl && customAppUrl.trim()) return customAppUrl.trim();
@@ -33,7 +32,6 @@ export const PWAInstallBanner: React.FC<PWAInstallBannerProps> = ({
   };
 
   const currentUrl = getPublicShareUrl();
-  const isDevUrlDetected = typeof window !== 'undefined' && window.location.origin.includes('ais-dev-');
   const shareText = `গফরগাঁওয়ের নিজস্ব স্মার্ট রাইড ও ইমার্জেন্সি অ্যাপ "সফর"। এখনই ফ্রিতে ইনস্টল করুন: ${currentUrl}`;
 
   useEffect(() => {
@@ -88,10 +86,6 @@ export const PWAInstallBanner: React.FC<PWAInstallBannerProps> = ({
     setShowShareModal(true);
   };
 
-  const handlePrintPoster = () => {
-    window.print();
-  };
-
   return (
     <>
       {/* Top Floating Mini Banner when not installed and not dismissed */}
@@ -102,9 +96,11 @@ export const PWAInstallBanner: React.FC<PWAInstallBannerProps> = ({
         >
           <div className="max-w-7xl mx-auto px-3 sm:px-4 py-2 sm:py-2.5 flex items-center justify-between gap-2 text-xs sm:text-sm">
             <div className="flex items-center gap-2 min-w-0">
-              <span className="flex-shrink-0 w-8 h-8 rounded-xl bg-white/20 backdrop-blur-sm flex items-center justify-center font-bold text-white shadow-inner">
-                🚗
-              </span>
+              <img
+                src="/safar-logo.svg"
+                alt="সফর লোগো"
+                className="w-8 h-8 rounded-xl shadow-md border border-emerald-300/40 object-contain flex-shrink-0 hover:scale-105 transition-transform"
+              />
               <div className="truncate">
                 <p className="font-semibold text-white flex items-center gap-1.5 truncate">
                   <span>মোবাইলে আসল অ্যাপের মতো ব্যবহার করুন</span>
@@ -271,9 +267,11 @@ export const PWAInstallBanner: React.FC<PWAInstallBannerProps> = ({
           <div className="bg-white rounded-3xl max-w-lg w-full p-5 sm:p-7 shadow-2xl border border-slate-100 my-6 animate-in fade-in zoom-in-95">
             <div className="flex items-start justify-between pb-3 border-b border-slate-100">
               <div className="flex items-center gap-3">
-                <div className="w-12 h-12 rounded-2xl bg-emerald-600 text-white flex items-center justify-center font-bold shadow-md shadow-emerald-600/30 text-lg">
-                  🚗
-                </div>
+                <img
+                  src="/safar-logo.svg"
+                  alt="সফর লোগো"
+                  className="w-12 h-12 rounded-2xl shadow-md border border-emerald-300/40 object-contain p-0.5 bg-white"
+                />
                 <div>
                   <h3 className="font-bold text-slate-900 text-base sm:text-lg">
                     সফর অ্যাপটি ফ্রিতে ছড়িয়ে দিন
@@ -292,8 +290,8 @@ export const PWAInstallBanner: React.FC<PWAInstallBannerProps> = ({
               </button>
             </div>
 
-            {/* Printable Poster Area */}
-            <div ref={printRef} className="py-4 flex flex-col items-center text-center">
+            {/* QR Code Area */}
+            <div className="py-4 flex flex-col items-center text-center">
               <div className="bg-gradient-to-b from-emerald-50 to-teal-50 p-4 sm:p-5 rounded-2xl border-2 border-dashed border-emerald-300 w-full max-w-xs flex flex-col items-center">
                 <span className="text-[11px] font-bold text-emerald-800 uppercase tracking-wider mb-1">
                   গফরগাঁও স্মার্ট ট্রান্সপোর্ট
@@ -316,10 +314,7 @@ export const PWAInstallBanner: React.FC<PWAInstallBannerProps> = ({
                   </div>
                 )}
 
-                <p className="text-[11px] text-slate-600 font-medium mt-3">
-                  সিএনজি, অটোরিকশা ও ইমার্জেন্সি অ্যাম্বুলেন্স সেবা
-                </p>
-                <span className="mt-1 px-2.5 py-0.5 bg-emerald-600 text-white text-[10px] font-bold rounded-full">
+                <span className="mt-3 px-2.5 py-0.5 bg-emerald-600 text-white text-[10px] font-bold rounded-full">
                   সম্পূর্ণ ফ্রি অ্যাপ
                 </span>
               </div>
@@ -353,13 +348,6 @@ export const PWAInstallBanner: React.FC<PWAInstallBannerProps> = ({
                 </button>
               </div>
 
-              {isDevUrlDetected && (
-                <div className="text-[11px] text-emerald-800 bg-emerald-50/80 px-2.5 py-1.5 rounded-lg border border-emerald-200 flex items-center gap-1.5">
-                  <Check className="w-3.5 h-3.5 text-emerald-600 flex-shrink-0" />
-                  <span>এটি পাবলিক শেয়ার লিংক — যেকোনো ফোনে কোনো লগইন বা 403 সমস্যা ছাড়াই চলবে।</span>
-                </div>
-              )}
-
               {/* Action Buttons */}
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 pt-1">
                 <a
@@ -379,19 +367,6 @@ export const PWAInstallBanner: React.FC<PWAInstallBannerProps> = ({
                 >
                   <Share2 className="w-4 h-4" />
                   <span>অন্যান্য মাধ্যমে শেয়ার</span>
-                </button>
-              </div>
-
-              {/* Instructions for Offline Posters */}
-              <div className="pt-2 border-t border-slate-100 flex items-center justify-between text-xs text-slate-500">
-                <span>চা স্টল বা স্ট্যান্ডে লাগানোর জন্য প্রিন্ট করুন</span>
-                <button
-                  type="button"
-                  onClick={handlePrintPoster}
-                  className="text-emerald-700 hover:text-emerald-800 font-semibold flex items-center gap-1 hover:underline"
-                >
-                  <Printer className="w-3.5 h-3.5" />
-                  <span>পোস্টার প্রিন্ট</span>
                 </button>
               </div>
             </div>
