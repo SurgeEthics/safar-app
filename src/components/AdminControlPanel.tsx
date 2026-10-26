@@ -285,7 +285,7 @@ export const AdminControlPanel: React.FC<AdminControlPanelProps> = ({
         window.URL.revokeObjectURL(url);
         document.body.removeChild(link);
       }, 2000);
-      showToast('🎉 সফলভাবে সম্পূর্ণ সোর্স কোড জিপ (২.৭৫ MB) ডাউনলোড হয়েছে!');
+      showToast('🎉 সফলভাবে ক্লাউডফ্লেয়ার ফিক্সড সোর্স কোড জিপ (৩.৫ MB) ডাউনলোড হয়েছে!');
     } catch (err: any) {
       console.error('ZIP download error:', err);
       showToast('সরাসরি ডাউনলোড লিঙ্ক ওপেন করা হচ্ছে...');
@@ -1413,11 +1413,11 @@ export const AdminControlPanel: React.FC<AdminControlPanelProps> = ({
                     সম্পূর্ণ প্রজেক্ট সোর্স কোড ডাউনলোড (.ZIP)
                   </h3>
                   <span className="text-[11px] font-bold bg-amber-400 text-slate-950 px-2.5 py-0.5 rounded-full shadow-xs border border-amber-500/50">
-                    ২.৭৫ MB • Full Source + Build
+                    ৩.৫ MB • ক্লাউডফ্লেয়ার সিঙ্কড ফিক্স
                   </span>
                 </div>
                 <p className="text-xs text-slate-700 leading-relaxed">
-                  আপনার সম্পূর্ণ অ্যাপের রিয়্যাক্ট ১৯, টাইপস্ক্রিপ্ট সোর্স কোড, চালক ভেরিফিকেশন পপআপ কোড, লাইভ ম্যাপ, আইকন, এবং প্রস্তুতকৃত <strong>dist/</strong> প্রোডাকশন বিল্ড ফাইল সহ সম্পূর্ণ অফিশিয়াল জিপ ফাইল। এটি গিটহাব বা ক্লাউডফ্লেয়ারে ডিপ্লয়ের জন্য শতভাগ প্রস্তুত।
+                  আপনার সম্পূর্ণ অ্যাপের রিয়্যাক্ট ১৯, টাইপস্ক্রিপ্ট সোর্স কোড, চালক ভেরিফিকেশন পপআপ কোড, লাইভ ম্যাপ, আইকন, এবং প্রস্তুতকৃত <strong>dist/</strong> প্রোডাকশন বিল্ড ফাইল সহ সম্পূর্ণ অফিশিয়াল জিপ ফাইল। ক্লাউডফ্লেয়ারের <code>npm ci</code> লকফাইল এরর শতভাগ ফিক্স করা হয়েছে।
                 </p>
                 <div className="flex flex-wrap items-center gap-2.5 pt-1">
                   {/* The requested yellow zip button */}
@@ -1430,12 +1430,12 @@ export const AdminControlPanel: React.FC<AdminControlPanelProps> = ({
                     {isZipDownloading ? (
                       <>
                         <div className="w-4 h-4 border-2 border-slate-950 border-t-transparent rounded-full animate-spin" />
-                        <span>জিপ ফাইল ডাউনলোড হচ্ছে...</span>
+                        <span>নতুন জিপ ফাইল ডাউনলোড হচ্ছে...</span>
                       </>
                     ) : (
                       <>
                         <Download className="w-4 h-4 text-slate-950" />
-                        <span>📥 সোর্স কোড জিপ ডাউনলোড করুন (২.৭৫ MB)</span>
+                        <span>📥 সোর্স কোড জিপ ডাউনলোড করুন (৩.৫ MB • ফিক্সড)</span>
                       </>
                     )}
                   </button>
