@@ -73,8 +73,9 @@ export const FullVerificationGuidedModal: React.FC<FullVerificationGuidedModalPr
   };
 
   return (
-    <div className="fixed inset-0 z-[9999] bg-slate-950/75 backdrop-blur-xs flex items-center justify-center p-3 sm:p-4 overflow-y-auto animate-in fade-in duration-200">
-      <div className="bg-white rounded-3xl max-w-lg w-full border border-slate-200 shadow-2xl overflow-hidden my-auto animate-in zoom-in-95 duration-200 flex flex-col">
+    <div className="fixed inset-0 z-[9999] bg-slate-950/80 backdrop-blur-xs overflow-y-auto overscroll-contain p-2 sm:p-4 modal-scroll-overlay animate-in fade-in duration-200">
+      <div className="min-h-full flex items-start sm:items-center justify-center py-2 sm:py-6">
+        <div className="bg-white rounded-3xl max-w-lg w-full border border-slate-200 shadow-2xl overflow-hidden my-auto animate-in zoom-in-95 duration-200 flex flex-col">
         {/* Header */}
         <div className="bg-gradient-to-r from-emerald-800 via-teal-800 to-slate-900 text-white p-5 flex items-start justify-between shrink-0">
           <div className="flex items-center gap-3">
@@ -256,5 +257,6 @@ export const FullVerificationGuidedModal: React.FC<FullVerificationGuidedModalPr
         </div>
       </div>
     </div>
+  </div>
   );
 };

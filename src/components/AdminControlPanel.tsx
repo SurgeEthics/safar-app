@@ -211,6 +211,42 @@ export const AdminControlPanel: React.FC<AdminControlPanelProps> = ({
 
   // New Quick Chip input
   const [newQuickChipText, setNewQuickChipText] = useState('');
+  const [showQuickChipSuggestions, setShowQuickChipSuggestions] = useState(false);
+
+  // Auto suggestion list combining Stands and Popular Places
+  const quickChipSuggestions = useMemo(() => {
+    const list: { name: string; type: 'স্ট্যান্ড' | 'জনপ্রিয় স্থান'; sub?: string }[] = [];
+    const added = new Set<string>();
+
+    (stands || []).forEach(s => {
+      const name = s.bengaliName || s.name;
+      if (name && !added.has(name.toLowerCase())) {
+        added.add(name.toLowerCase());
+        list.push({ name, type: 'স্ট্যান্ড', sub: s.location || 'গফরগাঁও' });
+      }
+    });
+
+    (popularPlaces || []).forEach(p => {
+      const name = p.bengaliName || p.name;
+      if (name && !added.has(name.toLowerCase())) {
+        added.add(name.toLowerCase());
+        list.push({ name, type: 'জনপ্রিয় স্থান', sub: p.category || p.area || 'গফরগাঁও' });
+      }
+    });
+
+    return list;
+  }, [stands, popularPlaces]);
+
+  const filteredQuickChipSuggestions = useMemo(() => {
+    const query = newQuickChipText.trim().toLowerCase();
+    if (!query) {
+      return quickChipSuggestions.filter(s => !settingsDraft.quickDestinations.includes(s.name)).slice(0, 8);
+    }
+    return quickChipSuggestions
+      .filter(s => s.name.toLowerCase().includes(query) || (s.sub && s.sub.toLowerCase().includes(query)))
+      .filter(s => !settingsDraft.quickDestinations.includes(s.name))
+      .slice(0, 10);
+  }, [quickChipSuggestions, newQuickChipText, settingsDraft.quickDestinations]);
 
   // Backup JSON String
   const [backupJsonInput, setBackupJsonInput] = useState('');
@@ -1336,29 +1372,104 @@ export const AdminControlPanel: React.FC<AdminControlPanelProps> = ({
                   যাত্রীরা যাত্রা পরিকল্পনা সেকশনে 'পিকআপ' ও 'গন্তব্য' বক্সের নিচেই এই শর্টকাট বাটনগুলো দেখতে পান। এখানে নতুন স্থান যুক্ত বা অদরকারি স্থান ডিলিট করতে পারবেন।
                 </p>
 
-                {/* Add Quick Chip Input */}
-                <div className="flex items-center gap-2 pt-2">
-                  <input
-                    type="text"
-                    value={newQuickChipText}
-                    onChange={(e) => setNewQuickChipText(e.target.value)}
-                    placeholder="যেমন: পাগলা বাজার মোড় বা লংগাইর হাই স্কুল..."
-                    className="flex-1 px-3.5 py-2.5 bg-slate-50 border border-slate-300 rounded-xl text-xs sm:text-sm text-slate-800 focus:outline-none focus:ring-2 focus:ring-emerald-500"
-                    onKeyDown={(e) => {
-                      if (e.key === 'Enter') {
-                        e.preventDefault();
+                {/* Add Quick Chip Input with Auto Suggestions */}
+                <div className="relative pt-2">
+                  <div className="flex items-center gap-2">
+                    <div className="relative flex-1">
+                      <input
+                        type="text"
+                        value={newQuickChipText}
+                        onChange={(e) => {
+                          setNewQuickChipText(e.target.value);
+                          setShowQuickChipSuggestions(true);
+                        }}
+                        onFocus={() => setShowQuickChipSuggestions(true)}
+                        placeholder="যেমন: পাগলা বাজার মোড় বা লংগাইর হাই স্কুল..."
+                        className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-300 rounded-xl text-xs sm:text-sm text-slate-800 focus:outline-none focus:ring-2 focus:ring-emerald-500 font-medium"
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter') {
+                            e.preventDefault();
+                            handleAddQuickChip();
+                            setShowQuickChipSuggestions(false);
+                          }
+                        }}
+                      />
+                      {newQuickChipText && (
+                        <button
+                          type="button"
+                          onClick={() => setNewQuickChipText('')}
+                          className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 text-xs cursor-pointer"
+                        >
+                          ✕
+                        </button>
+                      )}
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => {
                         handleAddQuickChip();
-                      }
-                    }}
-                  />
-                  <button
-                    type="button"
-                    onClick={handleAddQuickChip}
-                    className="inline-flex items-center gap-1.5 bg-emerald-600 hover:bg-emerald-700 text-white font-bold px-4 py-2.5 rounded-xl text-xs sm:text-sm shadow-xs cursor-pointer transition shrink-0"
-                  >
-                    <Plus className="w-4 h-4" />
-                    <span>যুক্ত করুন</span>
-                  </button>
+                        setShowQuickChipSuggestions(false);
+                      }}
+                      className="inline-flex items-center gap-1.5 bg-emerald-600 hover:bg-emerald-700 text-white font-bold px-4 py-2.5 rounded-xl text-xs sm:text-sm shadow-xs cursor-pointer transition shrink-0"
+                    >
+                      <Plus className="w-4 h-4" />
+                      <span>যুক্ত করুন</span>
+                    </button>
+                  </div>
+
+                  {/* Auto Suggestion Dropdown (Stands & Popular Places) */}
+                  {showQuickChipSuggestions && filteredQuickChipSuggestions.length > 0 && (
+                    <div className="absolute left-0 right-20 mt-1.5 bg-white rounded-2xl border-2 border-emerald-400 shadow-xl z-30 max-h-56 overflow-y-auto scrollbar-thin divide-y divide-slate-100 animate-in fade-in slide-in-from-top-1">
+                      <div className="px-3 py-1.5 bg-emerald-50/90 text-[10px] font-black text-emerald-900 flex items-center justify-between sticky top-0 backdrop-blur-xs">
+                        <span>💡 সাজেশন থেকে সহজে নির্বাচন করুন (স্ট্যান্ড ও জনপ্রিয় স্থান):</span>
+                        <button
+                          type="button"
+                          onClick={() => setShowQuickChipSuggestions(false)}
+                          className="text-slate-400 hover:text-slate-700 text-xs cursor-pointer p-0.5"
+                        >
+                          ✕
+                        </button>
+                      </div>
+                      {filteredQuickChipSuggestions.map((item, idx) => (
+                        <button
+                          key={`${item.name}-${idx}`}
+                          type="button"
+                          onClick={() => {
+                            if (!settingsDraft.quickDestinations.includes(item.name)) {
+                              setSettingsDraft(prev => ({
+                                ...prev,
+                                quickDestinations: [...prev.quickDestinations, item.name]
+                              }));
+                              showToast(`'${item.name}' দ্রুত গন্তব্য চিপসে যুক্ত হয়েছে!`);
+                            }
+                            setNewQuickChipText('');
+                            setShowQuickChipSuggestions(false);
+                          }}
+                          className="w-full flex items-center justify-between p-2.5 hover:bg-emerald-50/70 text-left transition cursor-pointer group"
+                        >
+                          <div className="flex items-center gap-2 truncate">
+                            <MapPin className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
+                            <span className="text-xs font-bold text-slate-800 group-hover:text-emerald-950 truncate">{item.name}</span>
+                            {item.sub && (
+                              <span className="text-[10px] text-slate-400 truncate">({item.sub})</span>
+                            )}
+                          </div>
+                          <div className="flex items-center gap-1.5 shrink-0">
+                            <span className={`text-[9.5px] font-bold px-1.5 py-0.2 rounded-full ${
+                              item.type === 'স্ট্যান্ড'
+                                ? 'bg-blue-100 text-blue-800'
+                                : 'bg-emerald-100 text-emerald-800'
+                            }`}>
+                              {item.type}
+                            </span>
+                            <span className="text-[10px] font-black text-emerald-700 bg-emerald-100/60 group-hover:bg-emerald-600 group-hover:text-white px-1.5 py-0.5 rounded-md transition">
+                              + নির্বাচন করুন
+                            </span>
+                          </div>
+                        </button>
+                      ))}
+                    </div>
+                  )}
                 </div>
 
                 {/* Current Quick Chips List */}
@@ -1836,7 +1947,7 @@ export const AdminControlPanel: React.FC<AdminControlPanelProps> = ({
                     সম্পূর্ণ প্রজেক্ট সোর্স কোড ডাউনলোড (.ZIP)
                   </h3>
                   <span className="text-[11px] font-bold bg-amber-400 text-slate-950 px-2.5 py-0.5 rounded-full shadow-xs border border-amber-500/50">
-                    ১.৩ MB • ক্লাউডফ্লেয়ার ১০০% ফিক্স
+                    ২.৫ MB • ক্লাউডফ্লেয়ার ১০০% ফিক্স
                   </span>
                 </div>
                 <p className="text-xs text-slate-700 leading-relaxed">
@@ -1858,7 +1969,7 @@ export const AdminControlPanel: React.FC<AdminControlPanelProps> = ({
                     ) : (
                       <>
                         <Download className="w-4 h-4 text-slate-950" />
-                        <span>📥 সম্পূর্ণ প্রজেক্ট জিপ ডাউনলোড করুন (২.৪ MB • dist সহ ভেরিফাইড)</span>
+                        <span>📥 সম্পূর্ণ প্রজেক্ট জিপ ডাউনলোড করুন (২.৫ MB • dist সহ ভেরিফাইড)</span>
                       </>
                     )}
                   </button>

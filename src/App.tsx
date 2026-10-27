@@ -50,7 +50,8 @@ import {
   ArrowUpDown,
   Sparkles,
   Camera,
-  Download
+  Download,
+  UserPlus
 } from 'lucide-react';
 import L from 'leaflet';
 import { SafarLogo } from './components/SafarLogo';
@@ -522,6 +523,10 @@ export const INITIAL_DRIVERS: Driver[] = [
     categoryBengali: 'সিএনজি অটো-রিকশা',
     vehicleModel: 'বাজাজ ফোর-স্ট্রোক সিএনজি',
     plateNumber: 'ময়মনসিংহ-থ-১৪-৫৬৭৮',
+    regLastFour: '৫৬৭৮',
+    manufacturingYear: '২০২৩',
+    chassisNumber: 'CH-MYM-5678-X9',
+    engineNumber: 'ENG-BAJAJ-5678-M',
     licenseNumber: 'MYM-DL-29104-P',
     licenseType: 'পেশাদার (Professional)',
     nidNumber: '৯৫১২৮৭৪৬৩০',
@@ -1724,22 +1729,25 @@ export default function App() {
     isLoggedIn: boolean;
   }>(() => {
     try {
-      const saved = localStorage.getItem('safar_passenger_profile_v3');
-      if (saved) return JSON.parse(saved);
+      const saved = localStorage.getItem('safar_passenger_profile_v5');
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (parsed && parsed.isLoggedIn && parsed.phone) return parsed;
+      }
     } catch (e) {}
     return {
-      name: 'তানভীর আহমেদ',
-      phone: '০১৭১১-২২৩৩৪৪',
-      homeLocation: 'পৌরসভা চত্বর, গফরগাঁও',
-      emergencyContact: '০১৭০০-১১২২৩৩ (পরিবার)',
-      isLoggedIn: true
+      name: '',
+      phone: '',
+      homeLocation: '',
+      emergencyContact: '',
+      isLoggedIn: false
     };
   });
 
   // Save Passenger Profile on change
   useEffect(() => {
     try {
-      localStorage.setItem('safar_passenger_profile_v3', JSON.stringify(passengerProfile));
+      localStorage.setItem('safar_passenger_profile_v5', JSON.stringify(passengerProfile));
     } catch (e) {}
   }, [passengerProfile]);
 
@@ -1753,62 +1761,72 @@ export default function App() {
   });
   const [profileSaveToast, setProfileSaveToast] = useState(false);
 
-  // Past Trip History with LocalStorage Auto-Sync
+  // Passenger Registration & Login Form State
+  const [passengerLoginForm, setPassengerLoginForm] = useState({
+    name: '',
+    phone: '',
+    homeLocation: '',
+    emergencyContact: ''
+  });
+
+  const handlePassengerLoginSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!passengerLoginForm.name.trim() || !passengerLoginForm.phone.trim()) {
+      showAdminToastMessage('নাম ও মোবাইল নম্বর পূরণ করুন');
+      return;
+    }
+    const updated = {
+      name: passengerLoginForm.name.trim(),
+      phone: passengerLoginForm.phone.trim(),
+      homeLocation: passengerLoginForm.homeLocation.trim() || 'গফরগাঁও পৌরসভা',
+      emergencyContact: passengerLoginForm.emergencyContact.trim() || '০১৭০০-১১২২৩৩ (পরিবার)',
+      isLoggedIn: true
+    };
+    setPassengerProfile(updated);
+    setEditProfileForm(updated);
+    setDoc(doc(db, 'users', updated.phone), {
+      ...updated,
+      role: 'passenger',
+      updatedAt: new Date().toISOString()
+    }, { merge: true }).catch(() => {});
+    setProfileSaveToast(true);
+    setTimeout(() => setProfileSaveToast(false), 3000);
+    showAdminToastMessage(`স্বাগতম ${updated.name}! আপনার প্রোফাইল সক্রিয় হয়েছে`);
+  };
+
+  const handlePassengerLogout = () => {
+    setPassengerProfile({
+      name: '',
+      phone: '',
+      homeLocation: '',
+      emergencyContact: '',
+      isLoggedIn: false
+    });
+    setPassengerLoginForm({
+      name: '',
+      phone: '',
+      homeLocation: '',
+      emergencyContact: ''
+    });
+    showAdminToastMessage('যাত্রী প্রোফাইল থেকে লগআউট সম্পন্ন হয়েছে');
+  };
+
+  // Past Trip History with LocalStorage Auto-Sync (Real, Dynamic & Synced with Firestore)
   const [tripHistory, setTripHistory] = useState<PassengerTripRecord[]>(() => {
     try {
-      const saved = localStorage.getItem('safar_trip_history_v3');
-      if (saved) return JSON.parse(saved);
-    } catch (e) {}
-    return [
-      {
-        id: 'trip-101',
-        date: '২২ অক্টোবর ২০২৬, দুপুর ০২:১৫',
-        pickupPoint: 'গফরগাঁও রেলওয়ে স্টেশন স্ট্যান্ড',
-        destination: 'উপজেলা স্বাস্থ্য কমপ্লেক্স (হাসপাতাল)',
-        driverName: 'মো: রফিকুল ইসলাম',
-        driverPhone: '০১৭২২-৪৫৬৭৮৯',
-        vehicleCategory: 'cng',
-        vehicleModel: 'বাজাজ আরই ৪-স্ট্রোক সিএনজি',
-        plateNumber: 'ময়মনসিংহ-থ-১১-৪৫০২',
-        fare: 60,
-        status: 'সম্পন্ন',
-        ratingGiven: 5.0
-      },
-      {
-        id: 'trip-102',
-        date: '২১ অক্টোবর ২০২৬, সকাল ০৯:৩০',
-        pickupPoint: 'পৌরসভা চত্বর স্ট্যান্ড',
-        destination: 'পাগলা থানা স্ট্যান্ড',
-        driverName: 'মো: সুমন মিয়া',
-        driverPhone: '০১৯১১-২২৩৩৪৪',
-        vehicleCategory: 'bike',
-        vehicleModel: 'হোন্ডা সিবি শাইন ১২৫',
-        plateNumber: 'ময়মনসিংহ-হ-১২-৩৪৫৬',
-        fare: 140,
-        status: 'সম্পন্ন',
-        ratingGiven: 4.8
-      },
-      {
-        id: 'trip-103',
-        date: '১৯ অক্টোবর ২০২৬, সন্ধ্যা ০৭:২০',
-        pickupPoint: 'শিবগঞ্জ বাজার মোড় স্ট্যান্ড',
-        destination: 'দত্তপাড়া মোড় স্ট্যান্ড',
-        driverName: 'মো: হারুন অর রশিদ',
-        driverPhone: '০১৮১২-৯৯৮৮৭৭',
-        vehicleCategory: 'auto',
-        vehicleModel: 'মিশুক ব্যাটারি অটো রিকশা',
-        plateNumber: 'গফরগাঁও-ই-০৮-১২৩৪',
-        fare: 35,
-        status: 'সম্পন্ন',
-        ratingGiven: 5.0
+      const saved = localStorage.getItem('safar_trip_history_v5');
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed)) return parsed;
       }
-    ];
+    } catch (e) {}
+    return [];
   });
 
   // Automatically persist trip history on change
   useEffect(() => {
     try {
-      localStorage.setItem('safar_trip_history_v3', JSON.stringify(tripHistory));
+      localStorage.setItem('safar_trip_history_v5', JSON.stringify(tripHistory));
     } catch (e) {}
   }, [tripHistory]);
 
@@ -1827,31 +1845,98 @@ export default function App() {
     todayTrips: number;
     todayEarnings: number;
     driverPhoto?: string;
+    isRegistered?: boolean;
   }>(() => {
     try {
-      const saved = localStorage.getItem('safar_active_driver_profile_v4');
-      if (saved) return JSON.parse(saved);
+      const saved = localStorage.getItem('safar_active_driver_profile_v6');
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (parsed && parsed.isRegistered && parsed.phone) return parsed;
+      }
     } catch {}
     return {
-      name: 'মো: রফিকুল ইসলাম',
-      phone: '০১৭২২-৪৫৬৭৮৯',
-      vehicleModel: 'বাজাজ আরই ৪-স্ট্রোক সিএনজি',
-      plateNumber: 'ময়মনসিংহ-থ-১১-৪৫০২',
-      licenseNumber: 'MYM-DL-84920',
-      standName: 'গফরগাঁও রেলওয়ে স্টেশন স্ট্যান্ড',
+      id: '',
+      name: '',
+      phone: '',
+      vehicleModel: '',
+      plateNumber: '',
+      licenseNumber: '',
+      standName: '',
       category: 'cng',
-      rating: 4.9,
-      todayTrips: 6,
-      todayEarnings: 750,
-      driverPhoto: ''
+      rating: 5.0,
+      todayTrips: 0,
+      todayEarnings: 0,
+      driverPhoto: '',
+      isRegistered: false
     };
   });
 
   useEffect(() => {
     try {
-      localStorage.setItem('safar_active_driver_profile_v4', JSON.stringify(driverProfile));
+      localStorage.setItem('safar_active_driver_profile_v6', JSON.stringify(driverProfile));
     } catch {}
   }, [driverProfile]);
+
+  const [driverLoginPhoneInput, setDriverLoginPhoneInput] = useState('');
+  const [driverLoginError, setDriverLoginError] = useState<string | null>(null);
+
+  const handleDriverLogin = (phoneInput: string) => {
+    const clean = phoneInput.replace(/[^0-9]/g, '');
+    if (!clean || clean.length < 10) {
+      setDriverLoginError('সঠিক মোবাইল নম্বর প্রদান করুন (কমপক্ষে ১০ ডিজিট)');
+      return;
+    }
+    const found = drivers.find(d => {
+      const dPhone = d.phone.replace(/[^0-9]/g, '');
+      return dPhone === clean || dPhone.endsWith(clean.slice(-10)) || clean.endsWith(dPhone.slice(-10));
+    });
+
+    if (found) {
+      const active: typeof driverProfile = {
+        id: found.id,
+        name: found.name,
+        phone: found.phone,
+        vehicleModel: found.vehicleModel,
+        plateNumber: found.plateNumber,
+        licenseNumber: found.licenseNumber,
+        standName: found.standName,
+        category: found.category,
+        rating: found.rating || 5.0,
+        todayTrips: found.totalTrips || 0,
+        todayEarnings: (found.totalTrips || 0) * 100,
+        driverPhoto: found.driverPhoto || '',
+        isRegistered: true
+      };
+      setDriverProfile(active);
+      setDriverLoginError(null);
+      setDriverLoginPhoneInput('');
+      showAdminToastMessage(`স্বাগতম, ${found.name}! আপনার চালক কন্ট্রোল ড্যাশবোর্ড সক্রিয় হয়েছে।`);
+    } else {
+      setDriverLoginError('এই নম্বরে কোনো নিবন্ধিত চালক অ্যাকাউন্ট পাওয়া যায়নি। অনুগ্রহ করে নিবন্ধন করুন।');
+    }
+  };
+
+  const handleDriverLogout = () => {
+    setDriverProfile({
+      id: '',
+      name: '',
+      phone: '',
+      vehicleModel: '',
+      plateNumber: '',
+      licenseNumber: '',
+      standName: '',
+      category: 'cng',
+      rating: 5.0,
+      todayTrips: 0,
+      todayEarnings: 0,
+      driverPhoto: '',
+      isRegistered: false
+    });
+    try {
+      localStorage.removeItem('safar_active_driver_profile_v6');
+    } catch {}
+    showAdminToastMessage('চালক একাউন্ট থেকে সফলভাবে লগআউট করা হয়েছে।');
+  };
 
   // Simulated Incoming Passenger Requests in Driver Cockpit with LocalStorage sync
   const [passengerRequests, setPassengerRequests] = useState<PassengerRideRequest[]>(() => {
@@ -1914,8 +1999,8 @@ export default function App() {
   const [destCoords, setDestCoords] = useState<{ lat: number; lng: number } | null>(null);
   const [passengerSelectedVehicle, setPassengerSelectedVehicle] = useState<VehicleCategory>('cng');
   const [isRidePlannerCollapsed, setIsRidePlannerCollapsed] = useState<boolean>(false);
-  const [isQuickDestOpen, setIsQuickDestOpen] = useState<boolean>(true);
-  const [isVehicleFareOpen, setIsVehicleFareOpen] = useState<boolean>(true);
+  const [isQuickDestOpen, setIsQuickDestOpen] = useState<boolean>(false);
+  const [isVehicleFareOpen, setIsVehicleFareOpen] = useState<boolean>(false);
 
   // Popular Places State (Managed via Admin Control Panel & Synced with Autocomplete Dropdown)
   const [popularPlaces, setPopularPlaces] = useState<GafargaonPlace[]>(() => {
@@ -2984,7 +3069,8 @@ export default function App() {
       rating: 5.0,
       todayTrips: 0,
       todayEarnings: 0,
-      driverPhoto: newDriver.driverPhoto || ''
+      driverPhoto: newDriver.driverPhoto || '',
+      isRegistered: true
     });
 
     // Switch immediately to status check view to display the Pending Process Message
@@ -4129,36 +4215,9 @@ export default function App() {
 
                       {/* Dropdown Content with Scroll Option */}
                       {isQuickDestOpen && (
-                        <div className="p-3 space-y-2.5 animate-in fade-in slide-in-from-top-1 duration-200">
-                          {/* Quick Chips Row */}
-                          <div className="flex items-center gap-1.5 overflow-x-auto scrollbar-thin pb-1">
-                            <span className="text-[10px] font-bold text-slate-500 shrink-0">চিহ্নিত:</span>
-                            {(appCustomSettings.quickDestinations || []).slice(0, 5).map(dest => {
-                              const isMatch = passengerDestination.trim() === dest.trim();
-                              const shortLabel = dest.replace(' স্ট্যান্ড', '').replace(' (হাসপাতাল)', '');
-                              return (
-                                <button
-                                  key={dest}
-                                  type="button"
-                                  onClick={() => {
-                                    setPassengerDestination(dest);
-                                    const coords = resolveLocationCoordinates(dest, true);
-                                    setDestCoords(coords);
-                                  }}
-                                  className={`text-[10.5px] font-bold px-2 py-0.5 rounded-md border shrink-0 transition-all cursor-pointer ${
-                                    isMatch
-                                      ? 'bg-emerald-700 text-white border-emerald-800 shadow-xs ring-1 ring-emerald-500'
-                                      : 'bg-white hover:bg-emerald-50 text-slate-700 border-slate-200'
-                                  }`}
-                                >
-                                  {shortLabel}
-                                </button>
-                              );
-                            })}
-                          </div>
-
-                          {/* Scrollable Destination Items */}
-                          <div className="max-h-52 overflow-y-auto scrollbar-thin pr-1 space-y-1.5">
+                        <div className="p-3 animate-in fade-in slide-in-from-top-1 duration-200">
+                          {/* Scrollable Destination Items (Parallel fixed height matching vehicle fare list) */}
+                          <div className="h-[250px] overflow-y-auto scrollbar-thin pr-1 space-y-1.5">
                             {(appCustomSettings.quickDestinations && appCustomSettings.quickDestinations.length > 0
                               ? appCustomSettings.quickDestinations
                               : [
@@ -4183,6 +4242,7 @@ export default function App() {
                                     setPassengerDestination(dest);
                                     const coords = resolveLocationCoordinates(dest, true);
                                     setDestCoords(coords);
+                                    setIsQuickDestOpen(false); // Fold on selection
                                   }}
                                   className={`w-full flex items-center justify-between p-2 rounded-xl border text-left transition-all cursor-pointer ${
                                     isMatch
@@ -4247,8 +4307,8 @@ export default function App() {
 
                       {/* Dropdown Content with Scroll Option */}
                       {isVehicleFareOpen && (
-                        <div className="p-3 space-y-2 animate-in fade-in slide-in-from-top-1 duration-200">
-                          <div className="max-h-56 overflow-y-auto scrollbar-thin pr-1 space-y-1.5">
+                        <div className="p-3 animate-in fade-in slide-in-from-top-1 duration-200">
+                          <div className="h-[250px] overflow-y-auto scrollbar-thin pr-1 space-y-1.5">
                             {categories.filter(c => c.id !== 'all').map((cat) => {
                               const isSelected = passengerSelectedVehicle === cat.id;
                               const fare = calculateFareForCategory(cat.id, calculatedDistance);
@@ -4261,6 +4321,7 @@ export default function App() {
                                   onClick={() => {
                                     setPassengerSelectedVehicle(cat.id);
                                     setSelectedCategory(cat.id);
+                                    setIsVehicleFareOpen(false); // Fold on selection
                                   }}
                                   className={`w-full flex items-center justify-between p-2 rounded-xl border text-left transition-all cursor-pointer ${
                                     isSelected
@@ -4356,263 +4417,322 @@ export default function App() {
         {/* ============================================================== */}
         {userRole === 'driver' && (
           <section className="max-w-7xl mx-auto w-full px-3 sm:px-4 lg:px-6 pt-3 pb-2 animate-in fade-in">
-            {/* Driver Profile Bar */}
-            <div className="bg-gradient-to-r from-amber-500/15 via-emerald-500/10 to-blue-500/10 border border-amber-300 rounded-2xl p-3 sm:p-4 mb-3 shadow-xs">
-              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-                <div className="flex items-center gap-3">
-                  {driverProfile.driverPhoto ? (
-                    <img
-                      src={driverProfile.driverPhoto}
-                      alt={driverProfile.name}
-                      className="w-12 h-12 sm:w-14 sm:h-14 rounded-2xl object-cover shadow-md border-2 border-white shrink-0 bg-slate-800"
-                    />
-                  ) : (
-                    <div className="w-12 h-12 sm:w-14 sm:h-14 rounded-2xl bg-amber-500 text-slate-950 flex items-center justify-center font-bold text-xl shadow-md border-2 border-white shrink-0">
-                      {driverProfile.category === 'ambulance' ? '✚' :
-                       driverProfile.category === 'cng' ? '🛺' :
-                       driverProfile.category === 'auto' ? '🔋' :
-                       driverProfile.category === 'car' ? '🚗' :
-                       driverProfile.category === 'microbus' ? '🚐' :
-                       driverProfile.category === 'bike' ? '🏍️' : '🚒'}
-                    </div>
-                  )}
-                  <div>
-                    <div className="flex items-center gap-1.5 flex-wrap">
-                      <span className="bg-amber-400 text-slate-950 font-black text-[10px] px-2 py-0.5 rounded shadow-xs">
-                        চালক কন্ট্রোল ড্যাশবোর্ড
-                      </span>
-                      <span className="bg-emerald-100 text-emerald-800 font-bold text-[10px] px-2 py-0.5 rounded flex items-center gap-1">
-                        <ShieldCheck className="w-3 h-3 text-emerald-600" />
-                        BRTA লাইসেন্স ভেরিফাইড
-                      </span>
-                    </div>
-                    <h2 className="text-sm sm:text-base font-extrabold text-slate-900 mt-1">
-                      {driverProfile.name} • {driverProfile.vehicleModel}
-                    </h2>
-                    <p className="text-xs text-slate-600">
-                      প্লেট: <b className="text-emerald-700">{driverProfile.plateNumber}</b> | প্রধান স্ট্যান্ড: {driverProfile.standName}
-                    </p>
-                  </div>
+            {!driverProfile.isRegistered || !driverProfile.phone ? (
+              /* UNREGISTERED DRIVER ONBOARDING & LOGIN PROMPT */
+              <div className="bg-gradient-to-br from-amber-50 via-white to-amber-100/70 rounded-3xl border-2 border-amber-300 p-5 sm:p-8 shadow-lg max-w-2xl mx-auto my-4 text-center space-y-5 animate-in fade-in">
+                <div className="w-16 h-16 mx-auto rounded-3xl bg-amber-500 text-slate-950 flex items-center justify-center font-black shadow-md">
+                  <Car className="w-8 h-8" />
+                </div>
+                <div>
+                  <span className="bg-amber-200 text-amber-950 text-[11px] font-black px-2.5 py-1 rounded-full uppercase tracking-wider">
+                    সফর চালক কন্ট্রোল হাব
+                  </span>
+                  <h2 className="text-lg sm:text-xl font-black text-slate-900 mt-2">
+                    আপনি এখনও চালক হিসেবে নিবন্ধিত নন
+                  </h2>
+                  <p className="text-xs sm:text-sm text-slate-600 max-w-md mx-auto mt-1.5 leading-relaxed">
+                    গফরগাঁও সফর ডিজিটাল নেটওয়ার্কে গাড়ি চালিয়ে আয় করতে এবং সরাসরি যাত্রীদের ট্রিপ কল পেতে বিআরটিএ ড্রাইভিং লাইসেন্স ও জাতীয় পরিচয়পত্র দিয়ে নিবন্ধন সম্পন্ন করুন।
+                  </p>
                 </div>
 
-                {/* Online / Offline switch & Profile switch & Back to Passenger */}
-                <div className="flex items-center gap-2 self-start sm:self-center flex-wrap">
-                  {/* Quick Driver Profile Switcher to switch between registered drivers */}
-                  <select
-                    value={driverProfile.id || ''}
-                    onChange={(e) => {
-                      const selected = drivers.find(d => d.id === e.target.value);
-                      if (selected) {
-                        setDriverProfile({
-                          id: selected.id,
-                          name: selected.name,
-                          phone: selected.phone,
-                          vehicleModel: selected.vehicleModel,
-                          plateNumber: selected.plateNumber,
-                          licenseNumber: selected.licenseNumber,
-                          standName: selected.standName,
-                          category: selected.category,
-                          rating: selected.rating,
-                          todayTrips: selected.totalTrips || 4,
-                          todayEarnings: (selected.totalTrips || 4) * 120,
-                          driverPhoto: selected.driverPhoto || ''
-                        });
-                        showAdminToastMessage(`চালক মোড: ${selected.name} প্রোফাইলে সুইচ করা হয়েছে`);
-                      }
-                    }}
-                    className="bg-white hover:bg-slate-50 text-slate-700 border border-slate-300 px-2.5 py-1.5 rounded-xl text-xs font-bold cursor-pointer transition shadow-xs max-w-[150px] truncate"
-                    title="চালক প্রোফাইল নির্বাচন করুন"
-                  >
-                    <option value="">👤 প্রোফাইল পরিবর্তন</option>
-                    {drivers.map(d => (
-                      <option key={d.id} value={d.id}>
-                        {d.name} ({d.categoryBengali})
-                      </option>
-                    ))}
-                  </select>
-
+                <div className="flex flex-col sm:flex-row items-center justify-center gap-3 pt-2">
                   <button
                     type="button"
-                    onClick={() => setIsDriverOnline(!isDriverOnline)}
-                    className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl font-bold text-xs sm:text-sm transition-all shadow-xs cursor-pointer ${
-                      isDriverOnline
-                        ? 'bg-emerald-600 hover:bg-emerald-700 text-white shadow-emerald-600/30'
-                        : 'bg-slate-300 hover:bg-slate-400 text-slate-800'
-                    }`}
+                    onClick={() => {
+                      setRegisterModalTab('register');
+                      setIsRegisterModalOpen(true);
+                    }}
+                    className="w-full sm:w-auto inline-flex items-center justify-center gap-2 bg-emerald-600 hover:bg-emerald-700 text-white font-extrabold px-6 py-3 rounded-xl text-sm shadow-md transition-all cursor-pointer active:scale-95"
                   >
-                    <Power className="w-3.5 h-3.5" />
-                    <span>{isDriverOnline ? 'অনলাইনে আছেন (অনুরোধ আসবে)' : 'অফলাইন (অনুরোধ বন্ধ)'}</span>
+                    <UserPlus className="w-4 h-4" />
+                    <span>এখনই চালক নিবন্ধন করুন</span>
                   </button>
-
                   <button
                     type="button"
                     onClick={() => setUserRole('passenger')}
-                    className="flex items-center gap-1.5 bg-emerald-50 hover:bg-emerald-100 text-emerald-900 border border-emerald-300 px-3 py-1.5 rounded-xl text-xs font-black cursor-pointer transition-all shadow-xs"
-                    title="যাত্রী মোডে ফিরে যান"
+                    className="w-full sm:w-auto inline-flex items-center justify-center gap-2 bg-white hover:bg-slate-100 text-slate-700 font-bold px-4 py-3 rounded-xl text-sm border border-slate-300 shadow-xs transition-all cursor-pointer"
                   >
                     <User className="w-3.5 h-3.5 text-emerald-700" />
                     <span>যাত্রী মোডে ফিরে যান</span>
                   </button>
                 </div>
-              </div>
 
-              {/* Driver Stats */}
-              <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 mt-3 pt-3 border-t border-amber-200/60">
-                <div className="bg-white/90 p-2 rounded-xl border border-slate-200">
-                  <span className="text-[10.5px] text-slate-500 block">বর্তমান স্ট্যাটাস</span>
-                  <span className={`font-bold text-xs ${isDriverOnline ? 'text-emerald-700' : 'text-slate-500'}`}>
-                    {isDriverOnline ? '🟢 ট্রিপ নিতে প্রস্তুত' : '🔴 অফলাইন'}
+                {/* Inline Login for Already Registered Drivers */}
+                <div className="pt-4 border-t border-amber-200/80 text-left max-w-md mx-auto">
+                  <span className="text-xs font-bold text-slate-800 block mb-1.5">
+                    ইতিমধ্যে নিবন্ধিত চালক? আপনার নম্বর দিয়ে ড্যাশবোর্ড খুলুন:
                   </span>
-                </div>
-                <div className="bg-white/90 p-2 rounded-xl border border-slate-200">
-                  <span className="text-[10.5px] text-slate-500 block">আজকের ট্রিপ</span>
-                  <span className="font-bold text-xs text-blue-700">{driverProfile.todayTrips} টি সফল রাইড</span>
-                </div>
-                <div className="bg-white/90 p-2 rounded-xl border border-slate-200">
-                  <span className="text-[10.5px] text-slate-500 block">আজকের আনুমানিক আয়</span>
-                  <span className="font-extrabold text-xs text-emerald-800">৳ {driverProfile.todayEarnings}</span>
-                </div>
-                <div className="bg-white/90 p-2 rounded-xl border border-slate-200">
-                  <span className="text-[10.5px] text-slate-500 block">ড্রাইভার রেটিং</span>
-                  <span className="font-bold text-xs text-amber-600 flex items-center gap-0.5">
-                    <Star className="w-3 h-3 fill-amber-500" />
-                    {driverProfile.rating} (৫৫+ যাত্রী রিভিউ)
-                  </span>
-                </div>
-              </div>
-            </div>
-
-            {/* Incoming Passenger Requests Section */}
-            <div className="bg-white rounded-2xl border border-slate-200 p-3 sm:p-4 shadow-xs mb-3">
-              <div className="flex items-center justify-between pb-2 mb-2.5 border-b border-slate-100 flex-wrap gap-2">
-                <div className="flex items-center gap-2">
-                  <Users className="w-4 h-4 text-emerald-600" />
-                  <h3 className="font-bold text-slate-900 text-xs sm:text-sm">
-                    আগত যাত্রার অনুরোধসমূহ (প্যাসেঞ্জার রিকোয়েস্ট)
-                  </h3>
-                  <span className="bg-amber-100 text-amber-900 text-[10px] font-black px-2 py-0.5 rounded-full">
-                    {passengerRequests.filter(r => r.status === 'pending').length} টি অপেক্ষমাণ
-                  </span>
-                </div>
-                <span className="text-[11px] text-slate-500">
-                  চালকের ভূমিকা: যাত্রীকে সরাসরি কল দিন এবং ট্রিপ <b>কনফার্ম</b> করুন
-                </span>
-              </div>
-
-              {/* Request Cards Grid */}
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-2.5">
-                {passengerRequests.map((req) => (
-                  <div 
-                    key={req.id}
-                    className={`p-3 rounded-xl border transition-all ${
-                      req.status === 'accepted' 
-                        ? 'bg-emerald-50/80 border-emerald-400 shadow-xs' 
-                        : req.status === 'declined'
-                        ? 'bg-slate-50 border-slate-200 opacity-60'
-                        : 'bg-white border-slate-200 hover:border-emerald-300 shadow-xs'
-                    }`}
+                  <form
+                    onSubmit={(e) => {
+                      e.preventDefault();
+                      handleDriverLogin(driverLoginPhoneInput);
+                    }}
+                    className="flex items-center gap-2"
                   >
-                    <div className="flex items-start justify-between gap-1 mb-2">
+                    <input
+                      type="tel"
+                      value={driverLoginPhoneInput}
+                      onChange={(e) => {
+                        setDriverLoginPhoneInput(e.target.value);
+                        setDriverLoginError(null);
+                      }}
+                      placeholder="যেমন: ০১৭২২-৪৫৬৭৮৯"
+                      className="flex-1 px-3 py-2 bg-white border border-slate-300 rounded-xl text-xs text-slate-900 focus:outline-none focus:ring-2 focus:ring-amber-500 font-bold"
+                      required
+                    />
+                    <button
+                      type="submit"
+                      className="bg-amber-500 hover:bg-amber-600 text-slate-950 font-black px-4 py-2 rounded-xl text-xs shadow-xs cursor-pointer transition shrink-0"
+                    >
+                      লগইন করুন
+                    </button>
+                  </form>
+                  {driverLoginError && (
+                    <p className="text-[11px] font-bold text-red-600 mt-1.5 flex items-center gap-1">
+                      <AlertCircle className="w-3.5 h-3.5 shrink-0" />
+                      <span>{driverLoginError}</span>
+                    </p>
+                  )}
+                </div>
+              </div>
+            ) : (
+              /* REGISTERED DRIVER ACTIVE COCKPIT */
+              <>
+                {/* Driver Profile Bar */}
+                <div className="bg-gradient-to-r from-amber-500/15 via-emerald-500/10 to-blue-500/10 border border-amber-300 rounded-2xl p-3 sm:p-4 mb-3 shadow-xs">
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                    <div className="flex items-center gap-3">
+                      {driverProfile.driverPhoto ? (
+                        <img
+                          src={driverProfile.driverPhoto}
+                          alt={driverProfile.name}
+                          className="w-12 h-12 sm:w-14 sm:h-14 rounded-2xl object-cover shadow-md border-2 border-white shrink-0 bg-slate-800"
+                        />
+                      ) : (
+                        <div className="w-12 h-12 sm:w-14 sm:h-14 rounded-2xl bg-amber-500 text-slate-950 flex items-center justify-center font-bold text-xl shadow-md border-2 border-white shrink-0">
+                          {driverProfile.category === 'ambulance' ? '✚' :
+                           driverProfile.category === 'cng' ? '🛺' :
+                           driverProfile.category === 'auto' ? '🔋' :
+                           driverProfile.category === 'car' ? '🚗' :
+                           driverProfile.category === 'microbus' ? '🚐' :
+                           driverProfile.category === 'bike' ? '🏍️' : '🚒'}
+                        </div>
+                      )}
                       <div>
-                        <span className="text-xs font-bold text-slate-900 flex items-center gap-1">
-                          <User className="w-3.5 h-3.5 text-blue-600" />
-                          {req.passengerName}
-                        </span>
-                        <span className="text-[10px] text-slate-400">{req.requestedAt}</span>
+                        <div className="flex items-center gap-1.5 flex-wrap">
+                          <span className="bg-amber-400 text-slate-950 font-black text-[10px] px-2 py-0.5 rounded shadow-xs">
+                            চালক কন্ট্রোল ড্যাশবোর্ড
+                          </span>
+                          <span className="bg-emerald-100 text-emerald-800 font-bold text-[10px] px-2 py-0.5 rounded flex items-center gap-1">
+                            <ShieldCheck className="w-3 h-3 text-emerald-600" />
+                            BRTA লাইসেন্স ভেরিফাইড
+                          </span>
+                        </div>
+                        <h2 className="text-sm sm:text-base font-extrabold text-slate-900 mt-1">
+                          {driverProfile.name} • {driverProfile.vehicleModel}
+                        </h2>
+                        <p className="text-xs text-slate-600">
+                          প্লেট: <b className="text-emerald-700">{driverProfile.plateNumber}</b> | প্রধান স্ট্যান্ড: {driverProfile.standName}
+                        </p>
                       </div>
-                      <span className="bg-emerald-100 text-emerald-800 font-extrabold text-xs px-2 py-0.5 rounded-md">
-                        ভাড়া: ৳ {req.estFare}
+                    </div>
+
+                    {/* Online / Offline switch & Back to Passenger & Logout */}
+                    <div className="flex items-center gap-2 self-start sm:self-center flex-wrap">
+                      <button
+                        type="button"
+                        onClick={() => setIsDriverOnline(!isDriverOnline)}
+                        className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl font-bold text-xs sm:text-sm transition-all shadow-xs cursor-pointer ${
+                          isDriverOnline
+                            ? 'bg-emerald-600 hover:bg-emerald-700 text-white shadow-emerald-600/30'
+                            : 'bg-slate-300 hover:bg-slate-400 text-slate-800'
+                        }`}
+                      >
+                        <Power className="w-3.5 h-3.5" />
+                        <span>{isDriverOnline ? 'অনলাইনে আছেন (অনুরোধ আসবে)' : 'অফলাইন (অনুরোধ বন্ধ)'}</span>
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={() => setUserRole('passenger')}
+                        className="flex items-center gap-1.5 bg-emerald-50 hover:bg-emerald-100 text-emerald-900 border border-emerald-300 px-3 py-1.5 rounded-xl text-xs font-black cursor-pointer transition-all shadow-xs"
+                        title="যাত্রী মোডে ফিরে যান"
+                      >
+                        <User className="w-3.5 h-3.5 text-emerald-700" />
+                        <span>যাত্রী মোডে ফিরে যান</span>
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={handleDriverLogout}
+                        className="flex items-center gap-1 bg-red-50 hover:bg-red-100 text-red-700 border border-red-200 px-2.5 py-1.5 rounded-xl text-xs font-bold cursor-pointer transition-all shadow-xs"
+                        title="চালক একাউন্ট থেকে লগআউট করুন"
+                      >
+                        <LogOut className="w-3.5 h-3.5" />
+                        <span>লগআউট</span>
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* Driver Stats */}
+                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 mt-3 pt-3 border-t border-amber-200/60">
+                    <div className="bg-white/90 p-2 rounded-xl border border-slate-200">
+                      <span className="text-[10.5px] text-slate-500 block">বর্তমান স্ট্যাটাস</span>
+                      <span className={`font-bold text-xs ${isDriverOnline ? 'text-emerald-700' : 'text-slate-500'}`}>
+                        {isDriverOnline ? '🟢 ট্রিপ নিতে প্রস্তুত' : '🔴 অফলাইন'}
                       </span>
                     </div>
-
-                    <div className="text-xs space-y-1 mb-3 bg-slate-50 p-2 rounded-lg border border-slate-100">
-                      <div className="flex items-center gap-1.5 text-slate-700">
-                        <MapPin className="w-3 h-3 text-emerald-600 shrink-0" />
-                        <span className="text-slate-500 text-[11px]">পিকআপ:</span>
-                        <b className="truncate text-[11px]">{req.pickupPoint}</b>
-                      </div>
-                      <div className="flex items-center gap-1.5 text-slate-700">
-                        <Navigation className="w-3 h-3 text-blue-600 shrink-0" />
-                        <span className="text-slate-500 text-[11px]">গন্তব্য:</span>
-                        <b className="truncate text-[11px]">{req.destination}</b>
-                      </div>
-                      <div className="flex items-center gap-1.5 text-slate-500 text-[10px] pt-1 border-t border-slate-200/60">
-                        <span>দূরত্ব: {req.distanceKm} কিমি</span>
-                      </div>
+                    <div className="bg-white/90 p-2 rounded-xl border border-slate-200">
+                      <span className="text-[10.5px] text-slate-500 block">আজকের ট্রিপ</span>
+                      <span className="font-bold text-xs text-blue-700">{driverProfile.todayTrips} টি সফল রাইড</span>
                     </div>
-
-                    {req.status === 'pending' && (
-                      <div className="flex items-center gap-1.5">
-                        <a
-                          href={`tel:${req.passengerPhone}`}
-                          className="flex-1 flex items-center justify-center gap-1 py-1.5 px-2 bg-slate-900 hover:bg-slate-800 text-white rounded-lg text-xs font-bold transition-all"
-                        >
-                          <PhoneCall className="w-3.5 h-3.5 text-emerald-400" />
-                          <span>যাত্রীকে কল দিন</span>
-                        </a>
-                        <button
-                          type="button"
-                          onClick={() => handleDriverAcceptRequest(req.id)}
-                          className="flex-1 flex items-center justify-center gap-1 py-1.5 px-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-xs font-bold transition-all shadow-xs cursor-pointer"
-                        >
-                          <Check className="w-3.5 h-3.5" />
-                          <span>ট্রিপ কনফার্ম করুন</span>
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => handleDriverDeclineRequest(req.id)}
-                          className="p-1.5 bg-slate-100 hover:bg-slate-200 text-slate-600 rounded-lg text-xs cursor-pointer"
-                          title="বাতিল"
-                        >
-                          <X className="w-3.5 h-3.5" />
-                        </button>
-                      </div>
-                    )}
-
-                    {req.status === 'accepted' && (
-                      <div className="space-y-1.5">
-                        <div className="bg-emerald-100 text-emerald-800 text-[11px] font-bold p-1.5 rounded-lg flex items-center gap-1">
-                          <CheckCircle className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
-                          <span>ট্রিপ গ্রহণ করেছেন! যাত্রীর লোকেশনে রওনা দিন।</span>
-                        </div>
-                        <a
-                          href={`tel:${req.passengerPhone}`}
-                          className="w-full flex items-center justify-center gap-1 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-xs font-bold"
-                        >
-                          <PhoneCall className="w-3.5 h-3.5" />
-                          <span>যাত্রীকে কল করুন</span>
-                        </a>
-                      </div>
-                    )}
-
-                    {req.status === 'declined' && (
-                      <div className="text-center text-slate-500 text-[11px] py-1">
-                        এই অনুরোধটি বাতিল করা হয়েছে
-                      </div>
-                    )}
+                    <div className="bg-white/90 p-2 rounded-xl border border-slate-200">
+                      <span className="text-[10.5px] text-slate-500 block">আজকের আনুমানিক আয়</span>
+                      <span className="font-extrabold text-xs text-emerald-800">৳ {driverProfile.todayEarnings}</span>
+                    </div>
+                    <div className="bg-white/90 p-2 rounded-xl border border-slate-200">
+                      <span className="text-[10.5px] text-slate-500 block">ড্রাইভার রেটিং</span>
+                      <span className="font-bold text-xs text-amber-600 flex items-center gap-0.5">
+                        <Star className="w-3 h-3 fill-amber-500" />
+                        {driverProfile.rating} (৫৫+ যাত্রী রিভিউ)
+                      </span>
+                    </div>
                   </div>
-                ))}
-              </div>
-            </div>
+                </div>
 
-            {/* Chalok Cockpit Dedicated Guidance & Tips */}
-            <div className="bg-gradient-to-r from-emerald-950 via-slate-900 to-emerald-900 rounded-2xl p-4 text-white border border-emerald-500/40 shadow-xs mb-3">
-              <div className="flex items-start gap-3">
-                <div className="w-10 h-10 rounded-xl bg-amber-400 text-slate-950 flex items-center justify-center font-bold shrink-0 shadow-md">
-                  <Car className="w-5 h-5 text-slate-950" />
+                {/* Incoming Passenger Requests Section */}
+                <div className="bg-white rounded-2xl border border-slate-200 p-3 sm:p-4 shadow-xs mb-3">
+                  <div className="flex items-center justify-between pb-2 mb-2.5 border-b border-slate-100 flex-wrap gap-2">
+                    <div className="flex items-center gap-2">
+                      <Users className="w-4 h-4 text-emerald-600" />
+                      <h3 className="font-bold text-slate-900 text-xs sm:text-sm">
+                        আগত যাত্রার অনুরোধসমূহ (প্যাসেঞ্জার রিকোয়েস্ট)
+                      </h3>
+                      <span className="bg-amber-100 text-amber-900 text-[10px] font-black px-2 py-0.5 rounded-full">
+                        {passengerRequests.filter(r => r.status === 'pending').length} টি অপেক্ষমাণ
+                      </span>
+                    </div>
+                    <span className="text-[11px] text-slate-500">
+                      চালকের ভূমিকা: যাত্রীকে সরাসরি কল দিন এবং ট্রিপ <b>কনফার্ম</b> করুন
+                    </span>
+                  </div>
+
+                  {/* Request Cards Grid */}
+                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-2.5">
+                    {passengerRequests.map((req) => (
+                      <div 
+                        key={req.id}
+                        className={`p-3 rounded-xl border transition-all ${
+                          req.status === 'accepted' 
+                            ? 'bg-emerald-50/80 border-emerald-400 shadow-xs' 
+                            : req.status === 'declined'
+                            ? 'bg-slate-50 border-slate-200 opacity-60'
+                            : 'bg-white border-slate-200 hover:border-emerald-300 shadow-xs'
+                        }`}
+                      >
+                        <div className="flex items-start justify-between gap-1 mb-2">
+                          <div>
+                            <span className="text-xs font-bold text-slate-900 flex items-center gap-1">
+                              <User className="w-3.5 h-3.5 text-blue-600" />
+                              {req.passengerName}
+                            </span>
+                            <span className="text-[10px] text-slate-400">{req.requestedAt}</span>
+                          </div>
+                          <span className="bg-emerald-100 text-emerald-800 font-extrabold text-xs px-2 py-0.5 rounded-md">
+                            ভাড়া: ৳ {req.estFare}
+                          </span>
+                        </div>
+
+                        <div className="text-xs space-y-1 mb-3 bg-slate-50 p-2 rounded-lg border border-slate-100">
+                          <div className="flex items-center gap-1.5 text-slate-700">
+                            <MapPin className="w-3 h-3 text-emerald-600 shrink-0" />
+                            <span className="text-slate-500 text-[11px]">পিকআপ:</span>
+                            <b className="truncate text-[11px]">{req.pickupPoint}</b>
+                          </div>
+                          <div className="flex items-center gap-1.5 text-slate-700">
+                            <Navigation className="w-3 h-3 text-blue-600 shrink-0" />
+                            <span className="text-slate-500 text-[11px]">গন্তব্য:</span>
+                            <b className="truncate text-[11px]">{req.destination}</b>
+                          </div>
+                          <div className="flex items-center gap-1.5 text-slate-500 text-[10px] pt-1 border-t border-slate-200/60">
+                            <span>দূরত্ব: {req.distanceKm} কিমি</span>
+                          </div>
+                        </div>
+
+                        {req.status === 'pending' && (
+                          <div className="flex items-center gap-1.5">
+                            <a
+                              href={`tel:${req.passengerPhone}`}
+                              className="flex-1 flex items-center justify-center gap-1 py-1.5 px-2 bg-slate-900 hover:bg-slate-800 text-white rounded-lg text-xs font-bold transition-all"
+                            >
+                              <PhoneCall className="w-3.5 h-3.5 text-emerald-400" />
+                              <span>যাত্রীকে কল দিন</span>
+                            </a>
+                            <button
+                              type="button"
+                              onClick={() => handleDriverAcceptRequest(req.id)}
+                              className="flex-1 flex items-center justify-center gap-1 py-1.5 px-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-xs font-bold transition-all shadow-xs cursor-pointer"
+                            >
+                              <Check className="w-3.5 h-3.5" />
+                              <span>ট্রিপ কনফার্ম করুন</span>
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => handleDriverDeclineRequest(req.id)}
+                              className="p-1.5 bg-slate-100 hover:bg-slate-200 text-slate-600 rounded-lg text-xs cursor-pointer"
+                              title="বাতিল"
+                            >
+                              <X className="w-3.5 h-3.5" />
+                            </button>
+                          </div>
+                        )}
+
+                        {req.status === 'accepted' && (
+                          <div className="space-y-1.5">
+                            <div className="bg-emerald-100 text-emerald-800 text-[11px] font-bold p-1.5 rounded-lg flex items-center gap-1">
+                              <CheckCircle className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
+                              <span>ট্রিপ গ্রহণ করেছেন! যাত্রীর লোকেশনে রওনা দিন।</span>
+                            </div>
+                            <a
+                              href={`tel:${req.passengerPhone}`}
+                              className="w-full flex items-center justify-center gap-1 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-xs font-bold"
+                            >
+                              <PhoneCall className="w-3.5 h-3.5" />
+                              <span>যাত্রীকে কল করুন</span>
+                            </a>
+                          </div>
+                        )}
+
+                        {req.status === 'declined' && (
+                          <div className="text-center text-slate-500 text-[11px] py-1">
+                            এই অনুরোধটি বাতিল করা হয়েছে
+                          </div>
+                        )}
+                      </div>
+                    ))}
+                  </div>
                 </div>
-                <div>
-                  <h4 className="font-extrabold text-sm text-amber-300">
-                    চালক কন্ট্রোল ড্যাশবোর্ড নির্দেশিকা
-                  </h4>
-                  <p className="text-xs text-emerald-100/90 mt-1 leading-relaxed">
-                    ১. আপনি <b>অনলাইনে</b> থাকলে গফরগাঁও উপজেলার যাত্রীরা অ্যাপ থেকে সরাসরি আপনাকে রাইডের জন্য অনুরোধ পাঠাতে পারবেন।<br/>
-                    ২. অনুরোধ আসলে <b>'যাত্রীকে কল দিন'</b> বাটনে চাপ দিয়ে পিকআপ পয়েন্ট নিশ্চিত করুন এবং <b>'ট্রিপ কনফার্ম করুন'</b> এ চাপ দিন।<br/>
-                    ৩. স্ট্যান্ড নির্বাচন, ক্যাটাগরি মেনু ও লাইভ ম্যাপ কেবল <b>যাত্রীদের</b> ব্যবহারের জন্য; চালক মোডে আপনার স্ক্রিনটি সম্পূর্ণ ঝামেলামুক্ত ও ডেডিকেটেড রাখা হয়েছে।
-                  </p>
+
+                {/* Chalok Cockpit Dedicated Guidance & Tips */}
+                <div className="bg-gradient-to-r from-emerald-950 via-slate-900 to-emerald-900 rounded-2xl p-4 text-white border border-emerald-500/40 shadow-xs mb-3">
+                  <div className="flex items-start gap-3">
+                    <div className="w-10 h-10 rounded-xl bg-amber-400 text-slate-950 flex items-center justify-center font-bold shrink-0 shadow-md">
+                      <Car className="w-5 h-5 text-slate-950" />
+                    </div>
+                    <div>
+                      <h4 className="font-extrabold text-sm text-amber-300">
+                        চালক কন্ট্রোল ড্যাশবোর্ড নির্দেশিকা
+                      </h4>
+                      <p className="text-xs text-emerald-100/90 mt-1 leading-relaxed">
+                        ১. আপনি <b>অনলাইনে</b> থাকলে গফরগাঁও উপজেলার যাত্রীরা অ্যাপ থেকে সরাসরি আপনাকে রাইডের জন্য অনুরোধ পাঠাতে পারবেন।<br/>
+                        ২. অনুরোধ আসলে <b>'যাত্রীকে কল দিন'</b> বাটনে চাপ দিয়ে পিকআপ পয়েন্ট নিশ্চিত করুন এবং <b>'ট্রিপ কনফার্ম করুন'</b> এ চাপ দিন।<br/>
+                        ৩. স্ট্যান্ড নির্বাচন, ক্যাটাগরি মেনু ও লাইভ ম্যাপ কেবল <b>যাত্রীদের</b> ব্যবহারের জন্য; চালক মোডে আপনার স্ক্রিনটি সম্পূর্ণ ঝামেলামুক্ত ও ডেডিকেটেড রাখা হয়েছে।
+                      </p>
+                    </div>
+                  </div>
                 </div>
-              </div>
-            </div>
+              </>
+            )}
           </section>
         )}
 
@@ -6315,60 +6435,79 @@ export default function App() {
                     <span>মোট ভাড়া পরিশোধ: <b>৳ {tripHistory.reduce((acc, t) => acc + t.fare, 0)}</b></span>
                   </div>
 
-                  {tripHistory.map((trip) => (
-                    <div 
-                      key={trip.id} 
-                      className="bg-white rounded-xl sm:rounded-2xl border border-slate-200 p-3 sm:p-3.5 shadow-xs space-y-2 hover:border-emerald-300 transition-colors"
-                    >
-                      <div className="flex items-start justify-between gap-2">
-                        <div className="flex items-center gap-2">
-                          <CategoryBadgeLogo category={trip.vehicleCategory} size="compact" />
-                          <div>
-                            <span className="text-[10px] text-slate-400 block">{trip.date}</span>
-                            <h4 className="text-xs sm:text-sm font-bold text-slate-900 leading-snug">
-                              {trip.driverName}
-                            </h4>
+                  {tripHistory.length === 0 ? (
+                    <div className="bg-white rounded-2xl border border-slate-200 p-8 text-center space-y-3 shadow-xs">
+                      <div className="w-14 h-14 rounded-2xl bg-emerald-50 text-emerald-600 flex items-center justify-center mx-auto text-2xl border border-emerald-100">
+                        🛵
+                      </div>
+                      <h4 className="font-extrabold text-slate-800 text-sm sm:text-base">কোনো পূর্ববর্তী যাত্রার রেকর্ড পাওয়া যায়নি</h4>
+                      <p className="text-xs text-slate-500 max-w-sm mx-auto leading-relaxed">
+                        আপনি এখনও কোনো ট্রিপ সম্পন্ন করেননি। গফরগাঁও বা পাগলা উপজেলায় কোনো রাইড বুকিং ও যাত্রা সম্পন্ন করলে আপনার ডিজিটাল রসিদ, ভাড়া ও চালকের বিবরণ স্বয়ংক্রিয়ভাবে এখানে এবং ফায়ারস্টোর ক্লাউডে সংরক্ষিত হবে।
+                      </p>
+                      <button
+                        type="button"
+                        onClick={() => setShowPassengerModal(false)}
+                        className="mt-2 inline-flex items-center gap-1.5 px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold cursor-pointer transition shadow-xs"
+                      >
+                        <span>নতুন যাত্রা শুরু করুন</span>
+                      </button>
+                    </div>
+                  ) : (
+                    tripHistory.map((trip) => (
+                      <div 
+                        key={trip.id} 
+                        className="bg-white rounded-xl sm:rounded-2xl border border-slate-200 p-3 sm:p-3.5 shadow-xs space-y-2 hover:border-emerald-300 transition-colors"
+                      >
+                        <div className="flex items-start justify-between gap-2">
+                          <div className="flex items-center gap-2">
+                            <CategoryBadgeLogo category={trip.vehicleCategory} size="compact" />
+                            <div>
+                              <span className="text-[10px] text-slate-400 block">{trip.date}</span>
+                              <h4 className="text-xs sm:text-sm font-bold text-slate-900 leading-snug">
+                                {trip.driverName}
+                              </h4>
+                            </div>
+                          </div>
+                          <div className="text-right">
+                            <span className="bg-emerald-100 text-emerald-800 font-extrabold text-xs px-2 py-0.5 rounded-md inline-block">
+                              ৳ {trip.fare}
+                            </span>
+                            <span className="text-[9.5px] font-bold text-emerald-700 block mt-0.5">
+                              {trip.status} ✅
+                            </span>
                           </div>
                         </div>
-                        <div className="text-right">
-                          <span className="bg-emerald-100 text-emerald-800 font-extrabold text-xs px-2 py-0.5 rounded-md inline-block">
-                            ৳ {trip.fare}
-                          </span>
-                          <span className="text-[9.5px] font-bold text-emerald-700 block mt-0.5">
-                            {trip.status} ✅
-                          </span>
-                        </div>
-                      </div>
 
-                      {/* Route */}
-                      <div className="bg-slate-50 rounded-lg p-2 text-xs border border-slate-100 space-y-1">
-                        <div className="flex items-center gap-1.5 text-slate-700">
-                          <MapPin className="w-3 h-3 text-emerald-600 shrink-0" />
-                          <span className="text-[11px] text-slate-500">শুরুর স্থান:</span>
-                          <span className="text-[11px] font-semibold text-slate-800 truncate">{trip.pickupPoint}</span>
+                        {/* Route */}
+                        <div className="bg-slate-50 rounded-lg p-2 text-xs border border-slate-100 space-y-1">
+                          <div className="flex items-center gap-1.5 text-slate-700">
+                            <MapPin className="w-3 h-3 text-emerald-600 shrink-0" />
+                            <span className="text-[11px] text-slate-500">শুরুর স্থান:</span>
+                            <span className="text-[11px] font-semibold text-slate-800 truncate">{trip.pickupPoint}</span>
+                          </div>
+                          <div className="flex items-center gap-1.5 text-slate-700">
+                            <Navigation className="w-3 h-3 text-blue-600 shrink-0" />
+                            <span className="text-[11px] text-slate-500">গন্তব্য:</span>
+                            <span className="text-[11px] font-semibold text-slate-800 truncate">{trip.destination}</span>
+                          </div>
                         </div>
-                        <div className="flex items-center gap-1.5 text-slate-700">
-                          <Navigation className="w-3 h-3 text-blue-600 shrink-0" />
-                          <span className="text-[11px] text-slate-500">গন্তব্য:</span>
-                          <span className="text-[11px] font-semibold text-slate-800 truncate">{trip.destination}</span>
-                        </div>
-                      </div>
 
-                      {/* Driver info & action */}
-                      <div className="flex items-center justify-between pt-1 border-t border-slate-100 text-[11px]">
-                        <div className="text-slate-600">
-                          <span>{trip.vehicleModel}</span> • <span className="font-semibold">{trip.plateNumber}</span>
+                        {/* Driver info & action */}
+                        <div className="flex items-center justify-between pt-1 border-t border-slate-100 text-[11px]">
+                          <div className="text-slate-600">
+                            <span>{trip.vehicleModel}</span> • <span className="font-semibold">{trip.plateNumber}</span>
+                          </div>
+                          <a
+                            href={`tel:${trip.driverPhone}`}
+                            className="inline-flex items-center gap-1 text-emerald-700 hover:text-emerald-800 font-bold bg-emerald-50 px-2 py-1 rounded-md border border-emerald-200"
+                          >
+                            <PhoneCall className="w-3 h-3" />
+                            <span>পুনরায় কল</span>
+                          </a>
                         </div>
-                        <a
-                          href={`tel:${trip.driverPhone}`}
-                          className="inline-flex items-center gap-1 text-emerald-700 hover:text-emerald-800 font-bold bg-emerald-50 px-2 py-1 rounded-md border border-emerald-200"
-                        >
-                          <PhoneCall className="w-3 h-3" />
-                          <span>পুনরায় কল</span>
-                        </a>
                       </div>
-                    </div>
-                  ))}
+                    ))
+                  )}
                 </div>
               ) : (
                 /* Passenger Profile Tab with Dynamic Edit & Auto-Sync */
@@ -6382,145 +6521,232 @@ export default function App() {
                       </div>
                     )}
 
-                    <div className="flex items-center justify-between">
-                      <div className="flex items-center gap-3">
-                        <div className="w-11 h-11 rounded-2xl bg-emerald-600 text-white font-bold text-lg flex items-center justify-center shadow-md">
+                  {!passengerProfile.isLoggedIn ? (
+                    <div className="bg-white rounded-2xl p-4 sm:p-5 border border-slate-200 shadow-xs space-y-3.5">
+                      <div className="flex items-center gap-3 pb-3 border-b border-slate-100">
+                        <div className="w-12 h-12 rounded-2xl bg-emerald-100 text-emerald-800 flex items-center justify-center font-bold text-xl border border-emerald-200 shrink-0">
                           👤
                         </div>
                         <div>
-                          <div className="flex items-center gap-1.5">
-                            <h4 className="font-bold text-slate-900 text-sm sm:text-base">{passengerProfile.name}</h4>
-                            <span className="bg-emerald-100 text-emerald-800 text-[10px] font-bold px-1.5 py-0.2 rounded-full">
-                              লগইন সক্রিয়
-                            </span>
-                          </div>
-                          <p className="text-xs text-slate-500 flex items-center gap-1 mt-0.5">
-                            <Phone className="w-3 h-3 text-emerald-600" />
-                            {passengerProfile.phone}
-                          </p>
+                          <h4 className="font-extrabold text-slate-900 text-sm sm:text-base">যাত্রী প্রোফাইল তৈরি ও লগইন</h4>
+                          <p className="text-xs text-slate-500 mt-0.5">গফরগাঁও পৌরসভা ও পাগলা থানা এলাকার নিরাপদ যাতায়াতে তথ্য দিন</p>
                         </div>
                       </div>
 
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setEditProfileForm({
-                            name: passengerProfile.name,
-                            phone: passengerProfile.phone,
-                            homeLocation: passengerProfile.homeLocation,
-                            emergencyContact: passengerProfile.emergencyContact
-                          });
-                          setIsEditingProfile(!isEditingProfile);
-                        }}
-                        className="text-[11px] font-bold px-2.5 py-1 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg border border-slate-300 cursor-pointer transition-colors"
-                      >
-                        {isEditingProfile ? 'বাতিল' : '✏️ তথ্য পরিবর্তন'}
-                      </button>
-                    </div>
-
-                    {isEditingProfile ? (
-                      <form
-                        onSubmit={(e) => {
-                          e.preventDefault();
-                          setPassengerProfile({
-                            ...passengerProfile,
-                            name: editProfileForm.name.trim() || passengerProfile.name,
-                            phone: editProfileForm.phone.trim() || passengerProfile.phone,
-                            homeLocation: editProfileForm.homeLocation.trim() || passengerProfile.homeLocation,
-                            emergencyContact: editProfileForm.emergencyContact.trim() || passengerProfile.emergencyContact
-                          });
-                          setIsEditingProfile(false);
-                          setProfileSaveToast(true);
-                          setTimeout(() => setProfileSaveToast(false), 3000);
-                        }}
-                        className="space-y-2.5 pt-3 border-t border-slate-100 text-xs"
-                      >
+                      <form onSubmit={handlePassengerLoginSubmit} className="space-y-3 text-xs">
                         <div>
-                          <label className="text-[11px] font-bold text-slate-700 block mb-1">
-                            আপনার নাম:
-                          </label>
+                          <label className="font-bold text-slate-700 block mb-1">আপনার পূর্ণ নাম: *</label>
                           <input
                             type="text"
-                            value={editProfileForm.name}
-                            onChange={(e) => setEditProfileForm({ ...editProfileForm, name: e.target.value })}
-                            className="w-full px-2.5 py-1.5 bg-slate-50 border border-slate-300 rounded-lg text-xs text-slate-900 focus:outline-none focus:ring-2 focus:ring-emerald-500"
-                            placeholder="আপনার নাম"
+                            value={passengerLoginForm.name}
+                            onChange={(e) => setPassengerLoginForm({ ...passengerLoginForm, name: e.target.value })}
+                            placeholder="যেমন: তানভীর আহমেদ"
+                            className="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl text-slate-900 focus:outline-none focus:ring-2 focus:ring-emerald-500 font-bold"
                             required
                           />
                         </div>
 
                         <div>
-                          <label className="text-[11px] font-bold text-slate-700 block mb-1">
-                            মোবাইল নম্বর:
-                          </label>
+                          <label className="font-bold text-slate-700 block mb-1">মোবাইল নম্বর (১১ ডিজিট): *</label>
                           <input
                             type="tel"
-                            value={editProfileForm.phone}
-                            onChange={(e) => setEditProfileForm({ ...editProfileForm, phone: e.target.value })}
-                            className="w-full px-2.5 py-1.5 bg-slate-50 border border-slate-300 rounded-lg text-xs text-slate-900 focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                            value={passengerLoginForm.phone}
+                            onChange={(e) => setPassengerLoginForm({ ...passengerLoginForm, phone: e.target.value })}
                             placeholder="০১XXXXXXXXX"
+                            className="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl text-slate-900 font-mono focus:outline-none focus:ring-2 focus:ring-emerald-500"
                             required
                           />
                         </div>
 
                         <div>
-                          <label className="text-[11px] font-bold text-slate-700 block mb-1">
-                            নিয়মিত ঠিকানা / প্রিয় স্থান:
-                          </label>
+                          <label className="font-bold text-slate-700 block mb-1">নিয়মিত ঠিকানা / প্রিয় স্থান:</label>
                           <input
                             type="text"
-                            value={editProfileForm.homeLocation}
-                            onChange={(e) => setEditProfileForm({ ...editProfileForm, homeLocation: e.target.value })}
-                            className="w-full px-2.5 py-1.5 bg-slate-50 border border-slate-300 rounded-lg text-xs text-slate-900 focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                            value={passengerLoginForm.homeLocation}
+                            onChange={(e) => setPassengerLoginForm({ ...passengerLoginForm, homeLocation: e.target.value })}
                             placeholder="যেমন: পৌরসভা চত্বর, গফরগাঁও"
-                            required
+                            className="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl text-slate-900 focus:outline-none focus:ring-2 focus:ring-emerald-500"
                           />
                         </div>
 
                         <div>
-                          <label className="text-[11px] font-bold text-slate-700 block mb-1">
-                            জরুরি পারিবারিক কন্টাক্ট নম্বর:
-                          </label>
+                          <label className="font-bold text-slate-700 block mb-1">জরুরি পারিবারিক কন্টাক্ট নম্বর (ঐচ্ছিক):</label>
                           <input
                             type="text"
-                            value={editProfileForm.emergencyContact}
-                            onChange={(e) => setEditProfileForm({ ...editProfileForm, emergencyContact: e.target.value })}
-                            className="w-full px-2.5 py-1.5 bg-slate-50 border border-slate-300 rounded-lg text-xs text-slate-900 focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                            value={passengerLoginForm.emergencyContact}
+                            onChange={(e) => setPassengerLoginForm({ ...passengerLoginForm, emergencyContact: e.target.value })}
                             placeholder="যেমন: ০১৭০০-১১২২৩৩ (পরিবার)"
-                            required
+                            className="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl text-slate-900 focus:outline-none focus:ring-2 focus:ring-emerald-500"
                           />
                         </div>
 
                         <button
                           type="submit"
-                          className="w-full py-2 bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded-lg text-xs shadow-xs cursor-pointer transition-colors"
+                          className="w-full py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white font-extrabold rounded-xl text-xs sm:text-sm shadow-xs cursor-pointer transition active:scale-95"
                         >
-                          তথ্য সংরক্ষণ করুন
+                          প্রোফাইল তৈরি ও লগইন করুন
                         </button>
                       </form>
-                    ) : (
-                      <div className="space-y-2 pt-2 border-t border-slate-100 text-xs">
-                        <div>
-                          <label className="text-[11px] font-bold text-slate-600 block mb-1">
-                            আপনার নিয়মিত ঠিকানা / প্রিয় স্থান:
-                          </label>
-                          <div className="p-2 rounded-xl bg-slate-50 border border-slate-200 flex items-center justify-between">
-                            <span className="text-slate-800 font-medium">{passengerProfile.homeLocation}</span>
-                            <span className="text-emerald-600 font-bold text-[10px]">সেভ করা</span>
+                    </div>
+                  ) : (
+                    <div className="bg-white rounded-2xl p-4 border border-slate-200 shadow-xs space-y-3">
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-3">
+                          <div className="w-11 h-11 rounded-2xl bg-emerald-600 text-white font-bold text-lg flex items-center justify-center shadow-md">
+                            👤
+                          </div>
+                          <div>
+                            <div className="flex items-center gap-1.5">
+                              <h4 className="font-bold text-slate-900 text-sm sm:text-base">{passengerProfile.name}</h4>
+                              <span className="bg-emerald-100 text-emerald-800 text-[10px] font-bold px-1.5 py-0.2 rounded-full">
+                                লগইন সক্রিয়
+                              </span>
+                            </div>
+                            <p className="text-xs text-slate-500 flex items-center gap-1 mt-0.5">
+                              <Phone className="w-3 h-3 text-emerald-600" />
+                              {passengerProfile.phone}
+                            </p>
                           </div>
                         </div>
 
-                        <div>
-                          <label className="text-[11px] font-bold text-slate-600 block mb-1">
-                            জরুরি পারিবারিক কন্টাক্ট নম্বর:
-                          </label>
-                          <div className="p-2 rounded-xl bg-slate-50 border border-slate-200 flex items-center justify-between">
-                            <span className="text-slate-800 font-medium">{passengerProfile.emergencyContact}</span>
-                            <span className="text-emerald-600 font-bold text-[10px]">জরুরি ৯৯৯ যুক্ত</span>
-                          </div>
+                        <div className="flex items-center gap-1.5">
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setEditProfileForm({
+                                name: passengerProfile.name,
+                                phone: passengerProfile.phone,
+                                homeLocation: passengerProfile.homeLocation,
+                                emergencyContact: passengerProfile.emergencyContact
+                              });
+                              setIsEditingProfile(!isEditingProfile);
+                            }}
+                            className="text-[11px] font-bold px-2.5 py-1 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg border border-slate-300 cursor-pointer transition-colors"
+                          >
+                            {isEditingProfile ? 'বাতিল' : '✏️ তথ্য পরিবর্তন'}
+                          </button>
+                          <button
+                            type="button"
+                            onClick={handlePassengerLogout}
+                            className="text-[11px] font-bold px-2 py-1 bg-red-50 hover:bg-red-100 text-red-600 rounded-lg border border-red-200 cursor-pointer transition-colors"
+                            title="লগআউট করুন"
+                          >
+                            লগআউট
+                          </button>
                         </div>
                       </div>
-                    )}
+
+                      {isEditingProfile ? (
+                        <form
+                          onSubmit={(e) => {
+                            e.preventDefault();
+                            const updated = {
+                              ...passengerProfile,
+                              name: editProfileForm.name.trim() || passengerProfile.name,
+                              phone: editProfileForm.phone.trim() || passengerProfile.phone,
+                              homeLocation: editProfileForm.homeLocation.trim() || passengerProfile.homeLocation,
+                              emergencyContact: editProfileForm.emergencyContact.trim() || passengerProfile.emergencyContact
+                            };
+                            setPassengerProfile(updated);
+                            setIsEditingProfile(false);
+                            setProfileSaveToast(true);
+                            setDoc(doc(db, 'users', updated.phone), {
+                              ...updated,
+                              role: 'passenger',
+                              updatedAt: new Date().toISOString()
+                            }, { merge: true }).catch(() => {});
+                            setTimeout(() => setProfileSaveToast(false), 3000);
+                          }}
+                          className="space-y-2.5 pt-3 border-t border-slate-100 text-xs"
+                        >
+                          <div>
+                            <label className="text-[11px] font-bold text-slate-700 block mb-1">
+                              আপনার নাম:
+                            </label>
+                            <input
+                              type="text"
+                              value={editProfileForm.name}
+                              onChange={(e) => setEditProfileForm({ ...editProfileForm, name: e.target.value })}
+                              className="w-full px-2.5 py-1.5 bg-slate-50 border border-slate-300 rounded-lg text-xs text-slate-900 focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                              placeholder="আপনার নাম"
+                              required
+                            />
+                          </div>
+
+                          <div>
+                            <label className="text-[11px] font-bold text-slate-700 block mb-1">
+                              মোবাইল নম্বর:
+                            </label>
+                            <input
+                              type="tel"
+                              value={editProfileForm.phone}
+                              onChange={(e) => setEditProfileForm({ ...editProfileForm, phone: e.target.value })}
+                              className="w-full px-2.5 py-1.5 bg-slate-50 border border-slate-300 rounded-lg text-xs text-slate-900 focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                              placeholder="০১XXXXXXXXX"
+                              required
+                            />
+                          </div>
+
+                          <div>
+                            <label className="text-[11px] font-bold text-slate-700 block mb-1">
+                              নিয়মিত ঠিকানা / প্রিয় স্থান:
+                            </label>
+                            <input
+                              type="text"
+                              value={editProfileForm.homeLocation}
+                              onChange={(e) => setEditProfileForm({ ...editProfileForm, homeLocation: e.target.value })}
+                              className="w-full px-2.5 py-1.5 bg-slate-50 border border-slate-300 rounded-lg text-xs text-slate-900 focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                              placeholder="যেমন: পৌরসভা চত্বর, গফরগাঁও"
+                              required
+                            />
+                          </div>
+
+                          <div>
+                            <label className="text-[11px] font-bold text-slate-700 block mb-1">
+                              জরুরি পারিবারিক কন্টাক্ট নম্বর:
+                            </label>
+                            <input
+                              type="text"
+                              value={editProfileForm.emergencyContact}
+                              onChange={(e) => setEditProfileForm({ ...editProfileForm, emergencyContact: e.target.value })}
+                              className="w-full px-2.5 py-1.5 bg-slate-50 border border-slate-300 rounded-lg text-xs text-slate-900 focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                              placeholder="যেমন: ০১৭০০-১১২২৩৩ (পরিবার)"
+                              required
+                            />
+                          </div>
+
+                          <button
+                            type="submit"
+                            className="w-full py-2 bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded-lg text-xs shadow-xs cursor-pointer transition-colors"
+                          >
+                            তথ্য সংরক্ষণ করুন
+                          </button>
+                        </form>
+                      ) : (
+                        <div className="space-y-2 pt-2 border-t border-slate-100 text-xs">
+                          <div>
+                            <label className="text-[11px] font-bold text-slate-600 block mb-1">
+                              আপনার নিয়মিত ঠিকানা / প্রিয় স্থান:
+                            </label>
+                            <div className="p-2 rounded-xl bg-slate-50 border border-slate-200 flex items-center justify-between">
+                              <span className="text-slate-800 font-medium">{passengerProfile.homeLocation}</span>
+                              <span className="text-emerald-600 font-bold text-[10px]">সেভ করা</span>
+                            </div>
+                          </div>
+
+                          <div>
+                            <label className="text-[11px] font-bold text-slate-600 block mb-1">
+                              জরুরি পারিবারিক কন্টাক্ট নম্বর:
+                            </label>
+                            <div className="p-2 rounded-xl bg-slate-50 border border-slate-200 flex items-center justify-between">
+                              <span className="text-slate-800 font-medium">{passengerProfile.emergencyContact}</span>
+                              <span className="text-emerald-600 font-bold text-[10px]">জরুরি ৯৯৯ যুক্ত</span>
+                            </div>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  )}
                   </div>
 
                   <div className="p-3 bg-blue-50 rounded-2xl border border-blue-200 text-xs text-blue-900">

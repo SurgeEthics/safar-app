@@ -47,7 +47,7 @@ export const TravelDuaDropdown: React.FC<TravelDuaDropdownProps> = ({ className 
   }) => {
     setActiveDua(dua);
     setCopied(false);
-    setIsOpen(false); // close dropdown when sticker modal opens
+    // Keep dropdown open so user can smoothly continue reading without re-opening
   };
 
   const handleCopy = () => {
@@ -219,7 +219,7 @@ export const TravelDuaDropdown: React.FC<TravelDuaDropdownProps> = ({ className 
       {/* ============================================================== */}
       {activeDua && (
         <div 
-          className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-5 bg-slate-950/70 backdrop-blur-xs animate-in fade-in"
+          className="fixed inset-0 z-[80] flex items-center justify-center p-3 sm:p-5 bg-slate-950/75 backdrop-blur-xs animate-in fade-in"
           onClick={() => setActiveDua(null)}
         >
           <div
