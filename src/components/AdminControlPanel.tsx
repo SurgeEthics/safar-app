@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import {
   Shield,
   MapPin,
@@ -26,10 +26,20 @@ import {
   Layers,
   ArrowRight,
   ShieldCheck,
-  MessageCircle
+  MessageCircle,
+  Hospital,
+  Flame,
+  Siren,
+  Heart,
+  Phone,
+  Search
 } from 'lucide-react';
 import { Stand, Driver, VehicleCategoryItem } from '../App';
+import { EmergencyContact } from '../types';
+import { INITIAL_EMERGENCY_CONTACTS } from '../data/initialData';
+import { GafargaonPlace } from '../data/gafargaonPlaces';
 import { AutoMarqueeText } from './AutoMarqueeText';
+import { sortDriversDeterministic } from '../utils/stableDriverSort';
 
 export interface AppCustomSettings {
   primaryColor: string;
@@ -78,6 +88,12 @@ export interface AdminControlPanelProps {
     national: string;
   };
   onSaveHotlines: (hotlines: { hospital: string; fire: string; police: string; national: string }) => void;
+  emergencyContacts?: EmergencyContact[];
+  onSaveEmergencyContacts?: (contacts: EmergencyContact[]) => void;
+  popularPlaces?: GafargaonPlace[];
+  onSavePopularPlace?: (place: GafargaonPlace) => void;
+  onDeletePopularPlace?: (placeId: string, name: string) => void;
+  onResetPopularPlaces?: () => void;
   showToast: (msg: string) => void;
   onCleanupOldTrips?: () => void;
   tripStats?: { total: number; completed: number; cancelled: number };
@@ -105,12 +121,18 @@ export const AdminControlPanel: React.FC<AdminControlPanelProps> = ({
   onResetToDefaults,
   hotlines,
   onSaveHotlines,
+  emergencyContacts,
+  onSaveEmergencyContacts,
+  popularPlaces,
+  onSavePopularPlace,
+  onDeletePopularPlace,
+  onResetPopularPlaces,
   showToast,
   onCleanupOldTrips,
   tripStats,
   onOpenSourceCodeModal
 }) => {
-  const [activeTab, setActiveTab] = useState<'stands' | 'categories' | 'appearance' | 'quick_chips' | 'drivers' | 'hotlines' | 'backup'>('appearance');
+  const [activeTab, setActiveTab] = useState<'stands' | 'categories' | 'appearance' | 'quick_chips' | 'drivers' | 'hotlines' | 'places' | 'backup'>('appearance');
   const [isZipDownloading, setIsZipDownloading] = useState(false);
 
   // Stand Form Modal State
@@ -148,6 +170,46 @@ export const AdminControlPanel: React.FC<AdminControlPanelProps> = ({
   // Hotlines Draft
   const [hotlinesDraft, setHotlinesDraft] = useState(hotlines);
 
+  // Dynamic Emergency Contacts List Draft (for full add/edit/delete management)
+  const [contactsDraft, setContactsDraft] = useState<EmergencyContact[]>(() => {
+    return emergencyContacts && emergencyContacts.length > 0 ? emergencyContacts : INITIAL_EMERGENCY_CONTACTS;
+  });
+  const [editingContact, setEditingContact] = useState<EmergencyContact | null>(null);
+  const [isContactModalOpen, setIsContactModalOpen] = useState(false);
+  const [contactForm, setContactForm] = useState<Omit<EmergencyContact, 'id'>>({
+    titleBn: '',
+    phone: '',
+    altPhone: '',
+    category: 'hospital',
+    locationBn: 'গফরগাঁও',
+    is24x7: true
+  });
+
+  // Dynamic Popular Places Management State (for autocomplete dropdown control)
+  const [placesDraft, setPlacesDraft] = useState<GafargaonPlace[]>(() => {
+    return popularPlaces && popularPlaces.length > 0 ? popularPlaces : [];
+  });
+  const [editingPlace, setEditingPlace] = useState<GafargaonPlace | null>(null);
+  const [isPlaceModalOpen, setIsPlaceModalOpen] = useState(false);
+  const [placeFilterQuery, setPlaceFilterQuery] = useState('');
+  const [placeForm, setPlaceForm] = useState<GafargaonPlace>({
+    id: '',
+    name: '',
+    bengaliName: '',
+    category: 'স্ট্যান্ড',
+    area: '',
+    lat: 24.4536,
+    lng: 90.5479,
+    isPopular: true
+  });
+
+  // Sync places when prop updates
+  React.useEffect(() => {
+    if (popularPlaces && popularPlaces.length > 0) {
+      setPlacesDraft(popularPlaces);
+    }
+  }, [popularPlaces]);
+
   // New Quick Chip input
   const [newQuickChipText, setNewQuickChipText] = useState('');
 
@@ -157,8 +219,6 @@ export const AdminControlPanel: React.FC<AdminControlPanelProps> = ({
   // Driver search filter
   const [driverFilterQuery, setDriverFilterQuery] = useState('');
   const [driverCatFilter, setDriverCatFilter] = useState('all');
-
-  if (!isOpen) return null;
 
   // Handle Save Stand
   const handleSubmitStand = (e: React.FormEvent) => {
@@ -211,6 +271,89 @@ export const AdminControlPanel: React.FC<AdminControlPanelProps> = ({
   const handleSaveHotlinesAction = () => {
     onSaveHotlines(hotlinesDraft);
     showToast('জরুরি হটলাইন নম্বর আপডেট হয়েছে!');
+  };
+
+  // Submit / Save Emergency Contact (Add or Edit)
+  const handleSubmitContact = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!contactForm.titleBn.trim() || !contactForm.phone.trim()) {
+      showToast('হটলাইনের নাম এবং ফোন নম্বর আবশ্যক');
+      return;
+    }
+    let updated: EmergencyContact[];
+    if (editingContact) {
+      updated = contactsDraft.map(c => c.id === editingContact.id ? { ...contactForm, id: editingContact.id } : c);
+      showToast(`'${contactForm.titleBn}' সফলভাবে আপডেট হয়েছে!`);
+    } else {
+      const newContact: EmergencyContact = {
+        ...contactForm,
+        id: `em-${Date.now()}`
+      };
+      updated = [...contactsDraft, newContact];
+      showToast(`নতুন জরুরি হটলাইন '${contactForm.titleBn}' যুক্ত হয়েছে!`);
+    }
+    setContactsDraft(updated);
+    if (onSaveEmergencyContacts) {
+      onSaveEmergencyContacts(updated);
+    }
+    setIsContactModalOpen(false);
+    setEditingContact(null);
+  };
+
+  // Delete Emergency Contact
+  const handleDeleteContact = (contactId: string, title: string) => {
+    if (contactsDraft.length <= 1) {
+      showToast('কমপক্ষে ১টি জরুরি হটলাইন তালিকায় থাকা আবশ্যক!');
+      return;
+    }
+    const updated = contactsDraft.filter(c => c.id !== contactId);
+    setContactsDraft(updated);
+    if (onSaveEmergencyContacts) {
+      onSaveEmergencyContacts(updated);
+    }
+    showToast(`'${title}' হটলাইন মুছে ফেলা হয়েছে`);
+  };
+
+  // Submit / Save Popular Place (Add or Edit)
+  const handleSubmitPlace = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!placeForm.bengaliName.trim()) {
+      showToast('স্থানের বাংলা নাম পূরণ করুন!');
+      return;
+    }
+    const finalPlace: GafargaonPlace = {
+      ...placeForm,
+      id: editingPlace ? editingPlace.id : (placeForm.id.trim() || `place-${Date.now()}`),
+      name: placeForm.name.trim() || placeForm.bengaliName.trim(),
+      bengaliName: placeForm.bengaliName.trim(),
+      area: placeForm.area.trim() || 'গফরগাঁও',
+      lat: Number(placeForm.lat) || 24.4536,
+      lng: Number(placeForm.lng) || 90.5479,
+      isPopular: true
+    };
+    let updated: GafargaonPlace[];
+    if (editingPlace) {
+      updated = placesDraft.map(p => p.id === editingPlace.id ? finalPlace : p);
+    } else {
+      updated = [...placesDraft, finalPlace];
+    }
+    setPlacesDraft(updated);
+    if (onSavePopularPlace) {
+      onSavePopularPlace(finalPlace);
+    }
+    setIsPlaceModalOpen(false);
+    setEditingPlace(null);
+    showToast(editingPlace ? `'${finalPlace.bengaliName}' স্থানটি আপডেট হয়েছে!` : `'${finalPlace.bengaliName}' নতুন জনপ্রিয় স্থান হিসেবে যুক্ত হয়েছে!`);
+  };
+
+  // Delete Popular Place
+  const handleDeletePlace = (placeId: string, name: string) => {
+    const updated = placesDraft.filter(p => p.id !== placeId);
+    setPlacesDraft(updated);
+    if (onDeletePopularPlace) {
+      onDeletePopularPlace(placeId, name);
+    }
+    showToast(`'${name}' স্থানটি তালিকা থেকে মুছে ফেলা হয়েছে`);
   };
 
   // Add Quick Chip
@@ -269,7 +412,7 @@ export const AdminControlPanel: React.FC<AdminControlPanelProps> = ({
   const handleDownloadZip = async () => {
     setIsZipDownloading(true);
     try {
-      const res = await fetch(`/safar-app.zip?t=${Date.now()}`, { cache: 'no-store' });
+      const res = await fetch(`/safar-gafargaon-clean-source.zip?t=${Date.now()}`, { cache: 'no-store' });
       if (!res.ok) throw new Error(`সার্ভার এরর: HTTP ${res.status}`);
       const blob = await res.blob();
       if (!blob || blob.size < 1000) {
@@ -285,11 +428,11 @@ export const AdminControlPanel: React.FC<AdminControlPanelProps> = ({
         window.URL.revokeObjectURL(url);
         document.body.removeChild(link);
       }, 2000);
-      showToast('🎉 সফলভাবে ক্লাউডফ্লেয়ার ফিক্সড সোর্স কোড জিপ (৩.৫ MB) ডাউনলোড হয়েছে!');
+      showToast('🎉 সফলভাবে ক্লাউডফ্লেয়ার ফিক্সড সোর্স কোড ও dist জিপ (২.৪ MB) ডাউনলোড হয়েছে!');
     } catch (err: any) {
       console.error('ZIP download error:', err);
       showToast('সরাসরি ডাউনলোড লিঙ্ক ওপেন করা হচ্ছে...');
-      window.location.href = '/safar-app.zip';
+      window.location.href = '/safar-gafargaon-clean-source.zip';
     } finally {
       setIsZipDownloading(false);
     }
@@ -335,14 +478,19 @@ export const AdminControlPanel: React.FC<AdminControlPanelProps> = ({
     { id: 'crimson', name: 'রক্তিম লাল', hex: '#dc2626', bgClass: 'bg-red-600' }
   ];
 
-  const filteredDrivers = drivers.filter(d => {
-    const matchesCat = driverCatFilter === 'all' || d.category === driverCatFilter;
-    const matchesQuery = !driverFilterQuery.trim() ||
-      d.name.toLowerCase().includes(driverFilterQuery.toLowerCase()) ||
-      d.phone.includes(driverFilterQuery) ||
-      d.plateNumber.toLowerCase().includes(driverFilterQuery.toLowerCase());
-    return matchesCat && matchesQuery;
-  });
+  // 100% Deterministic Stable Driver Sorting: Rock solid, ZERO jumping/lafalafi
+  const filteredDrivers = useMemo(() => {
+    return drivers.filter(d => {
+      const matchesCat = driverCatFilter === 'all' || d.category === driverCatFilter;
+      const matchesQuery = !driverFilterQuery.trim() ||
+        d.name.toLowerCase().includes(driverFilterQuery.toLowerCase()) ||
+        d.phone.includes(driverFilterQuery) ||
+        d.plateNumber.toLowerCase().includes(driverFilterQuery.toLowerCase());
+      return matchesCat && matchesQuery;
+    }).sort(sortDriversDeterministic);
+  }, [drivers, driverCatFilter, driverFilterQuery]);
+
+  if (!isOpen) return null;
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-2 sm:p-4 bg-slate-950/80 backdrop-blur-xs animate-in fade-in">
@@ -412,6 +560,19 @@ export const AdminControlPanel: React.FC<AdminControlPanelProps> = ({
           >
             <MapPin className="w-3.5 h-3.5" />
             <span>📍 স্ট্যান্ডসমূহ ({stands.length})</span>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => setActiveTab('places')}
+            className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-extrabold transition cursor-pointer whitespace-nowrap ${
+              activeTab === 'places'
+                ? 'bg-emerald-700 text-white shadow-xs'
+                : 'bg-slate-100 hover:bg-slate-200 text-slate-700'
+            }`}
+          >
+            <MapPin className="w-3.5 h-3.5 text-rose-500" />
+            <span>🏙️ জনপ্রিয় স্থানসমূহ ({placesDraft.length})</span>
           </button>
 
           <button
@@ -709,6 +870,41 @@ export const AdminControlPanel: React.FC<AdminControlPanelProps> = ({
                 />
               </div>
 
+              {/* Editable Emergency Announcement Marquee Box (জরুরি ঘোষণা) */}
+              <div className="bg-amber-50/90 p-4 sm:p-5 rounded-2xl border-2 border-amber-300 shadow-xs space-y-3">
+                <div className="flex items-center justify-between gap-2 flex-wrap">
+                  <label className="text-xs sm:text-sm font-extrabold text-amber-950 flex items-center gap-1.5">
+                    <Sparkles className="w-4 h-4 text-amber-600 animate-spin" />
+                    <span>জরুরি ঘোষণা (শীর্ষ হলুদ স্ক্রলিং নোটিশ বার):</span>
+                  </label>
+                  <span className="text-[10px] bg-amber-200/90 text-amber-950 font-extrabold px-2.5 py-0.5 rounded-full border border-amber-300">
+                    মার্ছাড়া নোটিশ
+                  </span>
+                </div>
+                <p className="text-[11px] text-amber-800 leading-relaxed">
+                  অ্যাপের হেডারের নিচে প্রদর্শিত হলুদ রঙের জরুরি ঘোষণা বারটিতে যে বার্তা স্ক্রল করাতে চান তা এখানে লিখুন বা এডিট করুন:
+                </p>
+                <textarea
+                  rows={2}
+                  value={settingsDraft.announcementNotice || ''}
+                  onChange={(e) => setSettingsDraft({ ...settingsDraft, announcementNotice: e.target.value })}
+                  placeholder="গফরগাঁও পৌরসভা ও পাগলা থানা এলাকার নির্ভরযোগ্য নিরাপদ যাত্রা সেবা..."
+                  className="w-full bg-white border border-amber-300 rounded-xl px-3 py-2 text-xs sm:text-sm font-bold text-slate-900 focus:outline-none focus:ring-2 focus:ring-amber-500 shadow-2xs leading-relaxed"
+                />
+
+                {/* Live Preview Box */}
+                {settingsDraft.announcementNotice && settingsDraft.announcementNotice.trim() !== '' && (
+                  <div className="bg-gradient-to-r from-amber-500 via-amber-400 to-amber-500 text-slate-950 p-2.5 rounded-xl flex items-center gap-2 border border-amber-600/30 overflow-hidden shadow-2xs">
+                    <span className="bg-slate-950 text-amber-300 text-[10px] font-black px-2 py-0.5 rounded-full shrink-0">
+                      লাইভ প্রিভিউ:
+                    </span>
+                    <span className="text-xs font-bold truncate">
+                      {settingsDraft.announcementNotice}
+                    </span>
+                  </div>
+                )}
+              </div>
+
               {/* Save Button Fixed Bar */}
               <div className="flex items-center justify-end gap-3 pt-2">
                 <button
@@ -806,6 +1002,158 @@ export const AdminControlPanel: React.FC<AdminControlPanelProps> = ({
                     </div>
                   );
                 })}
+              </div>
+            </div>
+          )}
+
+          {/* ========================================================== */}
+          {/* TAB: POPULAR PLACES CONTROL (AUTOCOMPLETE DROPDOWN)         */}
+          {/* ========================================================== */}
+          {activeTab === 'places' && (
+            <div className="space-y-4">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-white p-4 rounded-2xl border border-slate-200 shadow-xs">
+                <div>
+                  <h3 className="font-extrabold text-sm sm:text-base text-slate-900 flex items-center gap-1.5">
+                    <MapPin className="w-4 h-4 text-rose-500" />
+                    গফরগাঁও ও পাগলা এলাকার জনপ্রিয় স্থানসমূহ নিয়ন্ত্রণ ({placesDraft.length} টি স্থান)
+                  </h3>
+                  <p className="text-xs text-slate-500 mt-0.5">
+                    যাত্রী বা চালকরা যখন পিকআপ বা গন্তব্য খোঁজেন, তখন এই স্থানগুলো ড্রপডাউনে প্রদর্শিত হয়। এখান থেকে নতুন স্থান যোগ, এডিট বা ডিলিট করতে পারবেন।
+                  </p>
+                </div>
+
+                <div className="flex items-center gap-2 flex-wrap shrink-0">
+                  {onResetPopularPlaces && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        if (confirm('জনপ্রিয় স্থানসমূহ ডিফল্ট তালিকায় রিসেট করতে চান?')) {
+                          onResetPopularPlaces();
+                          showToast('জনপ্রিয় স্থানসমূহ রিসেট করা হয়েছে!');
+                        }
+                      }}
+                      className="inline-flex items-center gap-1 px-3 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold rounded-xl transition cursor-pointer"
+                      title="ডিফল্ট তালিকা রিস্টোর করুন"
+                    >
+                      <RotateCcw className="w-3.5 h-3.5" />
+                      <span>রিসেট তালিকা</span>
+                    </button>
+                  )}
+
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setEditingPlace(null);
+                      setPlaceForm({
+                        id: `place-${Date.now()}`,
+                        name: '',
+                        bengaliName: '',
+                        category: 'স্ট্যান্ড',
+                        area: 'গফরগাঁও পৌরসভা',
+                        lat: 24.4536,
+                        lng: 90.5479,
+                        isPopular: true
+                      });
+                      setIsPlaceModalOpen(true);
+                    }}
+                    className="inline-flex items-center gap-1.5 bg-emerald-600 hover:bg-emerald-700 text-white font-extrabold px-4 py-2 rounded-xl text-xs sm:text-sm shadow-xs cursor-pointer transition shrink-0"
+                  >
+                    <Plus className="w-4 h-4" />
+                    <span>+ নতুন স্থান যোগ করুন</span>
+                  </button>
+                </div>
+              </div>
+
+              {/* Filter / Search Bar */}
+              <div className="bg-white p-3 rounded-2xl border border-slate-200 shadow-xs flex items-center gap-2">
+                <Search className="w-4 h-4 text-slate-400 shrink-0 ml-1" />
+                <input
+                  type="text"
+                  value={placeFilterQuery}
+                  onChange={(e) => setPlaceFilterQuery(e.target.value)}
+                  placeholder="জনপ্রিয় স্থানের নাম, ক্যাটাগরি বা এলাকা দিয়ে ফিল্টার করুন..."
+                  className="w-full text-xs sm:text-sm bg-transparent outline-none text-slate-800 placeholder-slate-400 font-medium"
+                />
+                {placeFilterQuery && (
+                  <button
+                    type="button"
+                    onClick={() => setPlaceFilterQuery('')}
+                    className="p-1 hover:bg-slate-100 rounded-lg text-slate-400 hover:text-slate-600"
+                  >
+                    <X className="w-3.5 h-3.5" />
+                  </button>
+                )}
+              </div>
+
+              {/* Places Grid */}
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+                {placesDraft
+                  .filter(p => {
+                    if (!placeFilterQuery.trim()) return true;
+                    const q = placeFilterQuery.toLowerCase().trim();
+                    return (
+                      p.bengaliName?.toLowerCase().includes(q) ||
+                      p.name?.toLowerCase().includes(q) ||
+                      p.category?.toLowerCase().includes(q) ||
+                      p.area?.toLowerCase().includes(q)
+                    );
+                  })
+                  .map((place) => {
+                    return (
+                      <div
+                        key={place.id || place.bengaliName}
+                        className="bg-white p-4 rounded-2xl border border-slate-200 shadow-xs hover:border-emerald-400 transition flex flex-col justify-between"
+                      >
+                        <div className="flex items-start justify-between gap-2">
+                          <div className="min-w-0">
+                            <h4 className="font-extrabold text-sm text-slate-900 flex items-center gap-1.5 truncate">
+                              <span className="w-2.5 h-2.5 rounded-full bg-rose-500 shrink-0" />
+                              {place.bengaliName}
+                            </h4>
+                            <p className="text-[11px] text-slate-500 mt-0.5 truncate">
+                              {place.area || 'গফরগাঁও'}
+                            </p>
+                            <span className="text-[10.5px] text-slate-400 font-mono block mt-0.5">
+                              GPS: {place.lat?.toFixed(4)}, {place.lng?.toFixed(4)}
+                            </span>
+                            <div className="flex items-center gap-1.5 mt-2 flex-wrap">
+                              <span className="inline-block bg-slate-100 text-slate-700 text-[10px] font-bold px-2 py-0.5 rounded border border-slate-200">
+                                {place.category || 'স্থান'}
+                              </span>
+                              {place.isPopular && (
+                                <span className="inline-block bg-rose-50 text-rose-700 text-[10px] font-bold px-1.5 py-0.2 rounded border border-rose-200">
+                                  জনপ্রিয় স্থান
+                                </span>
+                              )}
+                            </div>
+                          </div>
+
+                          <div className="flex items-center gap-1 shrink-0">
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setEditingPlace(place);
+                                setPlaceForm({ ...place });
+                                setIsPlaceModalOpen(true);
+                              }}
+                              className="p-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg cursor-pointer"
+                              title="এডিট করুন"
+                            >
+                              <Edit2 className="w-3.5 h-3.5" />
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => handleDeletePlace(place.id, place.bengaliName)}
+                              className="p-1.5 bg-red-50 hover:bg-red-100 text-red-600 rounded-lg cursor-pointer"
+                              title="মুছে ফেলুন"
+                            >
+                              <Trash2 className="w-3.5 h-3.5" />
+                            </button>
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })}
               </div>
             </div>
           )}
@@ -1051,14 +1399,14 @@ export const AdminControlPanel: React.FC<AdminControlPanelProps> = ({
                 {filteredDrivers.map((driver) => (
                   <div
                     key={driver.id}
-                    className="bg-white p-4 rounded-2xl border border-slate-200 shadow-xs hover:border-emerald-300 transition flex flex-col justify-between"
+                    className="bg-white p-4 rounded-2xl border border-slate-200 shadow-xs hover:border-emerald-300 transition-colors flex flex-col justify-between"
                   >
                     <div>
                       <div className="flex items-start justify-between gap-2 mb-2">
                         <div className="flex items-center gap-2.5">
-                          {driver.driverPhoto ? (
+                          {(driver.driverPhoto || (driver as any).photoUrl) ? (
                             <img
-                              src={driver.driverPhoto}
+                              src={driver.driverPhoto || (driver as any).photoUrl}
                               alt={driver.name}
                               className="w-11 h-11 rounded-xl object-cover border border-emerald-300 shrink-0"
                             />
@@ -1068,12 +1416,21 @@ export const AdminControlPanel: React.FC<AdminControlPanelProps> = ({
                             </div>
                           )}
                           <div className="min-w-0 flex-1 overflow-hidden">
-                            <AutoMarqueeText
-                              text={driver.name}
-                              className="font-extrabold text-sm text-slate-900"
-                              pauseAtEndMs={1500}
-                            />
-                            <span className="text-[11px] text-slate-500 font-mono block">{driver.phone}</span>
+                            <h4
+                              className="font-extrabold text-sm text-slate-900 truncate block"
+                              title={driver.name}
+                            >
+                              {driver.name}
+                            </h4>
+                            <div className="flex items-center gap-1.5 flex-wrap mt-0.5">
+                              <span className="text-[11px] text-slate-500 font-mono block">{driver.phone}</span>
+                              {driver.registeredAt && (
+                                <span className="text-[9.5px] font-bold px-1.5 py-0.5 rounded bg-emerald-50 text-emerald-800 border border-emerald-200 inline-flex items-center gap-1 shadow-2xs">
+                                  <span>🕒</span>
+                                  <span>{driver.registeredAt}</span>
+                                </span>
+                              )}
+                            </div>
                           </div>
                         </div>
 
@@ -1087,56 +1444,36 @@ export const AdminControlPanel: React.FC<AdminControlPanelProps> = ({
                         </button>
                       </div>
 
-                      <div className="text-xs text-slate-600 space-y-1 my-2">
+                      <div className="text-xs text-slate-600 space-y-1.5 my-2">
                         <div className="flex items-center justify-between gap-2 overflow-hidden">
                           <span className="text-slate-400 shrink-0">বাহন:</span>
-                          <div className="flex-1 min-w-0 overflow-hidden text-right">
-                            <AutoMarqueeText
-                              text={`${driver.vehicleModel} (${driver.categoryBengali})`}
-                              className="font-bold text-slate-800"
-                              pauseAtEndMs={1500}
-                            />
-                          </div>
+                          <span className="font-bold text-slate-800 truncate text-right flex-1" title={`${driver.vehicleModel} (${driver.categoryBengali})`}>
+                            {driver.vehicleModel} ({driver.categoryBengali})
+                          </span>
                         </div>
                         <div className="flex items-center justify-between gap-2 overflow-hidden">
                           <span className="text-slate-400 shrink-0">নম্বরপ্লেট:</span>
-                          <div className="flex-1 min-w-0 overflow-hidden text-right">
-                            <AutoMarqueeText
-                              text={driver.plateNumber}
-                              className="font-mono text-emerald-700 font-bold"
-                              pauseAtEndMs={1500}
-                            />
-                          </div>
+                          <span className="font-mono text-emerald-700 font-bold truncate text-right flex-1" title={driver.plateNumber}>
+                            {driver.plateNumber}
+                          </span>
                         </div>
                         <div className="flex items-center justify-between gap-2 overflow-hidden">
                           <span className="text-slate-400 shrink-0">স্ট্যান্ড:</span>
-                          <div className="flex-1 min-w-0 overflow-hidden text-right">
-                            <AutoMarqueeText
-                              text={driver.standName}
-                              className="text-slate-700 font-medium"
-                              pauseAtEndMs={1500}
-                            />
-                          </div>
+                          <span className="text-slate-700 font-medium truncate text-right flex-1" title={driver.standName}>
+                            {driver.standName}
+                          </span>
                         </div>
                         <div className="flex items-center justify-between gap-2 overflow-hidden">
                           <span className="text-slate-400 shrink-0">লাইসেন্স:</span>
-                          <div className="flex-1 min-w-0 overflow-hidden text-right">
-                            <AutoMarqueeText
-                              text={driver.licenseNumber}
-                              className="font-mono text-slate-700 font-medium"
-                              pauseAtEndMs={1500}
-                            />
-                          </div>
+                          <span className="font-mono text-slate-700 font-medium truncate text-right flex-1" title={driver.licenseNumber}>
+                            {driver.licenseNumber}
+                          </span>
                         </div>
                         <div className="flex items-center justify-between gap-2 overflow-hidden">
                           <span className="text-slate-400 shrink-0">NID নম্বর:</span>
-                          <div className="flex-1 min-w-0 overflow-hidden text-right">
-                            <AutoMarqueeText
-                              text={driver.nidNumber}
-                              className="font-mono text-slate-700 font-medium"
-                              pauseAtEndMs={1500}
-                            />
-                          </div>
+                          <span className="font-mono text-slate-700 font-medium truncate text-right flex-1" title={driver.nidNumber}>
+                            {driver.nidNumber}
+                          </span>
                         </div>
                       </div>
 
@@ -1163,7 +1500,7 @@ export const AdminControlPanel: React.FC<AdminControlPanelProps> = ({
                           <button
                             type="button"
                             onClick={() => onOpenVerificationGate ? onOpenVerificationGate(driver, 'brta') : onToggleDriverVerification(driver.id, 'license')}
-                            className={`flex items-center justify-center gap-1 px-1.5 py-1.5 rounded-lg text-[10px] font-bold border cursor-pointer transition-all ${
+                            className={`flex items-center justify-center gap-1 px-1.5 py-1.5 rounded-lg text-[10px] font-bold border cursor-pointer transition-colors ${
                               driver.licenseVerified
                                 ? 'bg-emerald-50 text-emerald-800 border-emerald-300 hover:bg-emerald-100 shadow-xs'
                                 : 'bg-amber-50 text-amber-800 border-amber-300 hover:bg-amber-100 ring-2 ring-amber-400/20'
@@ -1182,7 +1519,7 @@ export const AdminControlPanel: React.FC<AdminControlPanelProps> = ({
                           <button
                             type="button"
                             onClick={() => onOpenVerificationGate ? onOpenVerificationGate(driver, 'wa') : onToggleDriverVerification(driver.id, 'phone')}
-                            className={`flex items-center justify-center gap-1 px-1.5 py-1.5 rounded-lg text-[10px] font-bold border cursor-pointer transition-all ${
+                            className={`flex items-center justify-center gap-1 px-1.5 py-1.5 rounded-lg text-[10px] font-bold border cursor-pointer transition-colors ${
                               driver.phoneVerified
                                 ? 'bg-emerald-50 text-emerald-800 border-emerald-300 hover:bg-emerald-100 shadow-xs'
                                 : 'bg-amber-50 text-amber-800 border-amber-300 hover:bg-amber-100 ring-2 ring-amber-400/20'
@@ -1201,7 +1538,7 @@ export const AdminControlPanel: React.FC<AdminControlPanelProps> = ({
                           <button
                             type="button"
                             onClick={() => onOpenVerificationGate ? onOpenVerificationGate(driver, 'nid') : onToggleDriverVerification(driver.id, 'nid')}
-                            className={`flex items-center justify-center gap-1 px-1.5 py-1.5 rounded-lg text-[10px] font-bold border cursor-pointer transition-all ${
+                            className={`flex items-center justify-center gap-1 px-1.5 py-1.5 rounded-lg text-[10px] font-bold border cursor-pointer transition-colors ${
                               driver.nidVerified
                                 ? 'bg-emerald-50 text-emerald-800 border-emerald-300 hover:bg-emerald-100 shadow-xs'
                                 : 'bg-amber-50 text-amber-800 border-amber-300 hover:bg-amber-100 ring-2 ring-amber-400/20'
@@ -1276,76 +1613,130 @@ export const AdminControlPanel: React.FC<AdminControlPanelProps> = ({
           {/* TAB: EMERGENCY HOTLINES                                   */}
           {/* ========================================================== */}
           {activeTab === 'hotlines' && (
-            <div className="space-y-4 max-w-2xl">
-              <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-xs space-y-4">
-                <h3 className="font-extrabold text-sm sm:text-base text-slate-900 flex items-center gap-2">
-                  <PhoneCall className="w-4 h-4 text-red-600" />
-                  জরুরি হটলাইন নম্বর ব্যবস্থাপনা
-                </h3>
-                <p className="text-xs text-slate-500">
-                  উপজেলা স্বাস্থ্য কমপ্লেক্স, ফায়ার সার্ভিস, থানা পুলিশ ও জাতীয় জরুরি নম্বর পরিবর্তন করতে পারেন।
-                </p>
-
-                <div className="space-y-3 text-xs">
-                  <div>
-                    <label className="font-bold text-slate-700 block mb-1">
-                      উপজেলা স্বাস্থ্য কমপ্লেক্স ও এম্বুলেন্স হটলাইন:
-                    </label>
-                    <input
-                      type="text"
-                      value={hotlinesDraft.hospital}
-                      onChange={(e) => setHotlinesDraft({ ...hotlinesDraft, hospital: e.target.value })}
-                      className="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl font-mono text-slate-800 focus:outline-none focus:ring-2 focus:ring-emerald-500"
-                    />
-                  </div>
-
-                  <div>
-                    <label className="font-bold text-slate-700 block mb-1">
-                      গফরগাঁও ফায়ার সার্ভিস ও সিভিল ডিফেন্স:
-                    </label>
-                    <input
-                      type="text"
-                      value={hotlinesDraft.fire}
-                      onChange={(e) => setHotlinesDraft({ ...hotlinesDraft, fire: e.target.value })}
-                      className="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl font-mono text-slate-800 focus:outline-none focus:ring-2 focus:ring-emerald-500"
-                    />
-                  </div>
-
-                  <div>
-                    <label className="font-bold text-slate-700 block mb-1">
-                      গফরগাঁও ও পাগলা থানা পুলিশ কন্ট্রোল:
-                    </label>
-                    <input
-                      type="text"
-                      value={hotlinesDraft.police}
-                      onChange={(e) => setHotlinesDraft({ ...hotlinesDraft, police: e.target.value })}
-                      className="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl font-mono text-slate-800 focus:outline-none focus:ring-2 focus:ring-emerald-500"
-                    />
-                  </div>
-
-                  <div>
-                    <label className="font-bold text-slate-700 block mb-1">
-                      জাতীয় জরুরি সেবা নম্বর:
-                    </label>
-                    <input
-                      type="text"
-                      value={hotlinesDraft.national}
-                      onChange={(e) => setHotlinesDraft({ ...hotlinesDraft, national: e.target.value })}
-                      className="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl font-mono text-slate-800 focus:outline-none focus:ring-2 focus:ring-emerald-500"
-                    />
-                  </div>
-
-                  <div className="pt-2">
-                    <button
-                      type="button"
-                      onClick={handleSaveHotlinesAction}
-                      className="inline-flex items-center gap-1.5 bg-emerald-600 hover:bg-emerald-700 text-white font-bold px-4 py-2 rounded-xl text-xs shadow-xs cursor-pointer transition"
-                    >
-                      <Save className="w-4 h-4" />
-                      <span>হটলাইন সংরক্ষণ করুন</span>
-                    </button>
-                  </div>
+            <div className="space-y-4">
+              {/* Header Box */}
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 bg-white p-4 sm:p-5 rounded-2xl border border-slate-200 shadow-xs">
+                <div>
+                  <h3 className="font-extrabold text-sm sm:text-base text-slate-900 flex items-center gap-2">
+                    <PhoneCall className="w-4 h-4 text-red-600" />
+                    <span>জরুরি হটলাইন নম্বর সমূহ নিয়ন্ত্রণ ({contactsDraft.length}টি হটলাইন)</span>
+                  </h3>
+                  <p className="text-xs text-slate-500 mt-0.5">
+                    নতুন জরুরি হটলাইন যুক্ত করুন বা বিদ্যমান হেল্পলাইনের নাম ও ফোন নম্বর এডিট করুন। সাথে সাথে ড্রপডাউন মেনু ও ডিরেক্টরিতে আপডেট হবে!
+                  </p>
                 </div>
+
+                <button
+                  type="button"
+                  onClick={() => {
+                    setEditingContact(null);
+                    setContactForm({
+                      titleBn: '',
+                      phone: '',
+                      altPhone: '',
+                      category: 'hospital',
+                      locationBn: 'গফরগাঁও',
+                      is24x7: true
+                    });
+                    setIsContactModalOpen(true);
+                  }}
+                  className="inline-flex items-center gap-1.5 bg-red-600 hover:bg-red-700 text-white font-extrabold px-4 py-2 rounded-xl text-xs sm:text-sm shadow-xs cursor-pointer transition shrink-0"
+                >
+                  <Plus className="w-4 h-4" />
+                  <span>+ নতুন হটলাইন যোগ করুন</span>
+                </button>
+              </div>
+
+              {/* Hotlines Cards Grid */}
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+                {contactsDraft.map((contact) => (
+                  <div
+                    key={contact.id}
+                    className="bg-white p-4 rounded-2xl border border-slate-200 shadow-xs hover:border-red-300 transition flex flex-col justify-between group"
+                  >
+                    <div>
+                      <div className="flex items-start justify-between gap-2">
+                        <div className="flex items-start gap-2.5 min-w-0">
+                          <span className="w-9 h-9 rounded-xl bg-red-50 border border-red-200 flex items-center justify-center shrink-0">
+                            {contact.category === 'hospital' || contact.category === 'ambulance' ? (
+                              <Hospital className="w-4 h-4 text-red-600" />
+                            ) : contact.category === 'fire' ? (
+                              <Flame className="w-4 h-4 text-orange-600" />
+                            ) : contact.category === 'police' ? (
+                              <Siren className="w-4 h-4 text-blue-600" />
+                            ) : contact.category === 'blood' ? (
+                              <Heart className="w-4 h-4 text-rose-600" />
+                            ) : (
+                              <Phone className="w-4 h-4 text-red-600" />
+                            )}
+                          </span>
+                          <div className="min-w-0">
+                            <h4 className="font-extrabold text-xs sm:text-sm text-slate-900 leading-snug truncate">
+                              {contact.titleBn}
+                            </h4>
+                            <span className="text-[11px] text-slate-500 block mt-0.5">
+                              {contact.locationBn}
+                            </span>
+                          </div>
+                        </div>
+
+                        {/* Edit and Delete Action Buttons */}
+                        <div className="flex items-center gap-1 shrink-0">
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setEditingContact(contact);
+                              setContactForm({
+                                titleBn: contact.titleBn,
+                                phone: contact.phone,
+                                altPhone: contact.altPhone || '',
+                                category: contact.category,
+                                locationBn: contact.locationBn,
+                                is24x7: contact.is24x7
+                              });
+                              setIsContactModalOpen(true);
+                            }}
+                            className="p-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg cursor-pointer transition"
+                            title="এডিট করুন"
+                          >
+                            <Edit2 className="w-3.5 h-3.5" />
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => handleDeleteContact(contact.id, contact.titleBn)}
+                            className="p-1.5 bg-red-50 hover:bg-red-100 text-red-600 rounded-lg cursor-pointer transition"
+                            title="মুছে ফেলুন"
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </button>
+                        </div>
+                      </div>
+
+                      {/* Phone Numbers & Call Test */}
+                      <div className="mt-3 pt-2.5 border-t border-slate-100 flex items-center justify-between gap-2">
+                        <div>
+                          <span className="font-mono font-black text-xs sm:text-sm text-red-700 block">
+                            {contact.phone}
+                          </span>
+                          {contact.altPhone && (
+                            <span className="font-mono text-[10.5px] text-slate-500 block">
+                              বিকল্প: {contact.altPhone}
+                            </span>
+                          )}
+                        </div>
+
+                        <a
+                          href={`tel:${contact.phone.replace(/[^0-9]/g, '')}`}
+                          className="px-2.5 py-1 bg-red-600 hover:bg-red-700 text-white rounded-lg text-xs font-bold flex items-center gap-1 shadow-2xs transition active:scale-95 shrink-0"
+                          title="কল টেস্ট করুন"
+                        >
+                          <PhoneCall className="w-3 h-3" />
+                          <span>কল</span>
+                        </a>
+                      </div>
+                    </div>
+                  </div>
+                ))}
               </div>
             </div>
           )}
@@ -1405,19 +1796,16 @@ export const AdminControlPanel: React.FC<AdminControlPanelProps> = ({
                 </div>
               </div>
 
-              {/* Full Source Code Zip Download Card (With Yellow Zip Button) */}
-              <div className="bg-gradient-to-r from-amber-50 via-amber-100/40 to-emerald-50 p-5 rounded-2xl border-2 border-amber-300 shadow-sm space-y-3">
+              {/* Full Source Code Zip Download Card */}
+              <div className="bg-white p-5 rounded-2xl border border-slate-200 hover:border-emerald-300 shadow-xs space-y-3 transition-colors">
                 <div className="flex items-center justify-between">
                   <h3 className="font-extrabold text-sm sm:text-base text-slate-900 flex items-center gap-2">
-                    <Download className="w-5 h-5 text-amber-600" />
+                    <Download className="w-5 h-5 text-emerald-600" />
                     সম্পূর্ণ প্রজেক্ট সোর্স কোড ডাউনলোড (.ZIP)
                   </h3>
-                  <span className="text-[11px] font-bold bg-amber-400 text-slate-950 px-2.5 py-0.5 rounded-full shadow-xs border border-amber-500/50">
-                    ৩.৫ MB • ক্লাউডফ্লেয়ার সিঙ্কড ফিক্স
-                  </span>
                 </div>
                 <p className="text-xs text-slate-700 leading-relaxed">
-                  আপনার সম্পূর্ণ অ্যাপের রিয়্যাক্ট ১৯, টাইপস্ক্রিপ্ট সোর্স কোড, চালক ভেরিফিকেশন পপআপ কোড, লাইভ ম্যাপ, আইকন, এবং প্রস্তুতকৃত <strong>dist/</strong> প্রোডাকশন বিল্ড ফাইল সহ সম্পূর্ণ অফিশিয়াল জিপ ফাইল। ক্লাউডফ্লেয়ারের <code>npm ci</code> লকফাইল এরর শতভাগ ফিক্স করা হয়েছে।
+                  আপনার সম্পূর্ণ অ্যাপের রিয়্যাক্ট ১৯, টাইপস্ক্রিপ্ট সোর্স কোড, চালক ভেরিফিকেশন পপআপ কোড, লাইভ ম্যাপ, আইকন, এবং প্রস্তুতকৃত <strong>dist/</strong> প্রোডাকশন বিল্ড ফাইল সহ সম্পূর্ণ অফিশিয়াল জিপ ফাইল। ক্লাউডফ্লেয়ারের <code>edgesOut</code> ও Node.js ডিপ্লয় এরর শতভাগ সমাধান করা হয়েছে (.npmrc ও .node-version অন্তর্ভুক্ত)।
                 </p>
                 <div className="flex flex-wrap items-center gap-2.5 pt-1">
                   {/* The requested yellow zip button */}
@@ -1435,10 +1823,19 @@ export const AdminControlPanel: React.FC<AdminControlPanelProps> = ({
                     ) : (
                       <>
                         <Download className="w-4 h-4 text-slate-950" />
-                        <span>📥 সোর্স কোড জিপ ডাউনলোড করুন (৩.৫ MB • ফিক্সড)</span>
+                        <span>📥 সম্পূর্ণ প্রজেক্ট জিপ ডাউনলোড করুন (২.৪ MB • dist সহ ভেরিফাইড)</span>
                       </>
                     )}
                   </button>
+
+                  <a
+                    href="/safar-gafargaon-clean-source.zip"
+                    download="safar-gafargaon-clean-source.zip"
+                    className="inline-flex items-center gap-1.5 bg-white hover:bg-slate-50 text-slate-800 font-bold px-3.5 py-2.5 rounded-xl text-xs sm:text-sm shadow-xs border border-slate-300 cursor-pointer transition"
+                  >
+                    <Download className="w-3.5 h-3.5 text-slate-600" />
+                    <span>সরাসরি লিঙ্ক</span>
+                  </a>
 
                   {onOpenSourceCodeModal && (
                     <button
@@ -1789,6 +2186,233 @@ export const AdminControlPanel: React.FC<AdminControlPanelProps> = ({
                   className="flex-1 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white font-extrabold rounded-xl shadow-xs cursor-pointer"
                 >
                   {editingCategory ? 'আপডেট করুন' : 'তৈরি করুন'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* ============================================================== */}
+      {/* SUB-MODAL: EMERGENCY HOTLINE ADD / EDIT                        */}
+      {/* ============================================================== */}
+      {isContactModalOpen && (
+        <div className="fixed inset-0 z-[60] flex items-center justify-center p-3 bg-slate-950/75 backdrop-blur-xs animate-in fade-in">
+          <div className="bg-white rounded-3xl max-w-md w-full p-5 shadow-2xl border border-slate-200 animate-in zoom-in-95 text-slate-900">
+            <div className="flex items-center justify-between pb-3 border-b border-slate-100 mb-3.5">
+              <h3 className="font-extrabold text-slate-900 text-sm flex items-center gap-1.5">
+                <PhoneCall className="w-4 h-4 text-red-600" />
+                <span>{editingContact ? 'জরুরি হটলাইন তথ্য সম্পাদনা' : 'নতুন জরুরি হটলাইন যোগ'}</span>
+              </h3>
+              <button
+                type="button"
+                onClick={() => setIsContactModalOpen(false)}
+                className="p-1 rounded-lg text-slate-400 hover:text-slate-600 cursor-pointer"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <form onSubmit={handleSubmitContact} className="space-y-3 text-xs">
+              <div>
+                <label className="font-bold text-slate-700 block mb-1">হটলাইনের নাম / সেবা: *</label>
+                <input
+                  type="text"
+                  value={contactForm.titleBn}
+                  onChange={(e) => setContactForm({ ...contactForm, titleBn: e.target.value })}
+                  placeholder="যেমন: উপজেলা স্বাস্থ্য কমপ্লেক্স (হাসপাতাল)"
+                  className="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl font-bold text-slate-900 focus:outline-none focus:ring-2 focus:ring-red-500"
+                  required
+                />
+              </div>
+
+              <div>
+                <label className="font-bold text-slate-700 block mb-1">ফোন নম্বর (সরাসরি কল হবে): *</label>
+                <input
+                  type="text"
+                  value={contactForm.phone}
+                  onChange={(e) => setContactForm({ ...contactForm, phone: e.target.value })}
+                  placeholder="যেমন: 01710-024452"
+                  className="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl font-mono font-bold text-red-700 focus:outline-none focus:ring-2 focus:ring-red-500"
+                  required
+                />
+              </div>
+
+              <div>
+                <label className="font-bold text-slate-700 block mb-1">বিকল্প নম্বর (ঐচ্ছিক):</label>
+                <input
+                  type="text"
+                  value={contactForm.altPhone || ''}
+                  onChange={(e) => setContactForm({ ...contactForm, altPhone: e.target.value })}
+                  placeholder="যেমন: 09025-56222"
+                  className="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl font-mono text-slate-700 focus:outline-none focus:ring-2 focus:ring-red-500"
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="font-bold text-slate-700 block mb-1">সেবার ধরন / ক্যাটাগরি:</label>
+                  <select
+                    value={contactForm.category}
+                    onChange={(e) => setContactForm({ ...contactForm, category: e.target.value as any })}
+                    className="w-full px-2.5 py-2 bg-slate-50 border border-slate-300 rounded-xl font-bold text-slate-800 focus:outline-none focus:ring-2 focus:ring-red-500"
+                  >
+                    <option value="hospital">হাসপাতাল / চিকিৎসা</option>
+                    <option value="ambulance">এম্বুলেন্স সেবা</option>
+                    <option value="fire">ফায়ার সার্ভিস</option>
+                    <option value="police">থানা পুলিশ</option>
+                    <option value="blood">রক্তদান সংস্থা</option>
+                    <option value="upazila">উপজেলা প্রশাসন / হেল্পলাইন</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label className="font-bold text-slate-700 block mb-1">এলাকা / অবস্থান:</label>
+                  <input
+                    type="text"
+                    value={contactForm.locationBn}
+                    onChange={(e) => setContactForm({ ...contactForm, locationBn: e.target.value })}
+                    placeholder="যেমন: গফরগাঁও সদর রোড"
+                    className="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl text-slate-900 focus:outline-none focus:ring-2 focus:ring-red-500"
+                  />
+                </div>
+              </div>
+
+              <div className="flex items-center gap-2 pt-3">
+                <button
+                  type="button"
+                  onClick={() => setIsContactModalOpen(false)}
+                  className="flex-1 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold rounded-xl cursor-pointer"
+                >
+                  বাতিল
+                </button>
+                <button
+                  type="submit"
+                  className="flex-1 py-2.5 bg-red-600 hover:bg-red-700 text-white font-extrabold rounded-xl shadow-xs cursor-pointer"
+                >
+                  {editingContact ? 'আপডেট করুন' : 'সংরক্ষণ করুন'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* ============================================================== */}
+      {/* SUB-MODAL: POPULAR PLACE ADD / EDIT                           */}
+      {/* ============================================================== */}
+      {isPlaceModalOpen && (
+        <div className="fixed inset-0 z-[60] flex items-center justify-center p-3 bg-slate-950/75 backdrop-blur-xs animate-in fade-in">
+          <div className="bg-white rounded-3xl max-w-md w-full p-5 shadow-2xl border border-slate-200 animate-in zoom-in-95 text-slate-900">
+            <div className="flex items-center justify-between pb-3 border-b border-slate-100 mb-3.5">
+              <h3 className="font-extrabold text-slate-900 text-sm flex items-center gap-1.5">
+                <MapPin className="w-4 h-4 text-rose-500" />
+                <span>{editingPlace ? 'জনপ্রিয় স্থানের তথ্য সম্পাদনা' : 'নতুন জনপ্রিয় স্থান যোগ করুন'}</span>
+              </h3>
+              <button
+                type="button"
+                onClick={() => setIsPlaceModalOpen(false)}
+                className="p-1 rounded-lg text-slate-400 hover:text-slate-600 cursor-pointer"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <form onSubmit={handleSubmitPlace} className="space-y-3 text-xs">
+              <div>
+                <label className="font-bold text-slate-700 block mb-1">স্থানের বাংলা নাম (ড্রপডাউনে যা দেখাবে): *</label>
+                <input
+                  type="text"
+                  value={placeForm.bengaliName}
+                  onChange={(e) => setPlaceForm({ ...placeForm, bengaliName: e.target.value })}
+                  placeholder="যেমন: গফরগাঁও রেলওয়ে স্টেশন"
+                  className="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl font-bold text-slate-900 focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                  required
+                />
+              </div>
+
+              <div>
+                <label className="font-bold text-slate-700 block mb-1">স্থানের ইংরেজি নাম / কোড (ঐচ্ছিক):</label>
+                <input
+                  type="text"
+                  value={placeForm.name}
+                  onChange={(e) => setPlaceForm({ ...placeForm, name: e.target.value })}
+                  placeholder="যেমন: Gafargaon Railway Station"
+                  className="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl text-slate-800 focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="font-bold text-slate-700 block mb-1">ক্যাটাগরি / ধরন:</label>
+                  <select
+                    value={placeForm.category}
+                    onChange={(e) => setPlaceForm({ ...placeForm, category: e.target.value as any })}
+                    className="w-full px-2.5 py-2 bg-slate-50 border border-slate-300 rounded-xl font-bold text-slate-800 focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                  >
+                    <option value="স্ট্যান্ড">স্ট্যান্ড পয়েন্ট</option>
+                    <option value="মোড়">চৌরাস্তা / মোড়</option>
+                    <option value="বাজার">বাজার / হাট</option>
+                    <option value="হাসপাতাল">হাসপাতাল / স্বাস্থ্যকেন্দ্র</option>
+                    <option value="শিক্ষা প্রতিষ্ঠান">স্কুল / কলেজ</option>
+                    <option value="প্রশাসন">থানা / সরকারি অফিস</option>
+                    <option value="ইউনিয়ন">ইউনিয়ন পরিষদ</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label className="font-bold text-slate-700 block mb-1">এলাকা / ইউনিয়ন:</label>
+                  <input
+                    type="text"
+                    value={placeForm.area}
+                    onChange={(e) => setPlaceForm({ ...placeForm, area: e.target.value })}
+                    placeholder="যেমন: গফরগাঁও পৌরসভা ১ নং ওয়ার্ড"
+                    className="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl text-slate-900 focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="font-bold text-slate-700 block mb-1">অক্ষাংশ (Latitude): *</label>
+                  <input
+                    type="number"
+                    step="any"
+                    value={placeForm.lat}
+                    onChange={(e) => setPlaceForm({ ...placeForm, lat: parseFloat(e.target.value) || 0 })}
+                    placeholder="24.4536"
+                    className="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl font-mono text-slate-900 focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                    required
+                  />
+                </div>
+
+                <div>
+                  <label className="font-bold text-slate-700 block mb-1">দ্রাঘিমাংশ (Longitude): *</label>
+                  <input
+                    type="number"
+                    step="any"
+                    value={placeForm.lng}
+                    onChange={(e) => setPlaceForm({ ...placeForm, lng: parseFloat(e.target.value) || 0 })}
+                    placeholder="90.5479"
+                    className="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl font-mono text-slate-900 focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                    required
+                  />
+                </div>
+              </div>
+
+              <div className="flex items-center gap-2 pt-3">
+                <button
+                  type="button"
+                  onClick={() => setIsPlaceModalOpen(false)}
+                  className="flex-1 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold rounded-xl cursor-pointer"
+                >
+                  বাতিল
+                </button>
+                <button
+                  type="submit"
+                  className="flex-1 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white font-extrabold rounded-xl shadow-xs cursor-pointer"
+                >
+                  {editingPlace ? 'আপডেট করুন' : 'সংরক্ষণ করুন'}
                 </button>
               </div>
             </form>

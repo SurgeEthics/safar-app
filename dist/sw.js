@@ -84,109 +84,49 @@ define(['./workbox-afac4cd2'], (function (workbox) { 'use strict';
     "revision": "1872c500de691dce40960bb85481de07"
   }, {
     "url": "pwa-maskable-512x512.png",
-    "revision": "06c9b3ee14ed28a77812eb17fe29377e"
+    "revision": "424b0ddeffc660c348dde536838f238f"
   }, {
     "url": "pwa-512x512.png",
-    "revision": "10930b3255605e1f7a619514cdd80246"
+    "revision": "b939c8f0cf4bf04e5f824257d38bc4ce"
   }, {
     "url": "pwa-192x192.png",
-    "revision": "10930b3255605e1f7a619514cdd80246"
+    "revision": "968e2740b061116784f61b61304a0e07"
   }, {
     "url": "index.html",
-    "revision": "fcdd0924fed976f9644e72870ef22a1d"
+    "revision": "3f6f453b8fa21434d550203a1be4d71f"
+  }, {
+    "url": "icon.svg",
+    "revision": "2656b652288f2dc2146deee1452b7349"
   }, {
     "url": "favicon.png",
-    "revision": "10930b3255605e1f7a619514cdd80246"
+    "revision": "c48568c4b5a6df7bf2c0bc060531dba0"
   }, {
     "url": "favicon.ico",
-    "revision": "32540fda3ab26029108ea72620821a38"
+    "revision": "c91f4713b49633cff485a7bee25c82b4"
   }, {
     "url": "apple-touch-icon.png",
-    "revision": "10930b3255605e1f7a619514cdd80246"
+    "revision": "9c56b5edc561a53f807b294c64b4234f"
   }, {
-    "url": "assets/index-D34BRQmv.js",
+    "url": "assets/index-pfpLyw5C.css",
     "revision": null
   }, {
-    "url": "assets/index-CmCmZWI2.css",
-    "revision": null
-  }, {
-    "url": "assets/aistudio/image_d8d12f30.png",
-    "revision": null
-  }, {
-    "url": "assets/aistudio/image_b6f81972.png",
-    "revision": null
-  }, {
-    "url": "assets/aistudio/image_b0d5f581.png",
-    "revision": null
-  }, {
-    "url": "assets/aistudio/image_ab0b89c5.png",
-    "revision": null
-  }, {
-    "url": "assets/aistudio/image_a095f77e.png",
-    "revision": null
-  }, {
-    "url": "assets/aistudio/image_9088a0a7.png",
-    "revision": null
-  }, {
-    "url": "assets/aistudio/image_80117878.png",
-    "revision": null
-  }, {
-    "url": "assets/aistudio/image_71970538.png",
-    "revision": null
-  }, {
-    "url": "assets/aistudio/image_44a79acc.png",
-    "revision": null
-  }, {
-    "url": "assets/aistudio/image_22581970.png",
-    "revision": null
-  }, {
-    "url": "assets/aistudio/image_182d28ee.png",
-    "revision": null
-  }, {
-    "url": "assets/aistudio/image_036dddd1.png",
-    "revision": null
-  }, {
-    "url": "assets/aistudio/Screenshot_2026-10-26_061214_05fcbc11.png",
-    "revision": null
-  }, {
-    "url": "assets/aistudio/Screenshot_2026-10-26_051844_e6e58068.png",
-    "revision": null
-  }, {
-    "url": "assets/aistudio/Screenshot_2026-10-26_051727_3fb6d8a8.png",
-    "revision": null
-  }, {
-    "url": "assets/aistudio/Screenshot_2026-10-26_051402_89228004.png",
-    "revision": null
-  }, {
-    "url": "assets/aistudio/Screenshot_2026-10-26_040035_51a4884e.png",
-    "revision": null
-  }, {
-    "url": "assets/aistudio/Screenshot_2026-10-26_040010_314cf8cb.png",
-    "revision": null
-  }, {
-    "url": "assets/aistudio/Screenshot_2026-10-26_032925_ee775d5f.png",
-    "revision": null
-  }, {
-    "url": "assets/aistudio/Screenshot_2026-10-23_232850_f4cae9c4.png",
-    "revision": null
-  }, {
-    "url": "assets/aistudio/Screenshot_2026-10-23_232446_27a15e0f.png",
+    "url": "assets/index-Bp5ods0n.js",
     "revision": null
   }, {
     "url": "apple-touch-icon.png",
-    "revision": "10930b3255605e1f7a619514cdd80246"
+    "revision": "9c56b5edc561a53f807b294c64b4234f"
   }, {
     "url": "favicon.ico",
-    "revision": "32540fda3ab26029108ea72620821a38"
+    "revision": "c91f4713b49633cff485a7bee25c82b4"
   }, {
     "url": "pwa-192x192.png",
-    "revision": "10930b3255605e1f7a619514cdd80246"
+    "revision": "968e2740b061116784f61b61304a0e07"
   }, {
     "url": "pwa-512x512.png",
-    "revision": "10930b3255605e1f7a619514cdd80246"
+    "revision": "b939c8f0cf4bf04e5f824257d38bc4ce"
   }, {
     "url": "pwa-maskable-512x512.png",
-    "revision": "06c9b3ee14ed28a77812eb17fe29377e"
+    "revision": "424b0ddeffc660c348dde536838f238f"
   }, {
     "url": "manifest.webmanifest",
     "revision": "28884cb39ce6d01034507bc3e2dc82ea"

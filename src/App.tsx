@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useLayoutEffect, useRef } from 'react';
+import React, { useState, useEffect, useLayoutEffect, useRef, useMemo } from 'react';
 import { 
   Phone, 
   MapPin, 
@@ -58,6 +58,11 @@ import { VerificationGatewayModal } from './components/VerificationGatewayModal'
 import { DriverVerificationSuccessModal } from './components/DriverVerificationSuccessModal';
 import { PWAInstallBanner } from './components/PWAInstallBanner';
 import { SourceCodeDownloadModal } from './components/SourceCodeDownloadModal';
+import { EmergencyDirectoryModal } from './components/EmergencyDirectoryModal';
+import { TravelDuaDropdown } from './components/TravelDuaDropdown';
+import { EmergencyHotlineDropdown } from './components/EmergencyHotlineDropdown';
+import { EmergencyContact } from './types';
+import { INITIAL_EMERGENCY_CONTACTS } from './data/initialData';
 import confetti from 'canvas-confetti';
 import { sounds } from './utils/audio';
 import { toBengaliNumber } from './utils/calculator';
@@ -69,11 +74,12 @@ import { collection, doc, setDoc, onSnapshot, updateDoc, deleteDoc } from 'fireb
 import { db, handleFirestoreError, OperationType } from './lib/firebase';
 
 import { LocationAutocomplete } from './components/LocationAutocomplete';
-import { GAFARGAON_PLACES, resolveLocationCoordinates } from './data/gafargaonPlaces';
+import { GAFARGAON_PLACES, resolveLocationCoordinates, GafargaonPlace } from './data/gafargaonPlaces';
 import { GafargaonMap } from './components/GafargaonMap';
 import { CloudflareSettingsModal } from './components/CloudflareSettingsModal';
 import { useLiveTracking } from './hooks/useLiveTracking';
 import { liveLocationService } from './services/liveLocationService';
+import { sortDriversDeterministic, sanitizeFirestoreDriverData } from './utils/stableDriverSort';
 
 export type VehicleCategory = string;
 export type AppUserRole = 'passenger' | 'driver';
@@ -148,6 +154,8 @@ export interface Driver {
   verificationStatus?: 'verified' | 'pending';
   regAppId?: string;
   registeredAt?: string;
+  registeredTimestamp?: number;
+  createdAt?: string;
   standName: string;
   lat: number;
   lng: number;
@@ -1040,6 +1048,7 @@ export default function App() {
   const [selectedStand, setSelectedStand] = useState<string>('all');
   const [searchQuery, setSearchQuery] = useState('');
   const [showSourceCodeModal, setShowSourceCodeModal] = useState(false);
+  const [showEmergencyDirectory, setShowEmergencyDirectory] = useState(false);
 
   // 1. Dynamic Stands State (Manageable by Admin, persisted in localStorage with Google Maps auto-migration)
   const [stands, setStands] = useState<Stand[]>(() => {
@@ -1110,6 +1119,26 @@ export default function App() {
     } catch {}
   }, [hotlines]);
 
+  // 3.1 Dynamic Full Emergency Contacts List (Managed in Admin Panel)
+  const [emergencyContacts, setEmergencyContacts] = useState<EmergencyContact[]>(() => {
+    try {
+      const saved = localStorage.getItem('safar_emergency_contacts_v2');
+      if (saved) return JSON.parse(saved);
+    } catch {}
+    return INITIAL_EMERGENCY_CONTACTS;
+  });
+
+  const handleSaveEmergencyContacts = (newContacts: EmergencyContact[]) => {
+    setEmergencyContacts(newContacts);
+    try {
+      localStorage.setItem('safar_emergency_contacts_v2', JSON.stringify(newContacts));
+    } catch {}
+    setDoc(doc(db, 'hotlines', 'contacts_list'), {
+      contacts: newContacts,
+      updatedAt: new Date().toISOString()
+    }, { merge: true }).catch(() => {});
+  };
+
   // 4. Drivers State with LocalStorage Sync (Auto-migrated to exact Google Maps coordinates)
   const [drivers, setDrivers] = useState<Driver[]>(() => {
     try {
@@ -1121,14 +1150,14 @@ export default function App() {
           if (!hasOutdatedGps) {
             return parsed.map((d: any) => ({
               ...d,
-              driverPhoto: d.driverPhoto || '',
+              driverPhoto: d.driverPhoto || d.photoUrl || '',
               nidFrontPhoto: d.nidFrontPhoto || '',
               nidBackPhoto: d.nidBackPhoto || '',
-              firstIssueDate: d.firstIssueDate || '15/04/2021',
-              regLastFour: d.regLastFour || (d.plateNumber ? d.plateNumber.replace(/[^0-9]/g, '').slice(-4) : '5206') || '5206',
-              manufacturingYear: d.manufacturingYear || '2021',
-              chassisNumber: d.chassisNumber || `MD2A15BY4N${d.id ? d.id.replace(/[^0-9]/g, '').padStart(6, '1') : '123456'}`,
-              engineNumber: d.engineNumber || `JA15EQ${d.id ? d.id.replace(/[^0-9]/g, '').padStart(5, '2') : '12345'}`,
+              firstIssueDate: d.firstIssueDate || '',
+              regLastFour: d.regLastFour || (d.plateNumber ? d.plateNumber.replace(/[^0-9]/g, '').slice(-4) : '') || '',
+              manufacturingYear: d.manufacturingYear || '',
+              chassisNumber: d.chassisNumber || '',
+              engineNumber: d.engineNumber || '',
               phoneVerified: d.phoneVerified !== undefined ? d.phoneVerified : (d.licenseVerified && d.nidVerified),
               verificationStatus: (d.licenseVerified && (d.phoneVerified ?? true) && d.nidVerified) ? 'verified' : 'pending'
             }));
@@ -1143,11 +1172,11 @@ export default function App() {
       const all3 = isLic && isNid && isPhone;
       return {
         ...d,
-        firstIssueDate: d.firstIssueDate || '15/04/2021',
-        regLastFour: d.regLastFour || (d.plateNumber ? d.plateNumber.replace(/[^0-9]/g, '').slice(-4) : '5206') || '5206',
-        manufacturingYear: d.manufacturingYear || '2021',
-        chassisNumber: d.chassisNumber || `MD2A15BY4N${d.id ? d.id.replace(/[^0-9]/g, '').padStart(6, '1') : '123456'}`,
-        engineNumber: d.engineNumber || `JA15EQ${d.id ? d.id.replace(/[^0-9]/g, '').padStart(5, '2') : '12345'}`,
+        firstIssueDate: d.firstIssueDate || '',
+        regLastFour: d.regLastFour || (d.plateNumber ? d.plateNumber.replace(/[^0-9]/g, '').slice(-4) : '') || '',
+        manufacturingYear: d.manufacturingYear || '',
+        chassisNumber: d.chassisNumber || '',
+        engineNumber: d.engineNumber || '',
         phoneVerified: isPhone,
         verificationStatus: all3 ? ('verified' as const) : ('pending' as const)
       };
@@ -1180,10 +1209,10 @@ export default function App() {
             vehicleModel: data.vehicleModel || 'বাহন',
             plateNumber: data.plateNumber || data.licensePlate || '',
             licenseNumber: data.licenseNumber || '',
-            firstIssueDate: data.firstIssueDate || '15/04/2021',
+            firstIssueDate: data.firstIssueDate || '',
             licenseType: data.licenseType || 'পেশাদার (Professional)',
-            regLastFour: data.regLastFour || '5206',
-            manufacturingYear: data.manufacturingYear || '2021',
+            regLastFour: data.regLastFour || (data.plateNumber ? data.plateNumber.replace(/[^0-9]/g, '').slice(-4) : '') || '',
+            manufacturingYear: data.manufacturingYear || '',
             chassisNumber: data.chassisNumber || '',
             engineNumber: data.engineNumber || '',
             taxTokenReceiptPhoto: data.taxTokenReceiptPhoto || '',
@@ -1208,22 +1237,48 @@ export default function App() {
           });
         });
 
-        setDrivers(prev => {
-          const merged = [...firestoreDrivers];
+        setDrivers(prevDrivers => {
+          const map = new Map<string, Driver>();
+
+          // 1. Initial canonical drivers as baseline
           for (const initD of INITIAL_DRIVERS) {
-            if (!merged.some(m => m.id === initD.id || m.phone === initD.phone)) {
-              merged.push(initD);
-            }
+            map.set(initD.id, initD);
           }
-          return merged;
+
+          // 2. Overlay previous local driver state (keeps any local verification edits)
+          for (const prevD of prevDrivers) {
+            map.set(prevD.id, prevD);
+          }
+
+          // 3. Overlay Firestore snapshot data (official cloud truth)
+          for (const fD of firestoreDrivers) {
+            const existing = map.get(fD.id);
+            const isLocalVerified = existing && (existing.licenseVerified || existing.phoneVerified || existing.nidVerified);
+            const nextLic = fD.licenseVerified || (isLocalVerified ? Boolean(existing?.licenseVerified) : false);
+            const nextPhone = fD.phoneVerified || (isLocalVerified ? Boolean(existing?.phoneVerified) : false);
+            const nextNid = fD.nidVerified || (isLocalVerified ? Boolean(existing?.nidVerified) : false);
+            const all3 = nextLic && nextPhone && nextNid;
+
+            map.set(fD.id, {
+              ...(existing || {}),
+              ...fD,
+              licenseVerified: nextLic,
+              phoneVerified: nextPhone,
+              nidVerified: nextNid,
+              verificationStatus: all3 ? 'verified' : (fD.verificationStatus || 'pending')
+            });
+          }
+
+          // ALWAYS return deterministic stably sorted drivers! Zero jumping!
+          return Array.from(map.values()).sort(sortDriversDeterministic);
         });
       } else {
-        // First-time seed initial drivers to Firestore
+        // First-time seed initial drivers to Firestore with sanitized data
         INITIAL_DRIVERS.forEach(d => {
-          setDoc(doc(db, 'drivers', d.id), {
+          setDoc(doc(db, 'drivers', d.id), sanitizeFirestoreDriverData({
             ...d,
             updatedAt: new Date().toISOString()
-          }).catch(err => console.warn('Firestore initial driver seed fallback:', err));
+          }), { merge: true }).catch(err => console.warn('Firestore initial driver seed fallback:', err));
         });
       }
     }, (error) => {
@@ -1881,12 +1936,66 @@ export default function App() {
   }, [passengerRequests]);
 
   // Passenger Ride Booking Hub State (Dynamic Pickup, Destination & Fare Calculation)
-  const [passengerPickup, setPassengerPickup] = useState<string>('গফরগাঁও রেলওয়ে স্টেশন স্ট্যান্ড');
-  const [passengerDestination, setPassengerDestination] = useState<string>('উপজেলা স্বাস্থ্য কমপ্লেক্স (হাসপাতাল) স্ট্যান্ড');
-  const [pickupCoords, setPickupCoords] = useState<{ lat: number; lng: number }>({ lat: 24.5518, lng: 90.5512 });
-  const [destCoords, setDestCoords] = useState<{ lat: number; lng: number }>({ lat: 24.5585, lng: 90.5482 });
+  // Default is empty so no dummy route or distance line is drawn until user selects locations
+  const [passengerPickup, setPassengerPickup] = useState<string>('');
+  const [passengerDestination, setPassengerDestination] = useState<string>('');
+  const [pickupCoords, setPickupCoords] = useState<{ lat: number; lng: number } | null>(null);
+  const [destCoords, setDestCoords] = useState<{ lat: number; lng: number } | null>(null);
   const [passengerSelectedVehicle, setPassengerSelectedVehicle] = useState<VehicleCategory>('cng');
   const [isRidePlannerCollapsed, setIsRidePlannerCollapsed] = useState<boolean>(false);
+  const [isQuickDestOpen, setIsQuickDestOpen] = useState<boolean>(false);
+  const [isVehicleFareOpen, setIsVehicleFareOpen] = useState<boolean>(false);
+
+  // Popular Places State (Managed via Admin Control Panel & Synced with Autocomplete Dropdown)
+  const [popularPlaces, setPopularPlaces] = useState<GafargaonPlace[]>(() => {
+    try {
+      const saved = localStorage.getItem('safar_popular_places_v1');
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+      }
+    } catch {}
+    return GAFARGAON_PLACES;
+  });
+
+  const handleSavePopularPlace = (place: GafargaonPlace) => {
+    setPopularPlaces(prev => {
+      const idx = prev.findIndex(p => p.id === place.id);
+      let updated: GafargaonPlace[];
+      if (idx >= 0) {
+        updated = [...prev];
+        updated[idx] = place;
+      } else {
+        updated = [...prev, place];
+      }
+      try {
+        localStorage.setItem('safar_popular_places_v1', JSON.stringify(updated));
+      } catch {}
+      setDoc(doc(db, 'places', place.id), {
+        ...place,
+        updatedAt: new Date().toISOString()
+      }, { merge: true }).catch(() => {});
+      return updated;
+    });
+  };
+
+  const handleDeletePopularPlace = (placeId: string, name: string) => {
+    setPopularPlaces(prev => {
+      const updated = prev.filter(p => p.id !== placeId);
+      try {
+        localStorage.setItem('safar_popular_places_v1', JSON.stringify(updated));
+      } catch {}
+      deleteDoc(doc(db, 'places', placeId)).catch(() => {});
+      return updated;
+    });
+  };
+
+  const handleResetPopularPlaces = () => {
+    setPopularPlaces(GAFARGAON_PLACES);
+    try {
+      localStorage.setItem('safar_popular_places_v1', JSON.stringify(GAFARGAON_PLACES));
+    } catch {}
+  };
 
   // Active Pending Request submitted by this passenger
   const [passengerPendingRequest, setPassengerPendingRequest] = useState<PassengerRideRequest | null>(() => {
@@ -1951,8 +2060,8 @@ export default function App() {
   };
 
   // Helper to extract or resolve coordinates for any stand or custom name in Gafargaon
-  const getCoordinatesForLocation = (locName: string, isDest = false): { lat: number; lng: number } => {
-    if (!locName) return isDest ? { lat: 24.5585, lng: 90.5482 } : { lat: 24.5518, lng: 90.5512 };
+  const getCoordinatesForLocation = (locName: string, isDest = false): { lat: number; lng: number } | null => {
+    if (!locName || !locName.trim()) return null;
     if (!isDest && isLiveLocationQuery(locName)) {
       if (liveGps.lat && liveGps.lng) {
         return { lat: liveGps.lat, lng: liveGps.lng };
@@ -1966,6 +2075,10 @@ export default function App() {
 
   // Sync coordinates when locations or GPS change
   useEffect(() => {
+    if (!passengerPickup || !passengerPickup.trim()) {
+      setPickupCoords(null);
+      return;
+    }
     if (isLiveLocationQuery(passengerPickup)) {
       if (liveGps.lat && liveGps.lng) {
         setPickupCoords({ lat: liveGps.lat, lng: liveGps.lng });
@@ -1980,6 +2093,10 @@ export default function App() {
   }, [passengerPickup, passengerLocation, liveGps.lat, liveGps.lng]);
 
   useEffect(() => {
+    if (!passengerDestination || !passengerDestination.trim()) {
+      setDestCoords(null);
+      return;
+    }
     setDestCoords(getCoordinatesForLocation(passengerDestination, true));
   }, [passengerDestination]);
 
@@ -2012,16 +2129,17 @@ export default function App() {
   };
 
   // Dynamic Distance & Duration calculation with realistic road curvature factor (1.25x)
-  const isSamePoint = Math.abs(pickupCoords.lat - destCoords.lat) < 0.0001 && Math.abs(pickupCoords.lng - destCoords.lng) < 0.0001;
-  const directDistance = isSamePoint ? 0 : calculateDistanceKm(pickupCoords.lat, pickupCoords.lng, destCoords.lat, destCoords.lng);
+  const hasRouteCoordinates = Boolean(pickupCoords && destCoords && (pickupCoords.lat !== destCoords.lat || pickupCoords.lng !== destCoords.lng));
+  const isSamePoint = (pickupCoords && destCoords) ? (Math.abs(pickupCoords.lat - destCoords.lat) < 0.0001 && Math.abs(pickupCoords.lng - destCoords.lng) < 0.0001) : false;
+  const directDistance = (pickupCoords && destCoords && !isSamePoint) ? calculateDistanceKm(pickupCoords.lat, pickupCoords.lng, destCoords.lat, destCoords.lng) : 0;
   const roadCurvatureFactor = 1.25;
-  const calculatedDistance = isSamePoint ? 0.3 : Number(Math.max(0.3, directDistance * roadCurvatureFactor).toFixed(1));
+  const calculatedDistance = hasRouteCoordinates ? Number(Math.max(0.3, directDistance * roadCurvatureFactor).toFixed(1)) : 0;
 
   const currentVehicleSpeed = getVehicleSpeedKmh(passengerSelectedVehicle);
-  const calculatedDurationMinutes = Math.max(
+  const calculatedDurationMinutes = hasRouteCoordinates ? Math.max(
     2,
     Math.round((calculatedDistance / currentVehicleSpeed) * 60 + 1)
-  );
+  ) : 0;
 
   // Dynamic Fair Fare Calculator: Base fare covers first 1.5 km!
   const calculateFareForCategory = (catId: string, distKm: number): number => {
@@ -2120,7 +2238,7 @@ export default function App() {
         const matchedDriver = drivers.find(d => d.category === newRequest.category && d.isOnline) ||
           drivers.find(d => d.isOnline) || drivers[0];
 
-        const pCoords = pickupCoords;
+        const pCoords = pickupCoords || { lat: 24.5518, lng: 90.5512 };
         const dist = calculatedDistance;
         const eta = Math.max(2, Math.round(dist * 2.5));
         const otpCode = String(Math.floor(1000 + Math.random() * 9000));
@@ -2201,7 +2319,7 @@ export default function App() {
     const acceptedReq = passengerRequests.find(r => r.id === requestId);
     if (acceptedReq) {
       const matchingDriver = drivers.find(d => d.category === acceptedReq.category) || drivers[0];
-      const pCoords = getCoordinatesForLocation(acceptedReq.pickupPoint);
+      const pCoords = getCoordinatesForLocation(acceptedReq.pickupPoint) || { lat: 24.5518, lng: 90.5512 };
 
       setActiveBooking({
         driver: matchingDriver,
@@ -2688,20 +2806,29 @@ export default function App() {
   useEffect(() => {
     if (serverState.drivers && serverState.drivers.length > 0) {
       setDrivers(prevDrivers => {
-        const updated = [...prevDrivers];
-        serverState.drivers.forEach(sd => {
-          const idx = updated.findIndex(d => d.id === sd.id);
-          if (idx >= 0) {
-            updated[idx] = {
-              ...updated[idx],
-              lat: sd.lat,
-              lng: sd.lng,
-              approxSpeedKmh: sd.speed || updated[idx].approxSpeedKmh,
-              isOnline: sd.isOnline ?? updated[idx].isOnline
-            };
+        let hasChanges = false;
+        const updated = prevDrivers.map(d => {
+          const sd = serverState.drivers.find(s => s.id === d.id);
+          if (sd) {
+            const latDiff = Math.abs(d.lat - sd.lat);
+            const lngDiff = Math.abs(d.lng - sd.lng);
+            const currentOnline = d.isOnline !== false;
+            const targetOnline = sd.isOnline !== false;
+            const onlineDiff = currentOnline !== targetOnline;
+            if (latDiff > 0.0001 || lngDiff > 0.0001 || onlineDiff) {
+              hasChanges = true;
+              return {
+                ...d,
+                lat: sd.lat,
+                lng: sd.lng,
+                approxSpeedKmh: sd.speed || d.approxSpeedKmh,
+                isOnline: targetOnline
+              };
+            }
           }
+          return d;
         });
-        return updated;
+        return hasChanges ? updated : prevDrivers;
       });
     }
   }, [serverState.drivers]);
@@ -2767,19 +2894,21 @@ export default function App() {
     return () => clearInterval(timer);
   }, [activeBooking]);
 
-  // Filtered drivers based on category, stand and search
-  const filteredDrivers = drivers.filter(driver => {
-    const matchesCategory = selectedCategory === 'all' || driver.category === selectedCategory;
-    const matchesStand = selectedStand === 'all' || driver.standName.includes(selectedStand);
-    const matchesSearch = 
-      driver.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      driver.vehicleModel.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      driver.plateNumber.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      driver.licenseNumber.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      driver.standName.toLowerCase().includes(searchQuery.toLowerCase());
+  // Filtered and stably sorted drivers (100% deterministic, zero jumping/lafalafi)
+  const filteredDrivers = useMemo(() => {
+    return drivers.filter(driver => {
+      const matchesCategory = selectedCategory === 'all' || driver.category === selectedCategory;
+      const matchesStand = selectedStand === 'all' || driver.standName.includes(selectedStand);
+      const matchesSearch = 
+        driver.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        driver.vehicleModel.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        driver.plateNumber.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        driver.licenseNumber.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        driver.standName.toLowerCase().includes(searchQuery.toLowerCase());
 
-    return matchesCategory && matchesStand && matchesSearch;
-  });
+      return matchesCategory && matchesStand && matchesSearch;
+    }).sort(sortDriversDeterministic);
+  }, [drivers, selectedCategory, selectedStand, searchQuery]);
 
   // Handle Driver Registration Submit with full verification logic & mandatory Pending Review
   const handleRegisterSubmit = (e: React.FormEvent) => {
@@ -2816,14 +2945,14 @@ export default function App() {
       category: registerForm.category,
       categoryBengali: catObj ? catObj.nameBengali : 'যানবাহন',
       vehicleModel: registerForm.vehicleModel.trim() || 'নিবন্ধিত বাহন',
-      plateNumber: registerForm.plateNumber.trim() || 'ময়মনসিংহ-১১-৯৯০০',
+      plateNumber: registerForm.plateNumber.trim() || '',
       licenseNumber: registerForm.licenseNumber.trim(),
-      firstIssueDate: registerForm.firstIssueDate.trim() || '15/04/2021',
+      firstIssueDate: registerForm.firstIssueDate.trim() || '',
       licenseType: registerForm.licenseType,
-      regLastFour: registerForm.regLastFour.trim() || (registerForm.plateNumber ? registerForm.plateNumber.replace(/[^0-9]/g, '').slice(-4) : '5206') || '5206',
-      manufacturingYear: registerForm.manufacturingYear.trim() || '2021',
-      chassisNumber: registerForm.chassisNumber.trim() || `MD2A15BY4N${Math.floor(100000 + Math.random() * 900000)}`,
-      engineNumber: registerForm.engineNumber.trim() || `JA15EQ${Math.floor(10000 + Math.random() * 90000)}`,
+      regLastFour: registerForm.regLastFour.trim() || (registerForm.plateNumber ? registerForm.plateNumber.replace(/[^0-9]/g, '').slice(-4) : ''),
+      manufacturingYear: registerForm.manufacturingYear.trim() || '',
+      chassisNumber: registerForm.chassisNumber.trim() || '',
+      engineNumber: registerForm.engineNumber.trim() || '',
       taxTokenReceiptPhoto: registerForm.taxTokenReceiptPhoto || '',
       driverPhoto: registerForm.driverPhoto || '',
       nidFrontPhoto: registerForm.nidFrontPhoto || '',
@@ -2835,6 +2964,8 @@ export default function App() {
       verificationStatus: 'pending',
       regAppId: newRegAppId,
       registeredAt: new Date().toLocaleTimeString('bn-BD', { hour: '2-digit', minute: '2-digit' }),
+      registeredTimestamp: Date.now(),
+      createdAt: new Date().toISOString(),
       standName: targetStand ? targetStand.bengaliName : registerForm.standName,
       lat: (targetStand ? targetStand.lat : 24.5530) + (Math.random() - 0.5) * 0.008,
       lng: (targetStand ? targetStand.lng : 90.5520) + (Math.random() - 0.5) * 0.008,
@@ -2872,29 +3003,25 @@ export default function App() {
     setStatusCheckResult(newDriver);
     showAdminToastMessage(`আবেদন রেফারেন্স: ${newRegAppId} - যাচাইকরণ পেন্ডিং রয়েছে`);
 
-    // Sync newly registered driver to Firebase Firestore
+    // Sync newly registered driver to Firebase Firestore with ALL verification credentials and photos
     setDoc(doc(db, 'drivers', newDriver.id), {
-      name: newDriver.name,
+      ...newDriver,
       nameBn: newDriver.name,
-      phone: newDriver.phone,
-      category: newDriver.category,
-      categoryBengali: newDriver.categoryBengali,
-      vehicleModel: newDriver.vehicleModel,
-      plateNumber: newDriver.plateNumber,
       licensePlate: newDriver.plateNumber,
-      licenseNumber: newDriver.licenseNumber,
-      nidNumber: newDriver.nidNumber,
-      standName: newDriver.standName,
+      firstIssueDate: newDriver.firstIssueDate || '',
+      licenseType: newDriver.licenseType,
+      regLastFour: newDriver.regLastFour || '',
+      manufacturingYear: newDriver.manufacturingYear || '',
+      chassisNumber: newDriver.chassisNumber || '',
+      engineNumber: newDriver.engineNumber || '',
+      taxTokenReceiptPhoto: newDriver.taxTokenReceiptPhoto || '',
+      driverPhoto: newDriver.driverPhoto || '',
+      photoUrl: newDriver.driverPhoto || '',
+      nidFrontPhoto: newDriver.nidFrontPhoto || '',
+      nidBackPhoto: newDriver.nidBackPhoto || '',
       isVerified: false,
       verificationStatus: 'pending',
-      lat: newDriver.lat,
-      lng: newDriver.lng,
-      rating: 5.0,
-      totalTrips: 0,
-      isAvailable: true,
-      isOnline: true,
-      registeredAt: new Date().toISOString(),
-      regAppId: newDriver.regAppId
+      updatedAt: new Date().toISOString()
     }).catch(err => {
       console.warn('Firestore offline fallback for driver register:', err);
     });
@@ -3202,44 +3329,57 @@ export default function App() {
 
   const handleApproveVerificationGate = (driverId: string, gateType: 'brta' | 'wa' | 'nid') => {
     let newlyFullyVerifiedDriver: Driver | null = null;
+    let fullUpdatedDriver: Driver | null = null;
 
-    setDrivers(prev => prev.map(d => {
-      if (d.id !== driverId) return d;
-      const nextLic = gateType === 'brta' ? true : Boolean(d.licenseVerified);
-      const nextPhone = gateType === 'wa' ? true : Boolean(d.phoneVerified);
-      const nextNid = gateType === 'nid' ? true : Boolean(d.nidVerified);
-      const all3 = nextLic && nextPhone && nextNid;
-      const updated: Driver = {
-        ...d,
-        licenseVerified: nextLic,
-        phoneVerified: nextPhone,
-        nidVerified: nextNid,
-        verificationStatus: all3 ? 'verified' : 'pending',
-        isOnline: all3 ? true : d.isOnline
-      };
-      if (all3) {
-        newlyFullyVerifiedDriver = updated;
-      }
-      return updated;
-    }));
+    setDrivers(prev => {
+      const nextDrivers = prev.map(d => {
+        if (d.id !== driverId) return d;
+        const nextLic = gateType === 'brta' ? true : Boolean(d.licenseVerified);
+        const nextPhone = gateType === 'wa' ? true : Boolean(d.phoneVerified);
+        const nextNid = gateType === 'nid' ? true : Boolean(d.nidVerified);
+        const all3 = nextLic && nextPhone && nextNid;
+        const updated: Driver = {
+          ...d,
+          licenseVerified: nextLic,
+          phoneVerified: nextPhone,
+          nidVerified: nextNid,
+          verificationStatus: all3 ? 'verified' : 'pending',
+          isOnline: all3 ? true : d.isOnline
+        };
+        fullUpdatedDriver = updated;
+        if (all3) {
+          newlyFullyVerifiedDriver = updated;
+        }
+        return updated;
+      });
+      const sorted = nextDrivers.sort(sortDriversDeterministic);
+      try {
+        localStorage.setItem('safar_drivers_v5', JSON.stringify(sorted));
+      } catch {}
+      return sorted;
+    });
 
-    // Real-time Firestore sync
-    const targetDrv = drivers.find(d => d.id === driverId);
-    if (targetDrv) {
-      const nextLic = gateType === 'brta' ? true : Boolean(targetDrv.licenseVerified);
-      const nextPhone = gateType === 'wa' ? true : Boolean(targetDrv.phoneVerified);
-      const nextNid = gateType === 'nid' ? true : Boolean(targetDrv.nidVerified);
+    // Real-time Firestore sync with sanitized data and setDoc({ merge: true })
+    const baseTarget = fullUpdatedDriver || drivers.find(d => d.id === driverId);
+    if (baseTarget) {
+      const nextLic = gateType === 'brta' ? true : Boolean(baseTarget.licenseVerified);
+      const nextPhone = gateType === 'wa' ? true : Boolean(baseTarget.phoneVerified);
+      const nextNid = gateType === 'nid' ? true : Boolean(baseTarget.nidVerified);
       const all3 = nextLic && nextPhone && nextNid;
-      setDoc(doc(db, 'drivers', driverId), {
-        ...targetDrv,
+
+      const firestorePayload = sanitizeFirestoreDriverData({
+        ...baseTarget,
         licenseVerified: nextLic,
         phoneVerified: nextPhone,
         nidVerified: nextNid,
         isVerified: all3,
         verificationStatus: all3 ? 'verified' : 'pending',
-        isOnline: all3 ? true : targetDrv.isOnline,
+        isOnline: all3 ? true : baseTarget.isOnline,
         updatedAt: new Date().toISOString()
-      }, { merge: true }).catch(err => console.warn('Firestore verify gate error:', err));
+      });
+
+      setDoc(doc(db, 'drivers', driverId), firestorePayload, { merge: true })
+        .catch(err => console.warn('Firestore verify gate error:', err));
     }
 
     if (newlyFullyVerifiedDriver) {
@@ -3253,6 +3393,20 @@ export default function App() {
         });
         sounds.playTripCompletedFanfare();
       } catch {}
+    }
+
+    if (verifyingDriverTarget && verifyingDriverTarget.id === driverId) {
+      setVerifyingDriverTarget(prev => prev ? {
+        ...prev,
+        licenseVerified: gateType === 'brta' ? true : prev.licenseVerified,
+        phoneVerified: gateType === 'wa' ? true : prev.phoneVerified,
+        nidVerified: gateType === 'nid' ? true : prev.nidVerified,
+        verificationStatus: (
+          (gateType === 'brta' || prev.licenseVerified) &&
+          (gateType === 'wa' || prev.phoneVerified) &&
+          (gateType === 'nid' || prev.nidVerified)
+        ) ? 'verified' : 'pending'
+      } : null);
     }
 
     if (statusCheckResult && statusCheckResult.id === driverId) {
@@ -3282,34 +3436,59 @@ export default function App() {
   };
 
   const handleRevokeVerificationGate = (driverId: string, gateType: 'brta' | 'wa' | 'nid') => {
-    setDrivers(prev => prev.map(d => {
-      if (d.id !== driverId) return d;
-      const nextLic = gateType === 'brta' ? false : d.licenseVerified;
-      const nextPhone = gateType === 'wa' ? false : d.phoneVerified;
-      const nextNid = gateType === 'nid' ? false : d.nidVerified;
-      return {
-        ...d,
-        licenseVerified: nextLic,
-        phoneVerified: nextPhone,
-        nidVerified: nextNid,
-        verificationStatus: 'pending'
-      };
-    }));
+    let fullUpdatedDriver: Driver | null = null;
 
-    const targetDrv = drivers.find(d => d.id === driverId);
-    if (targetDrv) {
-      const nextLic = gateType === 'brta' ? false : targetDrv.licenseVerified;
-      const nextPhone = gateType === 'wa' ? false : targetDrv.phoneVerified;
-      const nextNid = gateType === 'nid' ? false : targetDrv.nidVerified;
-      setDoc(doc(db, 'drivers', driverId), {
-        ...targetDrv,
+    setDrivers(prev => {
+      const nextDrivers = prev.map(d => {
+        if (d.id !== driverId) return d;
+        const nextLic = gateType === 'brta' ? false : Boolean(d.licenseVerified);
+        const nextPhone = gateType === 'wa' ? false : Boolean(d.phoneVerified);
+        const nextNid = gateType === 'nid' ? false : Boolean(d.nidVerified);
+        const updated: Driver = {
+          ...d,
+          licenseVerified: nextLic,
+          phoneVerified: nextPhone,
+          nidVerified: nextNid,
+          verificationStatus: 'pending'
+        };
+        fullUpdatedDriver = updated;
+        return updated;
+      });
+      const sorted = nextDrivers.sort(sortDriversDeterministic);
+      try {
+        localStorage.setItem('safar_drivers_v5', JSON.stringify(sorted));
+      } catch {}
+      return sorted;
+    });
+
+    const baseTarget = fullUpdatedDriver || drivers.find(d => d.id === driverId);
+    if (baseTarget) {
+      const nextLic = gateType === 'brta' ? false : Boolean(baseTarget.licenseVerified);
+      const nextPhone = gateType === 'wa' ? false : Boolean(baseTarget.phoneVerified);
+      const nextNid = gateType === 'nid' ? false : Boolean(baseTarget.nidVerified);
+
+      const firestorePayload = sanitizeFirestoreDriverData({
+        ...baseTarget,
         licenseVerified: nextLic,
         phoneVerified: nextPhone,
         nidVerified: nextNid,
         isVerified: false,
         verificationStatus: 'pending',
         updatedAt: new Date().toISOString()
-      }, { merge: true }).catch(err => console.warn('Firestore revoke gate error:', err));
+      });
+
+      setDoc(doc(db, 'drivers', driverId), firestorePayload, { merge: true })
+        .catch(err => console.warn('Firestore revoke gate error:', err));
+    }
+
+    if (verifyingDriverTarget && verifyingDriverTarget.id === driverId) {
+      setVerifyingDriverTarget(prev => prev ? {
+        ...prev,
+        licenseVerified: gateType === 'brta' ? false : prev.licenseVerified,
+        phoneVerified: gateType === 'wa' ? false : prev.phoneVerified,
+        nidVerified: gateType === 'nid' ? false : prev.nidVerified,
+        verificationStatus: 'pending'
+      } : null);
     }
 
     showAdminToastMessage('অনুমোদন প্রত্যাহার করে পেন্ডিং করা হয়েছে');
@@ -3334,34 +3513,46 @@ export default function App() {
   // Execute full 3-tier approval with driver SMS notification and celebration
   const handleExecuteFullApproval = (driverId: string) => {
     let targetDrv: Driver | null = null;
-    setDrivers(prev => prev.map(d => {
-      if (d.id !== driverId) return d;
-      const updated: Driver = {
-        ...d,
+    setDrivers(prev => {
+      const nextDrivers = prev.map(d => {
+        if (d.id !== driverId) return d;
+        const updated: Driver = {
+          ...d,
+          licenseVerified: true,
+          phoneVerified: true,
+          nidVerified: true,
+          verificationStatus: 'verified',
+          isOnline: true
+        };
+        targetDrv = updated;
+        return updated;
+      });
+      const sorted = nextDrivers.sort(sortDriversDeterministic);
+      try {
+        localStorage.setItem('safar_drivers_v5', JSON.stringify(sorted));
+      } catch {}
+      return sorted;
+    });
+
+    const base = targetDrv || drivers.find(d => d.id === driverId);
+    if (base) {
+      const full = {
+        ...base,
         licenseVerified: true,
         phoneVerified: true,
         nidVerified: true,
-        verificationStatus: 'verified',
+        verificationStatus: 'verified' as const,
         isOnline: true
       };
-      targetDrv = updated;
-      return updated;
-    }));
-
-    if (targetDrv) {
-      setSuccessModalDriver(targetDrv);
+      setSuccessModalDriver(full);
       showAdminToastMessage('৩-স্তরের পূর্ণ যাচাইকরণ সম্পন্ন ও চালকের ফোনে নোটিফিকেশন পাঠানো হয়েছে!');
 
-      // Firestore update
-      updateDoc(doc(db, 'drivers', driverId), {
+      // Firestore update: ALWAYS use setDoc with merge: true and sanitizeFirestoreDriverData!
+      setDoc(doc(db, 'drivers', driverId), sanitizeFirestoreDriverData({
+        ...full,
         isVerified: true,
-        verificationStatus: 'verified',
-        licenseVerified: true,
-        nidVerified: true,
-        phoneVerified: true,
-        isOnline: true,
         updatedAt: new Date().toISOString()
-      }).catch(err => console.warn('Firestore update error:', err));
+      }), { merge: true }).catch(err => console.warn('Firestore full approval error:', err));
     }
   };
 
@@ -3372,43 +3563,81 @@ export default function App() {
 
   // Revoke All Verifications (Set Pending)
   const handleRevokeDriver = (driverId: string) => {
-    setDrivers(prev => prev.map(d => 
-      d.id === driverId 
-        ? { ...d, licenseVerified: false, phoneVerified: false, nidVerified: false, verificationStatus: 'pending' } 
-        : d
-    ));
-    showAdminToastMessage('চালকের সকল অনুমোদন পেন্ডিং করা হয়েছে');
+    let targetDrv: Driver | null = null;
+    setDrivers(prev => {
+      const nextDrivers = prev.map(d => {
+        if (d.id !== driverId) return d;
+        const updated: Driver = {
+          ...d,
+          licenseVerified: false,
+          phoneVerified: false,
+          nidVerified: false,
+          verificationStatus: 'pending'
+        };
+        targetDrv = updated;
+        return updated;
+      });
+      const sorted = nextDrivers.sort(sortDriversDeterministic);
+      try {
+        localStorage.setItem('safar_drivers_v5', JSON.stringify(sorted));
+      } catch {}
+      return sorted;
+    });
 
-    // Firestore revoke
-    updateDoc(doc(db, 'drivers', driverId), {
-      isVerified: false,
-      verificationStatus: 'pending',
-      licenseVerified: false,
-      nidVerified: false,
-      phoneVerified: false,
-      updatedAt: new Date().toISOString()
-    }).catch(err => console.warn('Firestore revoke error:', err));
+    const base = targetDrv || drivers.find(d => d.id === driverId);
+    if (base) {
+      setDoc(doc(db, 'drivers', driverId), sanitizeFirestoreDriverData({
+        ...base,
+        isVerified: false,
+        verificationStatus: 'pending',
+        licenseVerified: false,
+        nidVerified: false,
+        phoneVerified: false,
+        updatedAt: new Date().toISOString()
+      }), { merge: true }).catch(err => console.warn('Firestore revoke error:', err));
+    }
+    showAdminToastMessage('চালকের সকল অনুমোদন পেন্ডিং করা হয়েছে');
   };
 
   // Toggle Driver Online Status
   const handleToggleDriverOnline = (driverId: string) => {
-    setDrivers(prev => prev.map(d => {
-      if (d.id === driverId) {
-        const nextOnline = !d.isOnline;
-        updateDoc(doc(db, 'drivers', driverId), {
-          isOnline: nextOnline,
-          updatedAt: new Date().toISOString()
-        }).catch(err => console.warn('Firestore driver online toggle error:', err));
-        return { ...d, isOnline: nextOnline };
-      }
-      return d;
-    }));
+    let targetDrv: Driver | null = null;
+    setDrivers(prev => {
+      const nextDrivers = prev.map(d => {
+        if (d.id === driverId) {
+          const nextOnline = !d.isOnline;
+          const updated = { ...d, isOnline: nextOnline };
+          targetDrv = updated;
+          return updated;
+        }
+        return d;
+      });
+      const sorted = nextDrivers.sort(sortDriversDeterministic);
+      try {
+        localStorage.setItem('safar_drivers_v5', JSON.stringify(sorted));
+      } catch {}
+      return sorted;
+    });
+
+    const base = targetDrv || drivers.find(d => d.id === driverId);
+    if (base) {
+      setDoc(doc(db, 'drivers', driverId), sanitizeFirestoreDriverData({
+        ...base,
+        updatedAt: new Date().toISOString()
+      }), { merge: true }).catch(err => console.warn('Firestore driver online toggle error:', err));
+    }
     showAdminToastMessage('চালকের সক্রিয়তা স্ট্যাটাস পরিবর্তন হয়েছে');
   };
 
   // Delete Driver
   const handleDeleteDriver = (driverId: string, driverName: string) => {
-    setDrivers(prev => prev.filter(d => d.id !== driverId));
+    setDrivers(prev => {
+      const remaining = prev.filter(d => d.id !== driverId).sort(sortDriversDeterministic);
+      try {
+        localStorage.setItem('safar_drivers_v5', JSON.stringify(remaining));
+      } catch {}
+      return remaining;
+    });
     showAdminToastMessage(`চালক '${driverName}' রিমুভ করা হয়েছে`);
 
     // Firestore delete
@@ -3434,21 +3663,27 @@ export default function App() {
       category: directDriverForm.category,
       categoryBengali: catObj ? catObj.nameBengali : 'যানবাহন',
       vehicleModel: directDriverForm.vehicleModel.trim() || 'নিবন্ধিত গাড়ি',
-      plateNumber: directDriverForm.plateNumber.trim() || 'ময়মনসিংহ-১১-০০৯৯',
-      licenseNumber: directDriverForm.licenseNumber.trim() || 'MYM-DL-00000',
-      firstIssueDate: '15/04/2021',
+      plateNumber: directDriverForm.plateNumber.trim() || '',
+      licenseNumber: directDriverForm.licenseNumber.trim() || '',
+      firstIssueDate: '',
       licenseType: directDriverForm.licenseType,
-      regLastFour: (directDriverForm.plateNumber ? directDriverForm.plateNumber.replace(/[^0-9]/g, '').slice(-4) : '5206') || '5206',
-      manufacturingYear: '2021',
-      chassisNumber: `MD2A15BY4N${Math.floor(100000 + Math.random() * 900000)}`,
-      engineNumber: `JA15EQ${Math.floor(10000 + Math.random() * 90000)}`,
-      nidNumber: directDriverForm.nidNumber.trim() || '০০০০০০০০০০',
+      regLastFour: directDriverForm.plateNumber ? directDriverForm.plateNumber.replace(/[^0-9]/g, '').slice(-4) : '',
+      manufacturingYear: '',
+      chassisNumber: '',
+      engineNumber: '',
+      taxTokenReceiptPhoto: '',
+      driverPhoto: '',
+      nidFrontPhoto: '',
+      nidBackPhoto: '',
+      nidNumber: directDriverForm.nidNumber.trim() || '',
       nidVerified: directDriverForm.nidVerified,
       licenseVerified: directDriverForm.licenseVerified,
       phoneVerified: directDriverForm.phoneVerified,
       verificationStatus: isAll3Verified ? 'verified' : 'pending',
       regAppId: 'SAFAR-ADM-' + Math.floor(1000 + Math.random() * 9000),
       registeredAt: new Date().toLocaleTimeString('bn-BD', { hour: '2-digit', minute: '2-digit' }),
+      registeredTimestamp: Date.now(),
+      createdAt: new Date().toISOString(),
       standName: targetStand ? targetStand.bengaliName : 'গফরগাঁও রেলওয়ে স্টেশন স্ট্যান্ড',
       lat: targetStand ? targetStand.lat + (Math.random() - 0.5) * 0.005 : 24.5518,
       lng: targetStand ? targetStand.lng + (Math.random() - 0.5) * 0.005 : 90.5512,
@@ -3661,36 +3896,21 @@ export default function App() {
       )}
 
       {/* ============================================================== */}
-      {/* 2. EMERGENCY RED HOTLINE TICKER STRIP (PIXEL-PERFECT ALIGNED) */}
+      {/* 2. DUAL DROPDOWNS: EMERGENCY HOTLINES (50%) & TRAVEL DUAS (50%) */}
       {/* ============================================================== */}
       {appCustomSettings.showHotlineTicker && (
-        <section className="bg-red-50 border-b border-red-200 py-1.5">
-          <div className="max-w-7xl mx-auto px-3 sm:px-4 lg:px-6 flex flex-wrap items-center justify-between gap-1.5 text-xs">
-            <div className="flex items-center gap-2 sm:gap-4 flex-wrap">
-              <div className="flex items-center gap-1.5 text-red-700 font-bold shrink-0">
-                <span className="relative flex h-2 w-2">
-                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-400 opacity-75"></span>
-                  <span className="relative inline-flex rounded-full h-2 w-2 bg-red-600"></span>
-                </span>
-                <span className="text-[11px] sm:text-xs">জরুরি হটলাইন:</span>
-              </div>
-
-              <a href={`tel:${hotlines.hospital.replace(/[^0-9]/g, '')}`} className="flex items-center gap-1 text-red-700 hover:underline font-semibold text-[11px] sm:text-xs">
-                <Phone className="w-3 h-3 text-red-600 shrink-0" />
-                <span>হাসপাতাল এম্বুলেন্স: {hotlines.hospital}</span>
-              </a>
-              <span className="text-slate-300 hidden md:inline">|</span>
-              <a href={`tel:${hotlines.fire.replace(/[^0-9]/g, '')}`} className="flex items-center gap-1 text-orange-700 hover:underline font-semibold text-[11px] sm:text-xs">
-                <Flame className="w-3 h-3 text-orange-600 shrink-0" />
-                <span>ফায়ার সার্ভিস: {hotlines.fire}</span>
-              </a>
+        <section className="bg-slate-100/95 border-b border-slate-200/90 py-1.5 px-3 sm:px-4 lg:px-6 shadow-2xs">
+          <div className="max-w-7xl mx-auto flex flex-col md:flex-row items-stretch md:items-center gap-2 md:gap-3.5">
+            {/* On mobile: "সফরের দো'আ" is on TOP (order-1), "জরুরি হটলাইন" is on BOTTOM (order-2) */}
+            {/* On desktop: "জরুরি হটলাইন" is on LEFT 50% (md:order-1), "সফরের দো'আ" is on RIGHT 50% (md:order-2) */}
+            <div className="w-full md:w-1/2 order-2 md:order-1">
+              <EmergencyHotlineDropdown
+                contacts={emergencyContacts}
+                onOpenDirectory={() => setShowEmergencyDirectory(true)}
+              />
             </div>
-
-            <div className="flex items-center gap-2 shrink-0 ml-auto">
-              <a href={`tel:${hotlines.national.replace(/[^0-9]/g, '')}`} className="inline-flex items-center gap-1 bg-red-600 text-white px-2 py-0.5 rounded font-bold hover:bg-red-700 text-[10px] sm:text-xs shadow-xs">
-                <PhoneCall className="w-3 h-3" />
-                <span>জরুরি {hotlines.national}</span>
-              </a>
+            <div className="w-full md:w-1/2 order-1 md:order-2">
+              <TravelDuaDropdown />
             </div>
           </div>
         </section>
@@ -3912,6 +4132,7 @@ export default function App() {
                       label="শুরুর অবস্থান (পিকআপ):"
                       isPickup={true}
                       value={passengerPickup}
+                      places={popularPlaces}
                       isGpsActive={liveGps.isTracking || isLiveLocationQuery(passengerPickup)}
                       userGps={liveGps}
                       onLocateGps={() => {
@@ -3972,6 +4193,7 @@ export default function App() {
                       label="কোথায় যাবেন (গন্তব্য স্থল):"
                       isPickup={false}
                       value={passengerDestination}
+                      places={popularPlaces}
                       userGps={liveGps}
                       onChangeLocation={(name, coords) => {
                         setPassengerDestination(name);
@@ -3984,76 +4206,264 @@ export default function App() {
 
                   </div>
 
-                  {/* Quick Preset Destination Chips (Dynamic from Admin Control Panel) */}
-                  {appCustomSettings.showQuickChipsWidget && (
-                    <div className="flex items-center gap-1.5 overflow-x-auto scrollbar-thin pb-1">
-                      <span className="text-[10px] font-bold text-slate-500 shrink-0">দ্রুত গন্তব্য:</span>
-                      {(appCustomSettings.quickDestinations || []).map(dest => {
-                        const isMatch = passengerDestination.trim() === dest.trim();
-                        const shortLabel = dest.replace(' স্ট্যান্ড', '').replace(' (হাসপাতাল)', '');
-                        return (
-                          <button
-                            key={dest}
-                            type="button"
-                            onClick={() => {
-                              setPassengerDestination(dest);
-                              const coords = resolveLocationCoordinates(dest, true);
-                              setDestCoords(coords);
-                            }}
-                            className={`text-[10.5px] font-bold px-2 py-0.5 rounded-md border shrink-0 transition-all cursor-pointer ${
-                              isMatch
-                                ? 'bg-emerald-700 text-white border-emerald-800 shadow-xs'
-                                : 'bg-white hover:bg-slate-100 text-slate-700 border-slate-200'
-                            }`}
-                          >
-                            {shortLabel}
-                          </button>
-                        );
-                      })}
-                    </div>
-                  )}
+                  {/* Side-by-Side (50:50)% Layout: দ্রুত গন্তব্য (Left) & যানবাহন ও ভাড়ার তালিকা (Right) - Default Folded, Equal Height & Side Scroll */}
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-3.5 my-3 items-start">
+                    
+                    {/* LEFT COLUMN: দ্রুত গন্তব্য (50% desktop, 100% mobile) with Dropdown & Side Scroll */}
+                    <div className="w-full bg-slate-50/90 rounded-2xl border border-emerald-200/90 shadow-xs overflow-hidden flex flex-col">
+                      {/* Dropdown Header Bar (Equal Height & Parallel with Right Column) */}
+                      <button
+                        type="button"
+                        onClick={() => setIsQuickDestOpen(!isQuickDestOpen)}
+                        aria-expanded={isQuickDestOpen}
+                        className={`w-full h-[56px] min-h-[56px] flex items-center justify-between gap-2 px-3.5 py-2 bg-gradient-to-r from-emerald-50 via-teal-50 to-emerald-100/90 hover:from-emerald-100 hover:to-teal-100 transition-all cursor-pointer text-left select-none group ${
+                          isQuickDestOpen ? 'border-b border-emerald-200/80' : ''
+                        }`}
+                      >
+                        <div className="flex items-center gap-2 min-w-0">
+                          <span className="w-7 h-7 rounded-lg bg-emerald-600 text-white flex items-center justify-center shrink-0 shadow-xs group-hover:bg-emerald-700 transition">
+                            <Compass className="w-4 h-4" />
+                          </span>
+                          <div className="truncate">
+                            <span className="font-extrabold text-xs sm:text-sm text-emerald-950 block leading-tight">
+                              দ্রুত গন্তব্য
+                            </span>
+                            <span className="text-[10px] text-emerald-700 font-semibold block leading-tight truncate">
+                              {passengerDestination ? `গন্তব্য: ${passengerDestination}` : 'সহজে পছন্দের গন্তব্য নির্বাচন করুন'}
+                            </span>
+                          </div>
+                        </div>
 
-                  {/* Vehicle Selection Chips with Dynamic Fares */}
-                  <div>
-                    <label className="text-[11px] font-extrabold text-slate-700 block mb-1.5">
-                      যানবাহনের ধরন নির্বাচন করুন (ভাড়ার তালিকা):
-                    </label>
-                    <div className="grid grid-cols-3 sm:grid-cols-6 gap-2">
-                      {categories.filter(c => c.id !== 'all').map((cat) => {
-                        const isSelected = passengerSelectedVehicle === cat.id;
-                        const fare = calculateFareForCategory(cat.id, calculatedDistance);
-                        const driverCount = drivers.filter(d => d.category === cat.id).length;
+                        <div className="flex items-center gap-1.5 shrink-0">
+                          <span className="px-2 py-0.5 rounded-full bg-emerald-200/90 text-emerald-900 text-[10px] font-bold truncate max-w-[110px]">
+                            {passengerDestination ? passengerDestination.split(' ')[0] : 'স্থানসমূহ'}
+                          </span>
+                          <span className={`w-5 h-5 rounded-full bg-white border border-emerald-300 flex items-center justify-center text-emerald-700 transition-transform duration-200 ${isQuickDestOpen ? 'rotate-180 bg-emerald-600 text-white border-emerald-600' : ''}`}>
+                            <ChevronDown className="w-3.5 h-3.5" />
+                          </span>
+                        </div>
+                      </button>
 
-                        return (
-                          <button
-                            key={cat.id}
-                            type="button"
-                            onClick={() => {
-                              setPassengerSelectedVehicle(cat.id);
-                              setSelectedCategory(cat.id);
-                            }}
-                            className={`p-2 rounded-xl border text-center transition-all cursor-pointer flex flex-col items-center justify-between ${
-                              isSelected
-                                ? 'bg-emerald-50/90 border-emerald-500 shadow-xs ring-2 ring-emerald-500'
-                                : 'bg-white hover:bg-slate-50 border-slate-200'
-                            }`}
-                          >
-                            <CategoryBadgeLogo category={cat.id} size="sm" />
-                            <span className={`text-[11px] font-extrabold mt-1 truncate block ${
-                              isSelected ? 'text-emerald-950 font-black' : 'text-slate-800'
-                            }`}>
-                              {cat.nameBengali}
-                            </span>
-                            <span className="text-[10px] font-black text-emerald-700 bg-emerald-100/80 px-1.5 py-0.2 rounded-md mt-0.5">
-                              ৳ {fare}
-                            </span>
-                            <span className="text-[9px] text-slate-400 mt-0.5">
-                              {driverCount} চালক
-                            </span>
-                          </button>
-                        );
-                      })}
+                      {/* Dropdown Content with Side Scroll & Vertical List (Auto Folds on Selection) */}
+                      {isQuickDestOpen && (
+                        <div className="p-3 space-y-2.5 animate-in fade-in slide-in-from-top-1 duration-200">
+                          {/* Side-Scroll Horizontal Chips Row */}
+                          <div className="flex items-center gap-1.5 overflow-x-auto scrollbar-thin pb-1 [touch-action:pan-x]">
+                            <span className="text-[10px] font-bold text-slate-500 shrink-0">চিহ্নিত:</span>
+                            {(appCustomSettings.quickDestinations || []).slice(0, 8).map(dest => {
+                              const isMatch = passengerDestination.trim() === dest.trim();
+                              const shortLabel = dest.replace(' স্ট্যান্ড', '').replace(' (হাসপাতাল)', '');
+                              return (
+                                <button
+                                  key={`side-chip-${dest}`}
+                                  type="button"
+                                  onClick={() => {
+                                    setPassengerDestination(dest);
+                                    const coords = resolveLocationCoordinates(dest, true);
+                                    setDestCoords(coords);
+                                    setIsQuickDestOpen(false); // Auto fold on selection as requested!
+                                  }}
+                                  className={`text-[10.5px] font-bold px-2.5 py-1 rounded-lg border shrink-0 transition-all cursor-pointer ${
+                                    isMatch
+                                      ? 'bg-emerald-700 text-white border-emerald-800 shadow-xs ring-1 ring-emerald-500'
+                                      : 'bg-white hover:bg-emerald-50 text-slate-700 border-slate-200'
+                                  }`}
+                                >
+                                  {shortLabel}
+                                </button>
+                              );
+                            })}
+                          </div>
+
+                          {/* Scrollable Destination Items */}
+                          <div className="max-h-52 overflow-y-auto scrollbar-thin pr-1 space-y-1.5">
+                            {(appCustomSettings.quickDestinations && appCustomSettings.quickDestinations.length > 0
+                              ? appCustomSettings.quickDestinations
+                              : [
+                                  'উপজেলা স্বাস্থ্য কমপ্লেক্স (হাসপাতাল)',
+                                  'গফরগাঁও রেলওয়ে স্টেশন স্ট্যান্ড',
+                                  'পৌরসভা চত্বর স্ট্যান্ড',
+                                  'পাগলা থানা স্ট্যান্ড',
+                                  'শিবগঞ্জ বাজার মোড় স্ট্যান্ড',
+                                  'দত্তপাড়া মোড় স্ট্যান্ড',
+                                  'ইসলামিয়া সরকারি হাইস্কুল মোড়',
+                                  'খায়রুল্লাহ সরকারি কলেজ গেট',
+                                  'পাঁচবাগ বাজার মোড়',
+                                  'রাওনা ইউনিয়ন পরিষদ মোড়'
+                                ]
+                            ).map((dest, idx) => {
+                              const isMatch = passengerDestination.trim() === dest.trim();
+                              return (
+                                <button
+                                  key={`${dest}-${idx}`}
+                                  type="button"
+                                  onClick={() => {
+                                    setPassengerDestination(dest);
+                                    const coords = resolveLocationCoordinates(dest, true);
+                                    setDestCoords(coords);
+                                    setIsQuickDestOpen(false); // Auto fold on selection as requested!
+                                  }}
+                                  className={`w-full flex items-center justify-between p-2 rounded-xl border text-left transition-all cursor-pointer ${
+                                    isMatch
+                                      ? 'bg-emerald-100/80 border-emerald-500 text-emerald-950 font-bold shadow-xs'
+                                      : 'bg-white hover:bg-emerald-50/60 border-slate-200 text-slate-800'
+                                  }`}
+                                >
+                                  <div className="flex items-center gap-2 truncate">
+                                    <MapPin className={`w-3.5 h-3.5 shrink-0 ${isMatch ? 'text-emerald-700' : 'text-slate-400'}`} />
+                                    <span className="text-xs truncate">{dest}</span>
+                                  </div>
+                                  {isMatch ? (
+                                    <span className="px-1.5 py-0.5 rounded-full bg-emerald-600 text-white text-[9px] font-black shrink-0 flex items-center gap-0.5">
+                                      <Check className="w-2.5 h-2.5" />
+                                      নির্বাচিত
+                                    </span>
+                                  ) : (
+                                    <span className="text-[10px] text-emerald-700 hover:underline shrink-0">
+                                      নির্বাচন করুন
+                                    </span>
+                                  )}
+                                </button>
+                              );
+                            })}
+                          </div>
+                        </div>
+                      )}
                     </div>
+
+                    {/* RIGHT COLUMN: যানবাহন ও ভাড়ার তালিকা (50% desktop, 100% mobile) with Dropdown & Side Scroll */}
+                    <div className="w-full bg-slate-50/90 rounded-2xl border border-amber-200/90 shadow-xs overflow-hidden flex flex-col">
+                      {/* Dropdown Header Bar (Equal Height & Parallel with Left Column) */}
+                      <button
+                        type="button"
+                        onClick={() => setIsVehicleFareOpen(!isVehicleFareOpen)}
+                        aria-expanded={isVehicleFareOpen}
+                        className={`w-full h-[56px] min-h-[56px] flex items-center justify-between gap-2 px-3.5 py-2 bg-gradient-to-r from-amber-50 via-orange-50 to-amber-100/90 hover:from-amber-100 hover:to-orange-100 transition-all cursor-pointer text-left select-none group ${
+                          isVehicleFareOpen ? 'border-b border-amber-200/80' : ''
+                        }`}
+                      >
+                        <div className="flex items-center gap-2 min-w-0">
+                          <span className="w-7 h-7 rounded-lg bg-amber-500 text-slate-950 flex items-center justify-center shrink-0 shadow-xs group-hover:bg-amber-600 transition">
+                            <Car className="w-4 h-4 text-slate-950" />
+                          </span>
+                          <div className="truncate">
+                            <span className="font-extrabold text-xs sm:text-sm text-amber-950 block leading-tight">
+                              যানবাহন ও ভাড়ার তালিকা
+                            </span>
+                            <span className="text-[10px] text-amber-800 font-semibold block leading-tight truncate">
+                              নির্বাচিত: {categories.find(c => c.id === passengerSelectedVehicle)?.nameBengali || 'সিএনজি'} • নির্ধারিত ভাড়া: ৳{calculatedFare}
+                            </span>
+                          </div>
+                        </div>
+
+                        <div className="flex items-center gap-1.5 shrink-0">
+                          <span className="px-2 py-0.5 rounded-full bg-amber-200 text-amber-950 text-[10px] font-bold">
+                            {categories.find(c => c.id === passengerSelectedVehicle)?.nameBengali || 'সিএনজি'} • ৳{calculatedFare}
+                          </span>
+                          <span className={`w-5 h-5 rounded-full bg-white border border-amber-300 flex items-center justify-center text-amber-800 transition-transform duration-200 ${isVehicleFareOpen ? 'rotate-180 bg-amber-500 text-slate-950 border-amber-500' : ''}`}>
+                            <ChevronDown className="w-3.5 h-3.5" />
+                          </span>
+                        </div>
+                      </button>
+
+                      {/* Dropdown Content with Side Scroll & Vertical List (Auto Folds on Selection) */}
+                      {isVehicleFareOpen && (
+                        <div className="p-3 space-y-2.5 animate-in fade-in slide-in-from-top-1 duration-200">
+                          {/* Side-Scroll Horizontal Vehicle Cards Row */}
+                          <div className="flex items-center gap-2 overflow-x-auto scrollbar-thin pb-1 [touch-action:pan-x]">
+                            {categories.filter(c => c.id !== 'all').map((cat) => {
+                              const isSelected = passengerSelectedVehicle === cat.id;
+                              const fare = calculateFareForCategory(cat.id, calculatedDistance);
+                              return (
+                                <button
+                                  key={`side-veh-${cat.id}`}
+                                  type="button"
+                                  onClick={() => {
+                                    setPassengerSelectedVehicle(cat.id);
+                                    setSelectedCategory(cat.id);
+                                    setIsVehicleFareOpen(false); // Auto fold on selection as requested!
+                                  }}
+                                  className={`px-3 py-1.5 rounded-xl border shrink-0 text-left transition-all cursor-pointer flex items-center gap-2 ${
+                                    isSelected
+                                      ? 'bg-amber-100 border-amber-500 shadow-xs ring-1 ring-amber-400'
+                                      : 'bg-white hover:bg-amber-50/60 border-slate-200'
+                                  }`}
+                                >
+                                  <CategoryBadgeLogo category={cat.id} size="compact" />
+                                  <div className="truncate">
+                                    <span className="text-[11px] font-bold block leading-tight text-slate-800">
+                                      {cat.nameBengali}
+                                    </span>
+                                    <span className="text-[10px] font-black text-amber-900 block leading-tight">
+                                      {cat.isFree ? 'ফ্রি' : `৳ ${fare}`}
+                                    </span>
+                                  </div>
+                                </button>
+                              );
+                            })}
+                          </div>
+
+                          {/* Scrollable Vehicle List */}
+                          <div className="max-h-56 overflow-y-auto scrollbar-thin pr-1 space-y-1.5">
+                            {categories.filter(c => c.id !== 'all').map((cat) => {
+                              const isSelected = passengerSelectedVehicle === cat.id;
+                              const fare = calculateFareForCategory(cat.id, calculatedDistance);
+                              const driverCount = drivers.filter(d => d.category === cat.id).length;
+
+                              return (
+                                <button
+                                  key={cat.id}
+                                  type="button"
+                                  onClick={() => {
+                                    setPassengerSelectedVehicle(cat.id);
+                                    setSelectedCategory(cat.id);
+                                    setIsVehicleFareOpen(false); // Auto fold on selection as requested!
+                                  }}
+                                  className={`w-full flex items-center justify-between p-2 rounded-xl border text-left transition-all cursor-pointer ${
+                                    isSelected
+                                      ? 'bg-amber-100/90 border-amber-500 shadow-xs ring-2 ring-amber-400'
+                                      : 'bg-white hover:bg-amber-50/60 border-slate-200'
+                                  }`}
+                                >
+                                  <div className="flex items-center gap-2.5 min-w-0">
+                                    <div className="shrink-0">
+                                      <CategoryBadgeLogo category={cat.id} size="sm" />
+                                    </div>
+                                    <div className="truncate">
+                                      <div className="flex items-center gap-1.5">
+                                        <span className={`text-xs font-black block truncate ${
+                                          isSelected ? 'text-amber-950' : 'text-slate-800'
+                                        }`}>
+                                          {cat.nameBengali}
+                                        </span>
+                                        {cat.isEmergency && (
+                                          <span className="text-[9px] bg-red-100 text-red-700 font-bold px-1.5 py-0.2 rounded">
+                                            জরুরি
+                                          </span>
+                                        )}
+                                      </div>
+                                      <span className="text-[10px] text-slate-500 block">
+                                        বেস ৳{cat.baseFare} • কিমি ৳{cat.perKmFare} ({driverCount} চালক)
+                                      </span>
+                                    </div>
+                                  </div>
+
+                                  <div className="flex items-center gap-2 shrink-0">
+                                    <span className="text-xs font-black text-amber-900 bg-amber-200/90 px-2 py-0.5 rounded-lg shadow-2xs">
+                                      {cat.isFree ? 'ফ্রি সেবা' : `৳ ${fare}`}
+                                    </span>
+                                    {isSelected && (
+                                      <CheckCircle2 className="w-4 h-4 text-emerald-700" />
+                                    )}
+                                  </div>
+                                </button>
+                              );
+                            })}
+                          </div>
+                        </div>
+                      )}
+                    </div>
+
                   </div>
 
                   {/* Live Fare Summary & Action Bar */}
@@ -4510,15 +4920,24 @@ export default function App() {
                             <div
                               key={driver.id}
                               onClick={() => setSelectedDriver(driver)}
-                              className={`bg-white rounded-xl p-2 sm:p-2.5 border transition-all hover:shadow-md cursor-pointer flex flex-col justify-between group active:scale-[0.98] ${
+                              className={`bg-white rounded-xl p-2 sm:p-2.5 border transition-colors duration-150 hover:shadow-md cursor-pointer flex flex-col justify-between group active:scale-[0.98] ${
                                 isAmbulance 
                                   ? 'border-red-300 hover:border-red-400 bg-red-50/20' 
                                   : 'border-slate-200 hover:border-emerald-400'
                               }`}
                             >
-                              {/* Card Top: Category Logo & Rating Points */}
+                              {/* Card Top: Category Logo & Driver Photo & Rating Points */}
                               <div className="flex items-start justify-between gap-1 mb-1">
-                                <CategoryBadgeLogo category={driver.category} size="compact" />
+                                <div className="flex items-center gap-1.5 min-w-0">
+                                  {driver.driverPhoto ? (
+                                    <img
+                                      src={driver.driverPhoto}
+                                      alt={driver.name}
+                                      className="w-7 h-7 rounded-lg object-cover border border-emerald-400 shrink-0 shadow-2xs"
+                                    />
+                                  ) : null}
+                                  <CategoryBadgeLogo category={driver.category} size="compact" />
+                                </div>
                                 <div className="flex items-center gap-0.5 bg-amber-50 border border-amber-200 px-1 py-0.2 rounded text-amber-800 text-[9px] sm:text-[9.5px] font-bold">
                                   <Star className="w-2.5 h-2.5 fill-amber-500 text-amber-500" />
                                   <span>{driver.rating.toFixed(1)}</span>
@@ -4526,36 +4945,36 @@ export default function App() {
                               </div>
 
                               {/* Card Middle: Driver Name, Vehicle, Stand, License */}
-                              <div className="min-w-0 mb-1 overflow-hidden">
-                                <AutoMarqueeText
-                                  text={driver.name}
-                                  className="font-bold text-slate-900 text-[11px] sm:text-xs leading-tight group-hover:text-emerald-700 transition-colors"
-                                  pauseAtEndMs={1500}
-                                />
-                                <div className="w-full overflow-hidden mt-0.5">
-                                  <AutoMarqueeText
-                                    text={driver.vehicleModel}
-                                    className="text-[9.5px] sm:text-[10px] text-emerald-700 font-semibold"
-                                    pauseAtEndMs={1500}
-                                  />
-                                </div>
-                                <div className="flex items-center gap-0.5 mt-0.5 overflow-hidden">
+                              <div className="min-w-0 mb-1 overflow-hidden space-y-0.5">
+                                <h4
+                                  className="font-bold text-slate-900 text-[11px] sm:text-xs leading-tight group-hover:text-emerald-700 transition-colors truncate block"
+                                  title={driver.name}
+                                >
+                                  {driver.name}
+                                </h4>
+                                <p
+                                  className="text-[9.5px] sm:text-[10px] text-emerald-700 font-semibold truncate block"
+                                  title={driver.vehicleModel}
+                                >
+                                  {driver.vehicleModel}
+                                </p>
+                                <div className="flex items-center gap-0.5 overflow-hidden">
                                   <MapPin className="w-2.5 h-2.5 text-slate-400 shrink-0" />
-                                  <div className="flex-1 min-w-0 overflow-hidden">
-                                    <AutoMarqueeText
-                                      text={driver.standName.replace(' স্ট্যান্ড', '')}
-                                      className="text-[8.5px] sm:text-[9.5px] text-slate-500"
-                                      pauseAtEndMs={1500}
-                                    />
-                                  </div>
+                                  <span
+                                    className="text-[8.5px] sm:text-[9.5px] text-slate-500 truncate"
+                                    title={driver.standName}
+                                  >
+                                    {driver.standName.replace(' স্ট্যান্ড', '')}
+                                  </span>
                                 </div>
                                 <div className="mt-1 flex items-center justify-between gap-1 overflow-hidden">
-                                  <div className="flex-1 min-w-0 overflow-hidden bg-blue-50 text-blue-700 font-bold px-1 py-0.2 rounded border border-blue-200">
-                                    <AutoMarqueeText
-                                      text={`লাইসেন্স: ${driver.licenseNumber}`}
-                                      className="text-[7.5px] sm:text-[8.5px] text-blue-700 font-bold"
-                                      pauseAtEndMs={1500}
-                                    />
+                                  <div
+                                    className="flex-1 min-w-0 overflow-hidden bg-blue-50 text-blue-700 font-bold px-1 py-0.2 rounded border border-blue-200"
+                                    title={`লাইসেন্স: ${driver.licenseNumber}`}
+                                  >
+                                    <span className="text-[7.5px] sm:text-[8.5px] text-blue-700 font-bold truncate block">
+                                      লাইসেন্স: {driver.licenseNumber}
+                                    </span>
                                   </div>
                                   {driver.licenseVerified && driver.phoneVerified && driver.nidVerified ? (
                                     <span className="text-[7.5px] sm:text-[8.5px] bg-emerald-100 text-emerald-800 font-bold px-1 py-0.2 rounded shrink-0 flex items-center gap-0.5" title="BRTA, WhatsApp ও NID ভেরিফাইড">
@@ -6482,25 +6901,8 @@ export default function App() {
         onOpenVerificationGate={handleOpenVerificationGate}
         onApproveAllDriver={handleApproveAllDriver}
         onRevokeDriver={handleRevokeDriver}
-        onToggleDriverOnline={(driverId) => {
-          setDrivers(prev => prev.map(d => {
-            if (d.id === driverId) {
-              const nextOnline = !d.isOnline;
-              updateDoc(doc(db, 'drivers', driverId), {
-                isOnline: nextOnline,
-                updatedAt: new Date().toISOString()
-              }).catch(err => console.warn('Firestore driver online toggle error:', err));
-              return { ...d, isOnline: nextOnline };
-            }
-            return d;
-          }));
-          showAdminToastMessage('চালকের সক্রিয়তা স্ট্যাটাস পরিবর্তন হয়েছে');
-        }}
-        onDeleteDriver={(driverId, name) => {
-          setDrivers(prev => prev.filter(d => d.id !== driverId));
-          deleteDoc(doc(db, 'drivers', driverId)).catch(err => console.warn('Firestore driver delete error:', err));
-          showAdminToastMessage(`চালক '${name}' রিমুভ করা হয়েছে`);
-        }}
+        onToggleDriverOnline={handleToggleDriverOnline}
+        onDeleteDriver={handleDeleteDriver}
         customSettings={appCustomSettings}
         onSaveCustomSettings={saveCustomSettings}
         onResetToDefaults={handleResetToDefaults}
@@ -6516,6 +6918,12 @@ export default function App() {
           }, { merge: true }).catch(err => console.warn('Firestore hotlines error:', err));
           showAdminToastMessage('জরুরি হটলাইন নম্বর ফায়ারবেসে সেভ ও লাইভ আপডেট হয়েছে!');
         }}
+        emergencyContacts={emergencyContacts}
+        onSaveEmergencyContacts={handleSaveEmergencyContacts}
+        popularPlaces={popularPlaces}
+        onSavePopularPlace={handleSavePopularPlace}
+        onDeletePopularPlace={handleDeletePopularPlace}
+        onResetPopularPlaces={handleResetPopularPlaces}
         showToast={showAdminToastMessage}
         onCleanupOldTrips={() => {
           const toRemove = tripHistory.filter(t => t.status === 'সম্পন্ন' || t.status === 'বাতিল');
@@ -6949,7 +7357,7 @@ export default function App() {
                         (adminDriverVerificationFilter === 'verified' && Boolean(d.licenseVerified && d.phoneVerified && d.nidVerified)) ||
                         (adminDriverVerificationFilter === 'pending' && !Boolean(d.licenseVerified && d.phoneVerified && d.nidVerified));
                       return matchesSearch && matchesCat && matchesStand && matchesVerif;
-                    });
+                    }).sort(sortDriversDeterministic);
 
                     return (
                       <div className="space-y-2.5">
@@ -6970,18 +7378,17 @@ export default function App() {
                               const isAll3 = Boolean(driver.licenseVerified && driver.phoneVerified && driver.nidVerified);
 
                               return (
-                                <div key={driver.id} className="bg-white p-3 rounded-xl border border-slate-200 shadow-xs flex flex-col justify-between hover:border-emerald-300 transition-all text-xs">
+                                <div key={driver.id} className="bg-white p-3 rounded-xl border border-slate-200 shadow-xs flex flex-col justify-between hover:border-emerald-300 transition-colors text-xs">
                                   <div>
                                     <div className="flex items-start justify-between gap-1.5 mb-1.5">
                                       <div>
                                         <div className="flex items-center gap-1.5 flex-wrap">
-                                          <div className="flex-1 min-w-0 max-w-[160px] overflow-hidden">
-                                            <AutoMarqueeText
-                                              text={driver.name}
-                                              className="font-bold text-slate-900 text-sm"
-                                              pauseAtEndMs={1500}
-                                            />
-                                          </div>
+                                          <h4
+                                            className="font-bold text-slate-900 text-sm truncate max-w-[160px]"
+                                            title={driver.name}
+                                          >
+                                            {driver.name}
+                                          </h4>
                                           <span className={`w-2 h-2 rounded-full shrink-0 ${driver.isOnline ? 'bg-emerald-500' : 'bg-slate-300'}`} title={driver.isOnline ? 'অনলাইন' : 'অফলাইন'}></span>
                                           {isAll3 ? (
                                             <span className="px-1.5 py-0.2 rounded text-[9.5px] font-black bg-emerald-100 text-emerald-800 flex items-center gap-0.5">
@@ -6996,11 +7403,12 @@ export default function App() {
                                           )}
                                         </div>
                                         <div className="w-full overflow-hidden mt-0.5">
-                                          <AutoMarqueeText
-                                            text={`${driver.vehicleModel} • ${driver.plateNumber}`}
-                                            className="text-slate-600 text-[11px] font-semibold"
-                                            pauseAtEndMs={1500}
-                                          />
+                                          <p
+                                            className="text-slate-600 text-[11px] font-semibold truncate"
+                                            title={`${driver.vehicleModel} • ${driver.plateNumber}`}
+                                          >
+                                            {driver.vehicleModel} • {driver.plateNumber}
+                                          </p>
                                         </div>
                                         {driver.regAppId && (
                                           <p className="text-[10px] font-mono text-slate-400 mt-0.2">
@@ -7711,6 +8119,13 @@ export default function App() {
       <SourceCodeDownloadModal
         isOpen={showSourceCodeModal}
         onClose={() => setShowSourceCodeModal(false)}
+      />
+
+      {/* 15. EMERGENCY DIRECTORY MODAL */}
+      <EmergencyDirectoryModal
+        isOpen={showEmergencyDirectory}
+        onClose={() => setShowEmergencyDirectory(false)}
+        contacts={emergencyContacts}
       />
 
     </div>
