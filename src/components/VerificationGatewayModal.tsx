@@ -170,11 +170,11 @@ export const VerificationGatewayModal: React.FC<VerificationGatewayModalProps> =
 
   const cleanPhone = driver.phone.replace(/[^0-9]/g, '');
 
-  // Derived vehicle portal fields
-  const regLast4 = driver.regLastFour || (driver.plateNumber ? driver.plateNumber.replace(/[^0-9]/g, '').slice(-4) : '5206') || '5206';
-  const mfgYear = driver.manufacturingYear || '2021';
-  const chassis = driver.chassisNumber || `MD2A15BY4N${driver.id.replace(/[^0-9]/g, '').padStart(6, '1') || '123456'}`;
-  const engine = driver.engineNumber || `JA15EQ${driver.id.replace(/[^0-9]/g, '').padStart(5, '2') || '12345'}`;
+  // Derived vehicle portal fields (Uses actual driver data submitted by user, without fake mock fallbacks)
+  const regLast4 = driver.regLastFour || (driver.plateNumber ? driver.plateNumber.replace(/[^0-9]/g, '').slice(-4) : '') || '';
+  const mfgYear = driver.manufacturingYear || '';
+  const chassis = driver.chassisNumber || '';
+  const engine = driver.engineNumber || '';
 
   return (
     <div className="fixed inset-0 z-[9999] bg-slate-950/70 backdrop-blur-xs flex items-center justify-center p-3 sm:p-4 overflow-y-auto">
@@ -307,15 +307,17 @@ export const VerificationGatewayModal: React.FC<VerificationGatewayModalProps> =
                           প্রথম ইস্যুর তারিখ:
                         </span>
                         <div className="flex items-center gap-1.5 font-mono font-bold text-emerald-900 bg-emerald-50 px-2 py-1 rounded border border-emerald-200">
-                          <span>{driver.firstIssueDate || '15/04/2021'}</span>
-                          <button
-                            type="button"
-                            onClick={() => handleCopy(driver.firstIssueDate || '15/04/2021', 'issueDate')}
-                            title="ইস্যুর তারিখ কপি করুন"
-                            className="text-slate-500 hover:text-emerald-700 cursor-pointer p-0.5"
-                          >
-                            {copiedField === 'issueDate' ? <Check className="w-3.5 h-3.5 text-emerald-600" /> : <Copy className="w-3.5 h-3.5" />}
-                          </button>
+                          <span>{driver.firstIssueDate || 'তথ্য দেওয়া হয়নি'}</span>
+                          {driver.firstIssueDate && (
+                            <button
+                              type="button"
+                              onClick={() => handleCopy(driver.firstIssueDate!, 'issueDate')}
+                              title="ইস্যুর তারিখ কপি করুন"
+                              className="text-slate-500 hover:text-emerald-700 cursor-pointer p-0.5"
+                            >
+                              {copiedField === 'issueDate' ? <Check className="w-3.5 h-3.5 text-emerald-600" /> : <Copy className="w-3.5 h-3.5" />}
+                            </button>
+                          )}
                         </div>
                       </div>
                     </div>
@@ -384,15 +386,17 @@ export const VerificationGatewayModal: React.FC<VerificationGatewayModalProps> =
                           <span className="text-red-500">*</span> রেজিস্ট্রেশন নম্বর (শেষ চার সংখ্যা):
                         </span>
                         <div className="flex items-center gap-1.5 font-mono font-bold text-emerald-900 bg-emerald-50 px-2 py-1 rounded border border-emerald-200">
-                          <span>{regLast4}</span>
-                          <button
-                            type="button"
-                            onClick={() => handleCopy(regLast4, 'regLast4')}
-                            title="রেজিস্ট্রেশন শেষ ৪ সংখ্যা কপি করুন"
-                            className="text-slate-500 hover:text-emerald-700 cursor-pointer p-0.5"
-                          >
-                            {copiedField === 'regLast4' ? <Check className="w-3.5 h-3.5 text-emerald-600" /> : <Copy className="w-3.5 h-3.5" />}
-                          </button>
+                          <span>{regLast4 || 'প্রযোজ্য নয়'}</span>
+                          {regLast4 && (
+                            <button
+                              type="button"
+                              onClick={() => handleCopy(regLast4, 'regLast4')}
+                              title="রেজিস্ট্রেশন শেষ ৪ সংখ্যা কপি করুন"
+                              className="text-slate-500 hover:text-emerald-700 cursor-pointer p-0.5"
+                            >
+                              {copiedField === 'regLast4' ? <Check className="w-3.5 h-3.5 text-emerald-600" /> : <Copy className="w-3.5 h-3.5" />}
+                            </button>
+                          )}
                         </div>
                       </div>
 
@@ -402,15 +406,17 @@ export const VerificationGatewayModal: React.FC<VerificationGatewayModalProps> =
                           <span className="text-red-500">*</span> উৎপাদনের বছর (YYYY):
                         </span>
                         <div className="flex items-center gap-1.5 font-mono font-bold text-emerald-900 bg-emerald-50 px-2 py-1 rounded border border-emerald-200">
-                          <span>{mfgYear}</span>
-                          <button
-                            type="button"
-                            onClick={() => handleCopy(mfgYear, 'mfgYear')}
-                            title="উৎপাদনের বছর কপি করুন"
-                            className="text-slate-500 hover:text-emerald-700 cursor-pointer p-0.5"
-                          >
-                            {copiedField === 'mfgYear' ? <Check className="w-3.5 h-3.5 text-emerald-600" /> : <Copy className="w-3.5 h-3.5" />}
-                          </button>
+                          <span>{mfgYear || 'প্রযোজ্য নয়'}</span>
+                          {mfgYear && (
+                            <button
+                              type="button"
+                              onClick={() => handleCopy(mfgYear, 'mfgYear')}
+                              title="উৎপাদনের বছর কপি করুন"
+                              className="text-slate-500 hover:text-emerald-700 cursor-pointer p-0.5"
+                            >
+                              {copiedField === 'mfgYear' ? <Check className="w-3.5 h-3.5 text-emerald-600" /> : <Copy className="w-3.5 h-3.5" />}
+                            </button>
+                          )}
                         </div>
                       </div>
 
@@ -420,15 +426,17 @@ export const VerificationGatewayModal: React.FC<VerificationGatewayModalProps> =
                           <span className="text-red-500">*</span> চ্যাসিস নম্বর:
                         </span>
                         <div className="flex items-center gap-1.5 font-mono font-bold text-emerald-900 bg-emerald-50 px-2 py-1 rounded border border-emerald-200">
-                          <span className="truncate max-w-[150px]">{chassis}</span>
-                          <button
-                            type="button"
-                            onClick={() => handleCopy(chassis, 'chassis')}
-                            title="চ্যাসিস নম্বর কপি করুন"
-                            className="text-slate-500 hover:text-emerald-700 cursor-pointer p-0.5 shrink-0"
-                          >
-                            {copiedField === 'chassis' ? <Check className="w-3.5 h-3.5 text-emerald-600" /> : <Copy className="w-3.5 h-3.5" />}
-                          </button>
+                          <span className="truncate max-w-[150px]">{chassis || 'প্রযোজ্য নয়'}</span>
+                          {chassis && (
+                            <button
+                              type="button"
+                              onClick={() => handleCopy(chassis, 'chassis')}
+                              title="চ্যাসিস নম্বর কপি করুন"
+                              className="text-slate-500 hover:text-emerald-700 cursor-pointer p-0.5 shrink-0"
+                            >
+                              {copiedField === 'chassis' ? <Check className="w-3.5 h-3.5 text-emerald-600" /> : <Copy className="w-3.5 h-3.5" />}
+                            </button>
+                          )}
                         </div>
                       </div>
 
@@ -438,15 +446,17 @@ export const VerificationGatewayModal: React.FC<VerificationGatewayModalProps> =
                           <span className="text-red-500">*</span> ইঞ্জিন নম্বর/মোটর নম্বর:
                         </span>
                         <div className="flex items-center gap-1.5 font-mono font-bold text-emerald-900 bg-emerald-50 px-2 py-1 rounded border border-emerald-200">
-                          <span className="truncate max-w-[150px]">{engine}</span>
-                          <button
-                            type="button"
-                            onClick={() => handleCopy(engine, 'engine')}
-                            title="ইঞ্জিন নম্বর কপি করুন"
-                            className="text-slate-500 hover:text-emerald-700 cursor-pointer p-0.5 shrink-0"
-                          >
-                            {copiedField === 'engine' ? <Check className="w-3.5 h-3.5 text-emerald-600" /> : <Copy className="w-3.5 h-3.5" />}
-                          </button>
+                          <span className="truncate max-w-[150px]">{engine || 'প্রযোজ্য নয়'}</span>
+                          {engine && (
+                            <button
+                              type="button"
+                              onClick={() => handleCopy(engine, 'engine')}
+                              title="ইঞ্জিন নম্বর কপি করুন"
+                              className="text-slate-500 hover:text-emerald-700 cursor-pointer p-0.5 shrink-0"
+                            >
+                              {copiedField === 'engine' ? <Check className="w-3.5 h-3.5 text-emerald-600" /> : <Copy className="w-3.5 h-3.5" />}
+                            </button>
+                          )}
                         </div>
                       </div>
                     </div>
@@ -918,7 +928,7 @@ export const VerificationGatewayModal: React.FC<VerificationGatewayModalProps> =
                     <div className="flex items-center justify-between bg-slate-50 p-2 rounded-lg border border-slate-100">
                       <span className="text-slate-500">প্রথম ইস্যুর তারিখ:</span>
                       <span className="font-mono font-bold text-emerald-900 bg-emerald-50 px-1.5 py-0.5 rounded border border-emerald-200">
-                        {driver.firstIssueDate || '15/04/2021'}
+                        {driver.firstIssueDate || 'তথ্য দেওয়া হয়নি'}
                       </span>
                     </div>
 

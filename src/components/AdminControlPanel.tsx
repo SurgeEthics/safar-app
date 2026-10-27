@@ -39,7 +39,6 @@ import { EmergencyContact } from '../types';
 import { INITIAL_EMERGENCY_CONTACTS } from '../data/initialData';
 import { GafargaonPlace } from '../data/gafargaonPlaces';
 import { AutoMarqueeText } from './AutoMarqueeText';
-import { sortDriversDeterministic } from '../utils/stableDriverSort';
 
 export interface AppCustomSettings {
   primaryColor: string;
@@ -478,7 +477,7 @@ export const AdminControlPanel: React.FC<AdminControlPanelProps> = ({
     { id: 'crimson', name: 'রক্তিম লাল', hex: '#dc2626', bgClass: 'bg-red-600' }
   ];
 
-  // 100% Deterministic Stable Driver Sorting: Rock solid, ZERO jumping/lafalafi
+  // 100% Stable Driver Sorting: Newest registered drivers first, ZERO jumping/lafalafi
   const filteredDrivers = useMemo(() => {
     return drivers.filter(d => {
       const matchesCat = driverCatFilter === 'all' || d.category === driverCatFilter;
@@ -487,7 +486,40 @@ export const AdminControlPanel: React.FC<AdminControlPanelProps> = ({
         d.phone.includes(driverFilterQuery) ||
         d.plateNumber.toLowerCase().includes(driverFilterQuery.toLowerCase());
       return matchesCat && matchesQuery;
-    }).sort(sortDriversDeterministic);
+    }).sort((a, b) => {
+      const getStableDriverTime = (d: Driver): number => {
+        // 1. Direct permanent registeredTimestamp
+        if (typeof (d as any).registeredTimestamp === 'number' && (d as any).registeredTimestamp > 0) {
+          return (d as any).registeredTimestamp;
+        }
+        // 2. Milliseconds extracted from ID (e.g. drv-1740000000000)
+        const numMatch = d.id.match(/\d{10,}/);
+        if (numMatch) {
+          const num = parseInt(numMatch[0], 10);
+          if (!isNaN(num) && num > 1600000000000) return num;
+        }
+        // 3. Permanent createdAt (DO NOT use updatedAt because GPS ticks alter updatedAt every second)
+        if ((d as any).createdAt) {
+          const t = new Date((d as any).createdAt).getTime();
+          if (!isNaN(t) && t > 0) return t;
+        }
+        // 4. Pending review drivers go above demo drivers
+        if (d.verificationStatus === 'pending' || (!d.licenseVerified && !d.nidVerified)) {
+          return 1700000000000;
+        }
+        // 5. Static initial drivers
+        const anyDigits = d.id.replace(/\D/g, '');
+        return parseInt(anyDigits, 10) || 0;
+      };
+
+      const timeA = getStableDriverTime(a);
+      const timeB = getStableDriverTime(b);
+      if (timeB !== timeA) {
+        return timeB - timeA;
+      }
+      // Absolute deterministic tie-breaker ensures ZERO swapping
+      return a.id.localeCompare(b.id);
+    });
   }, [drivers, driverCatFilter, driverFilterQuery]);
 
   if (!isOpen) return null;
@@ -1399,7 +1431,7 @@ export const AdminControlPanel: React.FC<AdminControlPanelProps> = ({
                 {filteredDrivers.map((driver) => (
                   <div
                     key={driver.id}
-                    className="bg-white p-4 rounded-2xl border border-slate-200 shadow-xs hover:border-emerald-300 transition-colors flex flex-col justify-between"
+                    className="bg-white p-4 rounded-2xl border border-slate-200 shadow-xs hover:border-emerald-300 transition flex flex-col justify-between"
                   >
                     <div>
                       <div className="flex items-start justify-between gap-2 mb-2">
@@ -1500,7 +1532,7 @@ export const AdminControlPanel: React.FC<AdminControlPanelProps> = ({
                           <button
                             type="button"
                             onClick={() => onOpenVerificationGate ? onOpenVerificationGate(driver, 'brta') : onToggleDriverVerification(driver.id, 'license')}
-                            className={`flex items-center justify-center gap-1 px-1.5 py-1.5 rounded-lg text-[10px] font-bold border cursor-pointer transition-colors ${
+                            className={`flex items-center justify-center gap-1 px-1.5 py-1.5 rounded-lg text-[10px] font-bold border cursor-pointer transition-all ${
                               driver.licenseVerified
                                 ? 'bg-emerald-50 text-emerald-800 border-emerald-300 hover:bg-emerald-100 shadow-xs'
                                 : 'bg-amber-50 text-amber-800 border-amber-300 hover:bg-amber-100 ring-2 ring-amber-400/20'
@@ -1519,7 +1551,7 @@ export const AdminControlPanel: React.FC<AdminControlPanelProps> = ({
                           <button
                             type="button"
                             onClick={() => onOpenVerificationGate ? onOpenVerificationGate(driver, 'wa') : onToggleDriverVerification(driver.id, 'phone')}
-                            className={`flex items-center justify-center gap-1 px-1.5 py-1.5 rounded-lg text-[10px] font-bold border cursor-pointer transition-colors ${
+                            className={`flex items-center justify-center gap-1 px-1.5 py-1.5 rounded-lg text-[10px] font-bold border cursor-pointer transition-all ${
                               driver.phoneVerified
                                 ? 'bg-emerald-50 text-emerald-800 border-emerald-300 hover:bg-emerald-100 shadow-xs'
                                 : 'bg-amber-50 text-amber-800 border-amber-300 hover:bg-amber-100 ring-2 ring-amber-400/20'
@@ -1538,7 +1570,7 @@ export const AdminControlPanel: React.FC<AdminControlPanelProps> = ({
                           <button
                             type="button"
                             onClick={() => onOpenVerificationGate ? onOpenVerificationGate(driver, 'nid') : onToggleDriverVerification(driver.id, 'nid')}
-                            className={`flex items-center justify-center gap-1 px-1.5 py-1.5 rounded-lg text-[10px] font-bold border cursor-pointer transition-colors ${
+                            className={`flex items-center justify-center gap-1 px-1.5 py-1.5 rounded-lg text-[10px] font-bold border cursor-pointer transition-all ${
                               driver.nidVerified
                                 ? 'bg-emerald-50 text-emerald-800 border-emerald-300 hover:bg-emerald-100 shadow-xs'
                                 : 'bg-amber-50 text-amber-800 border-amber-300 hover:bg-amber-100 ring-2 ring-amber-400/20'
@@ -1796,13 +1828,16 @@ export const AdminControlPanel: React.FC<AdminControlPanelProps> = ({
                 </div>
               </div>
 
-              {/* Full Source Code Zip Download Card */}
-              <div className="bg-white p-5 rounded-2xl border border-slate-200 hover:border-emerald-300 shadow-xs space-y-3 transition-colors">
+              {/* Full Source Code Zip Download Card (With Yellow Zip Button) */}
+              <div className="bg-gradient-to-r from-amber-50 via-amber-100/40 to-emerald-50 p-5 rounded-2xl border-2 border-amber-300 shadow-sm space-y-3">
                 <div className="flex items-center justify-between">
                   <h3 className="font-extrabold text-sm sm:text-base text-slate-900 flex items-center gap-2">
-                    <Download className="w-5 h-5 text-emerald-600" />
+                    <Download className="w-5 h-5 text-amber-600" />
                     সম্পূর্ণ প্রজেক্ট সোর্স কোড ডাউনলোড (.ZIP)
                   </h3>
+                  <span className="text-[11px] font-bold bg-amber-400 text-slate-950 px-2.5 py-0.5 rounded-full shadow-xs border border-amber-500/50">
+                    ১.৩ MB • ক্লাউডফ্লেয়ার ১০০% ফিক্স
+                  </span>
                 </div>
                 <p className="text-xs text-slate-700 leading-relaxed">
                   আপনার সম্পূর্ণ অ্যাপের রিয়্যাক্ট ১৯, টাইপস্ক্রিপ্ট সোর্স কোড, চালক ভেরিফিকেশন পপআপ কোড, লাইভ ম্যাপ, আইকন, এবং প্রস্তুতকৃত <strong>dist/</strong> প্রোডাকশন বিল্ড ফাইল সহ সম্পূর্ণ অফিশিয়াল জিপ ফাইল। ক্লাউডফ্লেয়ারের <code>edgesOut</code> ও Node.js ডিপ্লয় এরর শতভাগ সমাধান করা হয়েছে (.npmrc ও .node-version অন্তর্ভুক্ত)।

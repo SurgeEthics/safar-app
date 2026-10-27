@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { X, Cloud, Check, Wifi, Globe, Server, RefreshCw, Copy, CheckCircle2, Terminal, Info, ExternalLink, Download } from 'lucide-react';
+import { X, Cloud, Check, Wifi, Globe, Server, RefreshCw } from 'lucide-react';
 import { liveLocationService } from '../services/liveLocationService';
 
 interface CloudflareSettingsModalProps {
@@ -24,7 +24,6 @@ export const CloudflareSettingsModal: React.FC<CloudflareSettingsModalProps> = (
   const [workerUrl, setWorkerUrl] = useState(liveLocationService.getCustomServerUrl());
   const [testStatus, setTestStatus] = useState<string | null>(null);
   const [isTesting, setIsTesting] = useState(false);
-  const [copied, setCopied] = useState(false);
 
   if (!isOpen) return null;
 
@@ -70,80 +69,6 @@ export const CloudflareSettingsModal: React.FC<CloudflareSettingsModalProps> = (
     } finally {
       setIsTesting(false);
     }
-  };
-
-  const sampleWorkerCode = `/**
- * SAFAR GAFARGAON - CLOUDFLARE EDGE WORKER
- */
-const activeDrivers = new Map();
-const activePassengers = new Map();
-const activeWebSockets = new Set();
-
-const corsHeaders = {
-  'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS',
-  'Access-Control-Allow-Headers': 'Content-Type, Authorization, X-Requested-With',
-};
-
-function jsonResponse(data, status = 200) {
-  return new Response(JSON.stringify(data), {
-    status,
-    headers: { 'Content-Type': 'application/json; charset=utf-8', ...corsHeaders },
-  });
-}
-
-export default {
-  async fetch(request) {
-    const url = new URL(request.url);
-    if (request.method === 'OPTIONS') return new Response(null, { headers: corsHeaders });
-
-    if (url.pathname === '/api/live/health' || url.pathname === '/health') {
-      return jsonResponse({
-        status: 'online',
-        server: 'Cloudflare Edge Worker (সফর গফরগাঁও)',
-        timestamp: new Date().toISOString(),
-        activeDriversCount: activeDrivers.size,
-        activePassengersCount: activePassengers.size
-      });
-    }
-
-    if (url.pathname === '/ws' || url.pathname === '/api/live/ws') {
-      const upgradeHeader = request.headers.get('Upgrade');
-      if (!upgradeHeader || upgradeHeader.toLowerCase() !== 'websocket') {
-        return new Response('Expected WebSocket upgrade', { status: 426 });
-      }
-      const webSocketPair = new WebSocketPair();
-      const [client, server] = Object.values(webSocketPair);
-      server.accept();
-      activeWebSockets.add(server);
-      server.send(JSON.stringify({ type: 'INIT_SYNC', drivers: Array.from(activeDrivers.values()) }));
-      server.addEventListener('message', (event) => {
-        try {
-          const payload = JSON.parse(event.data);
-          if (payload.type === 'DRIVER_LOCATION_UPDATE') {
-            activeDrivers.set(payload.driver.id, payload.driver);
-            for (const ws of activeWebSockets) {
-              if (ws !== server) { try { ws.send(JSON.stringify({ type: 'DRIVER_MOVED', driver: payload.driver })); } catch (_) {} }
-            }
-          }
-        } catch (_) {}
-      });
-      server.addEventListener('close', () => activeWebSockets.delete(server));
-      return new Response(null, { status: 101, webSocket: client });
-    }
-
-    if (url.pathname === '/api/live/drivers') {
-      return jsonResponse({ success: true, count: activeDrivers.size, drivers: Array.from(activeDrivers.values()) });
-    }
-
-    return jsonResponse({ app: 'Safar Gafargaon Live Edge' });
-  }
-};`;
-
-  const copyWorkerCode = () => {
-    navigator.clipboard.writeText(sampleWorkerCode);
-    setCopied(true);
-    setTimeout(() => setCopied(false), 2000);
   };
 
   return (
@@ -269,41 +194,6 @@ export default {
               <Check className="w-4 h-4" />
               <span>সংরক্ষণ করুন</span>
             </button>
-          </div>
-
-          {/* Quick Info / Guide */}
-          <div className="border-t border-slate-100 pt-3 space-y-2">
-            <div className="flex items-center justify-between text-slate-700 font-bold text-[11px]">
-              <span className="flex items-center gap-1">
-                <Terminal className="w-3.5 h-3.5 text-slate-500" />
-                ক্লাউডফ্লেয়ার কোড ফাইল:
-              </span>
-              <div className="flex items-center gap-1.5">
-                <span className="text-[10px] text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded font-mono">
-                  cloudflare-worker/worker.js
-                </span>
-                <button
-                  type="button"
-                  onClick={copyWorkerCode}
-                  className="px-2 py-0.5 text-[10px] bg-slate-200 hover:bg-slate-300 text-slate-800 rounded font-medium flex items-center gap-1 transition-colors cursor-pointer"
-                >
-                  {copied ? <CheckCircle2 className="w-3 h-3 text-emerald-600" /> : <Copy className="w-3 h-3" />}
-                  <span>{copied ? 'কপি হয়েছে' : 'কোড কপি'}</span>
-                </button>
-              </div>
-            </div>
-            <p className="text-[11px] text-slate-600 leading-relaxed">
-              প্রজেক্টের <code>cloudflare-worker/</code> ফোল্ডারে সম্পূর্ণ ক্লাউডফ্লেয়ার স্ক্রিপ্ট ও রেডিমেড কনফিগ রয়েছে। আপনি চাইলে যেকোনো সময় ক্লাউডফ্লেয়ারে এক ক্লিকেই ফ্রি হোস্টিং করতে পারবেন।
-            </p>
-
-            <a
-              href="/safar-gafargaon-clean-source.zip"
-              download="safar-gafargaon-clean-source.zip"
-              className="w-full mt-2 py-2 px-3 bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border border-emerald-300 rounded-xl text-xs font-bold flex items-center justify-center gap-2 transition shadow-2xs active:scale-98"
-            >
-              <Download className="w-3.5 h-3.5 text-emerald-600" />
-              <span>সম্পূর্ণ প্রজেক্ট জিপ নামান (Cloudflare + Firebase সহ)</span>
-            </a>
           </div>
         </div>
       </div>

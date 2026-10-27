@@ -62,24 +62,26 @@ export function useLiveTracking({
   }, []);
 
   // Sync passenger presence to liveLocationService
+  const pickupPoint = passengerDetails?.pickupPoint;
+  const destination = passengerDetails?.destination;
+  const tripStatus = passengerDetails?.status;
+
   useEffect(() => {
-    if (role === 'passenger' && passengerDetails) {
-      if (passengerDetails.pickupPoint) {
-        liveLocationService.registerPassenger({
-          id: userId || 'passenger-current',
-          name: userName || 'যাত্রী',
-          phone: userPhone,
-          pickupPoint: passengerDetails.pickupPoint,
-          destination: passengerDetails.destination,
-          lat: gps.lat || 24.4335,
-          lng: gps.lng || 90.5512,
-          status: passengerDetails.status
-        });
-      }
+    if (role === 'passenger' && pickupPoint) {
+      liveLocationService.registerPassenger({
+        id: userId || 'passenger-current',
+        name: userName || 'যাত্রী',
+        phone: userPhone,
+        pickupPoint: pickupPoint,
+        destination: destination,
+        lat: gps.lat || 24.4335,
+        lng: gps.lng || 90.5512,
+        status: tripStatus
+      });
     } else {
       liveLocationService.unregisterPassenger(userId || 'passenger-current');
     }
-  }, [role, userId, userName, userPhone, passengerDetails, gps.lat, gps.lng]);
+  }, [role, userId, userName, userPhone, pickupPoint, destination, tripStatus, gps.lat, gps.lng]);
 
   const startGpsTracking = useCallback(() => {
     if (typeof window === 'undefined' || !('geolocation' in navigator)) {

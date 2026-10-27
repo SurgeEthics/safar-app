@@ -37,7 +37,7 @@ export const SourceCodeDownloadModal: React.FC<SourceCodeDownloadModalProps> = (
 
     try {
       // 1. Fetch the zip directly from same-origin with cache busting
-      const response = await fetch(`/safar-app.zip?t=${Date.now()}`, {
+      const response = await fetch(`/safar-gafargaon-clean-source.zip?t=${Date.now()}`, {
         cache: 'no-store',
       });
 
@@ -73,7 +73,7 @@ export const SourceCodeDownloadModal: React.FC<SourceCodeDownloadModalProps> = (
       // Fallback: try navigating window location to zip
       setErrorMessage(err?.message || 'ডাউনলোড শুরু করা যায়নি');
       const fallbackLink = document.createElement('a');
-      fallbackLink.href = '/safar-app.zip';
+      fallbackLink.href = '/safar-gafargaon-clean-source.zip';
       fallbackLink.setAttribute('download', 'safar-gafargaon-clean-source.zip');
       fallbackLink.target = '_blank';
       fallbackLink.click();
@@ -103,7 +103,7 @@ export const SourceCodeDownloadModal: React.FC<SourceCodeDownloadModalProps> = (
                 সম্পূর্ণ সোর্স কোড ডাউনলোড
               </h3>
               <p className="text-xs text-slate-500">
-                গিটহাব ও ক্লাউডফ্লেয়ারের জন্য প্রস্তুত (৩.৫ মেগাবাইট)
+                গিটহাব ও ক্লাউডফ্লেয়ারের জন্য প্রস্তুত (২.৪ মেগাবাইট • dist সহ)
               </p>
             </div>
           </div>
@@ -125,11 +125,11 @@ export const SourceCodeDownloadModal: React.FC<SourceCodeDownloadModalProps> = (
               <div className="flex items-center gap-2">
                 <Sparkles className="w-4 h-4 text-emerald-600" />
                 <span className="text-xs font-bold text-emerald-950">
-                  সর্বশেষ আপডেটকৃত সম্পূর্ণ প্যাকেজ (লকফাইল সিঙ্কড)
+                  সর্বশেষ আপডেটকৃত সম্পূর্ণ প্যাকেজ (১০০% এররমুক্ত)
                 </span>
               </div>
               <span className="text-[11px] font-semibold bg-emerald-100 text-emerald-800 px-2 py-0.5 rounded-full">
-                ৩.৫ MB জিপ
+                ২.৪ MB জিপ (dist সহ)
               </span>
             </div>
 

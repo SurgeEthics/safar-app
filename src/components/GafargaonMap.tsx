@@ -119,6 +119,8 @@ export const GafargaonMap: React.FC<GafargaonMapProps> = ({
   });
   const [showLockNotification, setShowLockNotification] = useState<boolean>(false);
   const lockNotificationTimerRef = useRef<any>(null);
+  const lastFittedRouteKeyRef = useRef<string>('');
+  const lastFittedBookingIdRef = useRef<string>('');
 
   // Gafargaon Center Coordinates (Exact Google Maps Location)
   const DEFAULT_CENTER: [number, number] = [24.4536, 90.5479];
@@ -495,19 +497,18 @@ export const GafargaonMap: React.FC<GafargaonMapProps> = ({
         lineCap: 'round'
       }).addTo(map);
 
-      polyline.bindTooltip(`দূরত্ব: ${toBengaliNumber(activeBooking.distanceKm)} কিমি • পৌঁছাতে বাকি: ${toBengaliNumber(activeBooking.etaMinutes)} মিনিট`, {
-        permanent: true,
-        direction: 'center',
-        className: 'route-distance-tooltip'
-      });
-
       routePolylineRef.current = polyline;
 
-      const bounds = L.latLngBounds([
-        [activeBooking.currentDriverLat, activeBooking.currentDriverLng],
-        [activeBooking.passengerLat, activeBooking.passengerLng]
-      ]);
-      map.fitBounds(bounds, { padding: [50, 50] });
+      // Fit bounds only when booking starts, not on background driver movement pings
+      const bookingKey = `${activeBooking.currentDriverLat.toFixed(3)},${activeBooking.passengerLat.toFixed(3)}`;
+      if (lastFittedBookingIdRef.current !== bookingKey) {
+        lastFittedBookingIdRef.current = bookingKey;
+        const bounds = L.latLngBounds([
+          [activeBooking.currentDriverLat, activeBooking.currentDriverLng],
+          [activeBooking.passengerLat, activeBooking.passengerLng]
+        ]);
+        map.fitBounds(bounds, { padding: [50, 50] });
+      }
     }
     // F. Route Planning Preview (A to B)
     else if (pickupCoords && destCoords && (pickupCoords.lat !== destCoords.lat || pickupCoords.lng !== destCoords.lng)) {
@@ -568,21 +569,21 @@ export const GafargaonMap: React.FC<GafargaonMapProps> = ({
         lineCap: 'round'
       }).addTo(map);
 
-      if (calculatedDistance != null && calculatedDurationMinutes != null) {
-        polyline.bindTooltip(`দূরত্ব: ${toBengaliNumber(calculatedDistance)} কিমি • সময়: ${toBengaliNumber(calculatedDurationMinutes)} মিনিট`, {
-          permanent: true,
-          direction: 'center',
-          className: 'route-distance-tooltip'
-        });
-      }
-
       routePolylineRef.current = polyline;
 
-      const bounds = L.latLngBounds([
-        [pickupCoords.lat, pickupCoords.lng],
-        [destCoords.lat, destCoords.lng]
-      ]);
-      map.fitBounds(bounds, { padding: [55, 55], maxZoom: 16 });
+      // Fit bounds only when route endpoints change, not on background driver/passenger GPS updates
+      const routeKey = `${pickupCoords.lat.toFixed(4)},${pickupCoords.lng.toFixed(4)}->${destCoords.lat.toFixed(4)},${destCoords.lng.toFixed(4)}`;
+      if (lastFittedRouteKeyRef.current !== routeKey) {
+        lastFittedRouteKeyRef.current = routeKey;
+        const bounds = L.latLngBounds([
+          [pickupCoords.lat, pickupCoords.lng],
+          [destCoords.lat, destCoords.lng]
+        ]);
+        map.fitBounds(bounds, { padding: [55, 55], maxZoom: 16 });
+      }
+    } else {
+      // Clear route fitted key when no route is active
+      lastFittedRouteKeyRef.current = '';
     }
   }, [
     drivers,
@@ -760,16 +761,6 @@ export const GafargaonMap: React.FC<GafargaonMapProps> = ({
             <RotateCcw className="w-3.5 h-3.5" />
             <span className="hidden sm:inline text-[11px]">রিসেট</span>
           </button>
-
-          <button
-            type="button"
-            onClick={() => setIsFullscreen(!isFullscreen)}
-            className="p-1.5 bg-white hover:bg-slate-100 text-slate-700 border border-slate-300 rounded-lg text-xs font-medium flex items-center gap-1 transition-colors cursor-pointer"
-            title={isFullscreen ? 'ম্যাপ স্বাভাবিক করুন' : 'ম্যাপ বড় করুন'}
-          >
-            {isFullscreen ? <Minimize2 className="w-3.5 h-3.5" /> : <Maximize2 className="w-3.5 h-3.5" />}
-            <span className="hidden sm:inline text-[11px]">{isFullscreen ? 'ছোট করুন' : 'ফুল ভিউ'}</span>
-          </button>
         </div>
       </div>
 
@@ -786,9 +777,8 @@ export const GafargaonMap: React.FC<GafargaonMapProps> = ({
       >
         <div ref={mapContainerRef} className="w-full h-full z-0" />
 
-        {/* 1. Floating Scroll Lock / Unlock Button directly on Map (Semi-Transparent Frosted Glass) */}
-        {/* 1. Floating Scroll Lock / Unlock Button directly on Map (Transparent, solid black on hover, no blur) */}
-        <div className="absolute top-2.5 right-2.5 z-20 flex flex-col items-end gap-1 pointer-events-auto">
+        {/* 1. Floating Scroll Lock / Unlock Button directly on Map - Hidden on mobile as requested */}
+        <div className="hidden sm:flex absolute top-2.5 right-2.5 z-20 flex-col items-end gap-1 pointer-events-auto">
           <button
             type="button"
             onClick={(e) => {
@@ -821,7 +811,7 @@ export const GafargaonMap: React.FC<GafargaonMapProps> = ({
           </button>
         </div>
 
-        {/* 2. Floating helper note when scroll is locked (Transparent, solid black on hover, no blur) */}
+        {/* 2. Floating helper note when scroll is locked - Hidden on mobile */}
         {isScrollLocked && (
           <div 
             onClick={(e) => {
@@ -831,7 +821,7 @@ export const GafargaonMap: React.FC<GafargaonMapProps> = ({
               if (lockNotificationTimerRef.current) clearTimeout(lockNotificationTimerRef.current);
               lockNotificationTimerRef.current = setTimeout(() => setShowLockNotification(false), 3000);
             }}
-            className="absolute bottom-2.5 left-2.5 z-20 bg-black/25 hover:bg-black hover:border-black text-white/95 px-2.5 py-1.5 rounded-xl border border-white/25 shadow-md flex items-center gap-2 cursor-pointer transition-colors duration-200 max-w-[280px]"
+            className="hidden sm:flex absolute bottom-2.5 left-2.5 z-20 bg-black/25 hover:bg-black hover:border-black text-white/95 px-2.5 py-1.5 rounded-xl border border-white/25 shadow-md items-center gap-2 cursor-pointer transition-colors duration-200 max-w-[280px]"
             style={{ textShadow: '0 1px 3px rgba(0,0,0,0.95)' }}
           >
             <span className="w-2 h-2 rounded-full bg-amber-400 shrink-0 animate-ping" />
@@ -859,7 +849,7 @@ export const GafargaonMap: React.FC<GafargaonMapProps> = ({
         )}
 
         {/* 3. Floating Route Distance & Live Stats Overlay when pickup & dest are set (Transparent, solid black on hover, no blur) */}
-        {pickupCoords && destCoords && calculatedDistance != null && (
+        {pickupCoords && destCoords && (pickupCoords.lat !== destCoords.lat || pickupCoords.lng !== destCoords.lng) && Boolean(calculatedDistance && calculatedDistance > 0) && (
           <div 
             className="absolute top-2.5 left-2.5 z-20 bg-black/25 hover:bg-black hover:border-black text-white rounded-xl p-2.5 shadow-md border border-white/25 max-w-[280px] animate-in fade-in transition-colors duration-200 cursor-pointer"
             style={{ textShadow: '0 1px 3px rgba(0,0,0,0.95)' }}
@@ -870,7 +860,7 @@ export const GafargaonMap: React.FC<GafargaonMapProps> = ({
             </div>
             <div className="flex items-baseline gap-2">
               <span className="text-base sm:text-lg font-black text-white">
-                {toBengaliNumber(calculatedDistance)} কিমি
+                {toBengaliNumber(calculatedDistance || 0)} কিমি
               </span>
               <span className="text-[11px] text-emerald-300 font-bold">
                 (~{toBengaliNumber(calculatedDurationMinutes || 5)} মিনিট)

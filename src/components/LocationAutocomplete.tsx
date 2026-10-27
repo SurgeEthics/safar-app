@@ -15,11 +15,21 @@ export interface LocationAutocompleteProps {
   onLocateGps?: () => void;
   onChangeLocation: (name: string, coords?: { lat: number; lng: number }) => void;
   placeholder?: string;
+  places?: Array<{
+    id?: string;
+    name?: string;
+    bengaliName?: string;
+    category?: string;
+    categoryLabel?: string;
+    area?: string;
+    lat: number;
+    lng: number;
+  }>;
 }
 
-interface PlaceItem {
+export interface PlaceItem {
   name: string;
-  category: 'stand' | 'hospital' | 'station' | 'market' | 'admin';
+  category: 'stand' | 'hospital' | 'station' | 'market' | 'admin' | string;
   categoryLabel: string;
   lat: number;
   lng: number;
@@ -49,7 +59,8 @@ export const LocationAutocomplete: React.FC<LocationAutocompleteProps> = ({
   userGps,
   onLocateGps,
   onChangeLocation,
-  placeholder = 'স্থান খুঁজুন বা বাছুন...'
+  placeholder = 'স্থান খুঁজুন বা বাছুন...',
+  places
 }) => {
   const [isOpen, setIsOpen] = useState(false);
   const [inputValue, setInputValue] = useState(value || '');
@@ -72,9 +83,19 @@ export const LocationAutocomplete: React.FC<LocationAutocompleteProps> = ({
     };
   }, []);
 
-  const filteredPlaces = GAFARGAON_POPULAR_PLACES.filter((p) => {
-    if (!inputValue.trim()) return true;
+  const placesList: PlaceItem[] = places && places.length > 0
+    ? places.map(p => ({
+        name: p.bengaliName || p.name || 'স্থান',
+        category: p.category || 'stand',
+        categoryLabel: p.categoryLabel || p.category || (p.area ? p.area.slice(0, 15) : 'জনপ্রিয় স্থান'),
+        lat: p.lat,
+        lng: p.lng
+      }))
+    : GAFARGAON_POPULAR_PLACES;
+
+  const filteredPlaces = placesList.filter((p) => {
     const q = inputValue.toLowerCase().trim();
+    if (!q || q.includes('আমার বর্তমান অবস্থান') || q.includes('gps') || q.includes('লাইভ')) return true;
     return p.name.toLowerCase().includes(q) || p.categoryLabel.toLowerCase().includes(q);
   });
 

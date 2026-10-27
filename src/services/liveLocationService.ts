@@ -86,6 +86,24 @@ class LiveLocationService {
   public syncDriversFromCatalog(catalogDrivers: any[]): void {
     if (!catalogDrivers || catalogDrivers.length === 0) return;
     
+    const current = this.state.drivers;
+    if (current.length === catalogDrivers.length) {
+      const hasMeaningfulChange = catalogDrivers.some((d: any, idx: number) => {
+        const cur = current[idx];
+        if (!cur) return true;
+        const dLat = d.lat || 24.4340;
+        const dLng = d.lng || 90.5510;
+        const dOnline = d.isOnline !== false;
+        return (
+          cur.id !== d.id ||
+          cur.isOnline !== dOnline ||
+          Math.abs(cur.lat - dLat) > 0.0001 ||
+          Math.abs(cur.lng - dLng) > 0.0001
+        );
+      });
+      if (!hasMeaningfulChange) return;
+    }
+
     const liveDrivers: LiveDriverLocation[] = catalogDrivers
       .filter((d: any) => d.isOnline !== false)
       .map((d: any) => ({
@@ -98,7 +116,7 @@ class LiveLocationService {
         standName: d.standName || '',
         lat: d.lat || 24.4340,
         lng: d.lng || 90.5510,
-        speed: d.approxSpeedKmh || Math.floor(Math.random() * 20) + 12,
+        speed: d.approxSpeedKmh || 25,
         rating: d.rating || 4.9,
         isOnline: d.isOnline !== false,
         isLiveEdge: true,
@@ -113,6 +131,16 @@ class LiveLocationService {
   public registerPassenger(passenger: LivePassengerLocation): void {
     const existingIdx = this.state.passengers.findIndex((p: LivePassengerLocation) => p.id === passenger.id);
     if (existingIdx >= 0) {
+      const existing = this.state.passengers[existingIdx];
+      if (
+        existing.pickupPoint === passenger.pickupPoint &&
+        existing.destination === passenger.destination &&
+        existing.status === passenger.status &&
+        Math.abs(existing.lat - passenger.lat) < 0.0001 &&
+        Math.abs(existing.lng - passenger.lng) < 0.0001
+      ) {
+        return; // Identical, avoid re-triggering listeners
+      }
       this.state.passengers[existingIdx] = passenger;
     } else {
       this.state.passengers.push(passenger);
@@ -121,8 +149,11 @@ class LiveLocationService {
   }
 
   public unregisterPassenger(id: string): void {
+    const prevLen = this.state.passengers.length;
     this.state.passengers = this.state.passengers.filter((p: LivePassengerLocation) => p.id !== id);
-    this.notify();
+    if (this.state.passengers.length !== prevLen) {
+      this.notify();
+    }
   }
 
   public getState(): LiveServerState {

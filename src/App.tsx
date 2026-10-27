@@ -79,7 +79,6 @@ import { GafargaonMap } from './components/GafargaonMap';
 import { CloudflareSettingsModal } from './components/CloudflareSettingsModal';
 import { useLiveTracking } from './hooks/useLiveTracking';
 import { liveLocationService } from './services/liveLocationService';
-import { sortDriversDeterministic, sanitizeFirestoreDriverData } from './utils/stableDriverSort';
 
 export type VehicleCategory = string;
 export type AppUserRole = 'passenger' | 'driver';
@@ -154,8 +153,6 @@ export interface Driver {
   verificationStatus?: 'verified' | 'pending';
   regAppId?: string;
   registeredAt?: string;
-  registeredTimestamp?: number;
-  createdAt?: string;
   standName: string;
   lat: number;
   lng: number;
@@ -1237,48 +1234,22 @@ export default function App() {
           });
         });
 
-        setDrivers(prevDrivers => {
-          const map = new Map<string, Driver>();
-
-          // 1. Initial canonical drivers as baseline
+        setDrivers(prev => {
+          const merged = [...firestoreDrivers];
           for (const initD of INITIAL_DRIVERS) {
-            map.set(initD.id, initD);
+            if (!merged.some(m => m.id === initD.id || m.phone === initD.phone)) {
+              merged.push(initD);
+            }
           }
-
-          // 2. Overlay previous local driver state (keeps any local verification edits)
-          for (const prevD of prevDrivers) {
-            map.set(prevD.id, prevD);
-          }
-
-          // 3. Overlay Firestore snapshot data (official cloud truth)
-          for (const fD of firestoreDrivers) {
-            const existing = map.get(fD.id);
-            const isLocalVerified = existing && (existing.licenseVerified || existing.phoneVerified || existing.nidVerified);
-            const nextLic = fD.licenseVerified || (isLocalVerified ? Boolean(existing?.licenseVerified) : false);
-            const nextPhone = fD.phoneVerified || (isLocalVerified ? Boolean(existing?.phoneVerified) : false);
-            const nextNid = fD.nidVerified || (isLocalVerified ? Boolean(existing?.nidVerified) : false);
-            const all3 = nextLic && nextPhone && nextNid;
-
-            map.set(fD.id, {
-              ...(existing || {}),
-              ...fD,
-              licenseVerified: nextLic,
-              phoneVerified: nextPhone,
-              nidVerified: nextNid,
-              verificationStatus: all3 ? 'verified' : (fD.verificationStatus || 'pending')
-            });
-          }
-
-          // ALWAYS return deterministic stably sorted drivers! Zero jumping!
-          return Array.from(map.values()).sort(sortDriversDeterministic);
+          return merged;
         });
       } else {
-        // First-time seed initial drivers to Firestore with sanitized data
+        // First-time seed initial drivers to Firestore
         INITIAL_DRIVERS.forEach(d => {
-          setDoc(doc(db, 'drivers', d.id), sanitizeFirestoreDriverData({
+          setDoc(doc(db, 'drivers', d.id), {
             ...d,
             updatedAt: new Date().toISOString()
-          }), { merge: true }).catch(err => console.warn('Firestore initial driver seed fallback:', err));
+          }).catch(err => console.warn('Firestore initial driver seed fallback:', err));
         });
       }
     }, (error) => {
@@ -1943,8 +1914,8 @@ export default function App() {
   const [destCoords, setDestCoords] = useState<{ lat: number; lng: number } | null>(null);
   const [passengerSelectedVehicle, setPassengerSelectedVehicle] = useState<VehicleCategory>('cng');
   const [isRidePlannerCollapsed, setIsRidePlannerCollapsed] = useState<boolean>(false);
-  const [isQuickDestOpen, setIsQuickDestOpen] = useState<boolean>(false);
-  const [isVehicleFareOpen, setIsVehicleFareOpen] = useState<boolean>(false);
+  const [isQuickDestOpen, setIsQuickDestOpen] = useState<boolean>(true);
+  const [isVehicleFareOpen, setIsVehicleFareOpen] = useState<boolean>(true);
 
   // Popular Places State (Managed via Admin Control Panel & Synced with Autocomplete Dropdown)
   const [popularPlaces, setPopularPlaces] = useState<GafargaonPlace[]>(() => {
@@ -2812,9 +2783,7 @@ export default function App() {
           if (sd) {
             const latDiff = Math.abs(d.lat - sd.lat);
             const lngDiff = Math.abs(d.lng - sd.lng);
-            const currentOnline = d.isOnline !== false;
-            const targetOnline = sd.isOnline !== false;
-            const onlineDiff = currentOnline !== targetOnline;
+            const onlineDiff = d.isOnline !== (sd.isOnline ?? d.isOnline);
             if (latDiff > 0.0001 || lngDiff > 0.0001 || onlineDiff) {
               hasChanges = true;
               return {
@@ -2822,7 +2791,7 @@ export default function App() {
                 lat: sd.lat,
                 lng: sd.lng,
                 approxSpeedKmh: sd.speed || d.approxSpeedKmh,
-                isOnline: targetOnline
+                isOnline: sd.isOnline ?? d.isOnline
               };
             }
           }
@@ -2894,7 +2863,7 @@ export default function App() {
     return () => clearInterval(timer);
   }, [activeBooking]);
 
-  // Filtered and stably sorted drivers (100% deterministic, zero jumping/lafalafi)
+  // Filtered and stably sorted drivers (100% stable, zero jumping/lafalafi)
   const filteredDrivers = useMemo(() => {
     return drivers.filter(driver => {
       const matchesCategory = selectedCategory === 'all' || driver.category === selectedCategory;
@@ -2907,7 +2876,29 @@ export default function App() {
         driver.standName.toLowerCase().includes(searchQuery.toLowerCase());
 
       return matchesCategory && matchesStand && matchesSearch;
-    }).sort(sortDriversDeterministic);
+    }).sort((a, b) => {
+      const getStableDriverTime = (d: Driver): number => {
+        if (typeof (d as any).registeredTimestamp === 'number' && (d as any).registeredTimestamp > 0) {
+          return (d as any).registeredTimestamp;
+        }
+        const numMatch = d.id.match(/\d{10,}/);
+        if (numMatch) {
+          const num = parseInt(numMatch[0], 10);
+          if (!isNaN(num) && num > 1600000000000) return num;
+        }
+        if ((d as any).createdAt) {
+          const t = new Date((d as any).createdAt).getTime();
+          if (!isNaN(t) && t > 0) return t;
+        }
+        return 0;
+      };
+
+      const timeA = getStableDriverTime(a);
+      const timeB = getStableDriverTime(b);
+      if (timeB !== timeA) return timeB - timeA;
+      // Deterministic tie-breaker prevents order jumping on GPS moves
+      return a.id.localeCompare(b.id);
+    });
   }, [drivers, selectedCategory, selectedStand, searchQuery]);
 
   // Handle Driver Registration Submit with full verification logic & mandatory Pending Review
@@ -2964,8 +2955,6 @@ export default function App() {
       verificationStatus: 'pending',
       regAppId: newRegAppId,
       registeredAt: new Date().toLocaleTimeString('bn-BD', { hour: '2-digit', minute: '2-digit' }),
-      registeredTimestamp: Date.now(),
-      createdAt: new Date().toISOString(),
       standName: targetStand ? targetStand.bengaliName : registerForm.standName,
       lat: (targetStand ? targetStand.lat : 24.5530) + (Math.random() - 0.5) * 0.008,
       lng: (targetStand ? targetStand.lng : 90.5520) + (Math.random() - 0.5) * 0.008,
@@ -3329,57 +3318,44 @@ export default function App() {
 
   const handleApproveVerificationGate = (driverId: string, gateType: 'brta' | 'wa' | 'nid') => {
     let newlyFullyVerifiedDriver: Driver | null = null;
-    let fullUpdatedDriver: Driver | null = null;
 
-    setDrivers(prev => {
-      const nextDrivers = prev.map(d => {
-        if (d.id !== driverId) return d;
-        const nextLic = gateType === 'brta' ? true : Boolean(d.licenseVerified);
-        const nextPhone = gateType === 'wa' ? true : Boolean(d.phoneVerified);
-        const nextNid = gateType === 'nid' ? true : Boolean(d.nidVerified);
-        const all3 = nextLic && nextPhone && nextNid;
-        const updated: Driver = {
-          ...d,
-          licenseVerified: nextLic,
-          phoneVerified: nextPhone,
-          nidVerified: nextNid,
-          verificationStatus: all3 ? 'verified' : 'pending',
-          isOnline: all3 ? true : d.isOnline
-        };
-        fullUpdatedDriver = updated;
-        if (all3) {
-          newlyFullyVerifiedDriver = updated;
-        }
-        return updated;
-      });
-      const sorted = nextDrivers.sort(sortDriversDeterministic);
-      try {
-        localStorage.setItem('safar_drivers_v5', JSON.stringify(sorted));
-      } catch {}
-      return sorted;
-    });
-
-    // Real-time Firestore sync with sanitized data and setDoc({ merge: true })
-    const baseTarget = fullUpdatedDriver || drivers.find(d => d.id === driverId);
-    if (baseTarget) {
-      const nextLic = gateType === 'brta' ? true : Boolean(baseTarget.licenseVerified);
-      const nextPhone = gateType === 'wa' ? true : Boolean(baseTarget.phoneVerified);
-      const nextNid = gateType === 'nid' ? true : Boolean(baseTarget.nidVerified);
+    setDrivers(prev => prev.map(d => {
+      if (d.id !== driverId) return d;
+      const nextLic = gateType === 'brta' ? true : Boolean(d.licenseVerified);
+      const nextPhone = gateType === 'wa' ? true : Boolean(d.phoneVerified);
+      const nextNid = gateType === 'nid' ? true : Boolean(d.nidVerified);
       const all3 = nextLic && nextPhone && nextNid;
+      const updated: Driver = {
+        ...d,
+        licenseVerified: nextLic,
+        phoneVerified: nextPhone,
+        nidVerified: nextNid,
+        verificationStatus: all3 ? 'verified' : 'pending',
+        isOnline: all3 ? true : d.isOnline
+      };
+      if (all3) {
+        newlyFullyVerifiedDriver = updated;
+      }
+      return updated;
+    }));
 
-      const firestorePayload = sanitizeFirestoreDriverData({
-        ...baseTarget,
+    // Real-time Firestore sync
+    const targetDrv = drivers.find(d => d.id === driverId);
+    if (targetDrv) {
+      const nextLic = gateType === 'brta' ? true : Boolean(targetDrv.licenseVerified);
+      const nextPhone = gateType === 'wa' ? true : Boolean(targetDrv.phoneVerified);
+      const nextNid = gateType === 'nid' ? true : Boolean(targetDrv.nidVerified);
+      const all3 = nextLic && nextPhone && nextNid;
+      setDoc(doc(db, 'drivers', driverId), {
+        ...targetDrv,
         licenseVerified: nextLic,
         phoneVerified: nextPhone,
         nidVerified: nextNid,
         isVerified: all3,
         verificationStatus: all3 ? 'verified' : 'pending',
-        isOnline: all3 ? true : baseTarget.isOnline,
+        isOnline: all3 ? true : targetDrv.isOnline,
         updatedAt: new Date().toISOString()
-      });
-
-      setDoc(doc(db, 'drivers', driverId), firestorePayload, { merge: true })
-        .catch(err => console.warn('Firestore verify gate error:', err));
+      }, { merge: true }).catch(err => console.warn('Firestore verify gate error:', err));
     }
 
     if (newlyFullyVerifiedDriver) {
@@ -3393,20 +3369,6 @@ export default function App() {
         });
         sounds.playTripCompletedFanfare();
       } catch {}
-    }
-
-    if (verifyingDriverTarget && verifyingDriverTarget.id === driverId) {
-      setVerifyingDriverTarget(prev => prev ? {
-        ...prev,
-        licenseVerified: gateType === 'brta' ? true : prev.licenseVerified,
-        phoneVerified: gateType === 'wa' ? true : prev.phoneVerified,
-        nidVerified: gateType === 'nid' ? true : prev.nidVerified,
-        verificationStatus: (
-          (gateType === 'brta' || prev.licenseVerified) &&
-          (gateType === 'wa' || prev.phoneVerified) &&
-          (gateType === 'nid' || prev.nidVerified)
-        ) ? 'verified' : 'pending'
-      } : null);
     }
 
     if (statusCheckResult && statusCheckResult.id === driverId) {
@@ -3436,59 +3398,34 @@ export default function App() {
   };
 
   const handleRevokeVerificationGate = (driverId: string, gateType: 'brta' | 'wa' | 'nid') => {
-    let fullUpdatedDriver: Driver | null = null;
+    setDrivers(prev => prev.map(d => {
+      if (d.id !== driverId) return d;
+      const nextLic = gateType === 'brta' ? false : d.licenseVerified;
+      const nextPhone = gateType === 'wa' ? false : d.phoneVerified;
+      const nextNid = gateType === 'nid' ? false : d.nidVerified;
+      return {
+        ...d,
+        licenseVerified: nextLic,
+        phoneVerified: nextPhone,
+        nidVerified: nextNid,
+        verificationStatus: 'pending'
+      };
+    }));
 
-    setDrivers(prev => {
-      const nextDrivers = prev.map(d => {
-        if (d.id !== driverId) return d;
-        const nextLic = gateType === 'brta' ? false : Boolean(d.licenseVerified);
-        const nextPhone = gateType === 'wa' ? false : Boolean(d.phoneVerified);
-        const nextNid = gateType === 'nid' ? false : Boolean(d.nidVerified);
-        const updated: Driver = {
-          ...d,
-          licenseVerified: nextLic,
-          phoneVerified: nextPhone,
-          nidVerified: nextNid,
-          verificationStatus: 'pending'
-        };
-        fullUpdatedDriver = updated;
-        return updated;
-      });
-      const sorted = nextDrivers.sort(sortDriversDeterministic);
-      try {
-        localStorage.setItem('safar_drivers_v5', JSON.stringify(sorted));
-      } catch {}
-      return sorted;
-    });
-
-    const baseTarget = fullUpdatedDriver || drivers.find(d => d.id === driverId);
-    if (baseTarget) {
-      const nextLic = gateType === 'brta' ? false : Boolean(baseTarget.licenseVerified);
-      const nextPhone = gateType === 'wa' ? false : Boolean(baseTarget.phoneVerified);
-      const nextNid = gateType === 'nid' ? false : Boolean(baseTarget.nidVerified);
-
-      const firestorePayload = sanitizeFirestoreDriverData({
-        ...baseTarget,
+    const targetDrv = drivers.find(d => d.id === driverId);
+    if (targetDrv) {
+      const nextLic = gateType === 'brta' ? false : targetDrv.licenseVerified;
+      const nextPhone = gateType === 'wa' ? false : targetDrv.phoneVerified;
+      const nextNid = gateType === 'nid' ? false : targetDrv.nidVerified;
+      setDoc(doc(db, 'drivers', driverId), {
+        ...targetDrv,
         licenseVerified: nextLic,
         phoneVerified: nextPhone,
         nidVerified: nextNid,
         isVerified: false,
         verificationStatus: 'pending',
         updatedAt: new Date().toISOString()
-      });
-
-      setDoc(doc(db, 'drivers', driverId), firestorePayload, { merge: true })
-        .catch(err => console.warn('Firestore revoke gate error:', err));
-    }
-
-    if (verifyingDriverTarget && verifyingDriverTarget.id === driverId) {
-      setVerifyingDriverTarget(prev => prev ? {
-        ...prev,
-        licenseVerified: gateType === 'brta' ? false : prev.licenseVerified,
-        phoneVerified: gateType === 'wa' ? false : prev.phoneVerified,
-        nidVerified: gateType === 'nid' ? false : prev.nidVerified,
-        verificationStatus: 'pending'
-      } : null);
+      }, { merge: true }).catch(err => console.warn('Firestore revoke gate error:', err));
     }
 
     showAdminToastMessage('অনুমোদন প্রত্যাহার করে পেন্ডিং করা হয়েছে');
@@ -3513,46 +3450,34 @@ export default function App() {
   // Execute full 3-tier approval with driver SMS notification and celebration
   const handleExecuteFullApproval = (driverId: string) => {
     let targetDrv: Driver | null = null;
-    setDrivers(prev => {
-      const nextDrivers = prev.map(d => {
-        if (d.id !== driverId) return d;
-        const updated: Driver = {
-          ...d,
-          licenseVerified: true,
-          phoneVerified: true,
-          nidVerified: true,
-          verificationStatus: 'verified',
-          isOnline: true
-        };
-        targetDrv = updated;
-        return updated;
-      });
-      const sorted = nextDrivers.sort(sortDriversDeterministic);
-      try {
-        localStorage.setItem('safar_drivers_v5', JSON.stringify(sorted));
-      } catch {}
-      return sorted;
-    });
-
-    const base = targetDrv || drivers.find(d => d.id === driverId);
-    if (base) {
-      const full = {
-        ...base,
+    setDrivers(prev => prev.map(d => {
+      if (d.id !== driverId) return d;
+      const updated: Driver = {
+        ...d,
         licenseVerified: true,
         phoneVerified: true,
         nidVerified: true,
-        verificationStatus: 'verified' as const,
+        verificationStatus: 'verified',
         isOnline: true
       };
-      setSuccessModalDriver(full);
+      targetDrv = updated;
+      return updated;
+    }));
+
+    if (targetDrv) {
+      setSuccessModalDriver(targetDrv);
       showAdminToastMessage('৩-স্তরের পূর্ণ যাচাইকরণ সম্পন্ন ও চালকের ফোনে নোটিফিকেশন পাঠানো হয়েছে!');
 
-      // Firestore update: ALWAYS use setDoc with merge: true and sanitizeFirestoreDriverData!
-      setDoc(doc(db, 'drivers', driverId), sanitizeFirestoreDriverData({
-        ...full,
+      // Firestore update
+      updateDoc(doc(db, 'drivers', driverId), {
         isVerified: true,
+        verificationStatus: 'verified',
+        licenseVerified: true,
+        nidVerified: true,
+        phoneVerified: true,
+        isOnline: true,
         updatedAt: new Date().toISOString()
-      }), { merge: true }).catch(err => console.warn('Firestore full approval error:', err));
+      }).catch(err => console.warn('Firestore update error:', err));
     }
   };
 
@@ -3563,81 +3488,43 @@ export default function App() {
 
   // Revoke All Verifications (Set Pending)
   const handleRevokeDriver = (driverId: string) => {
-    let targetDrv: Driver | null = null;
-    setDrivers(prev => {
-      const nextDrivers = prev.map(d => {
-        if (d.id !== driverId) return d;
-        const updated: Driver = {
-          ...d,
-          licenseVerified: false,
-          phoneVerified: false,
-          nidVerified: false,
-          verificationStatus: 'pending'
-        };
-        targetDrv = updated;
-        return updated;
-      });
-      const sorted = nextDrivers.sort(sortDriversDeterministic);
-      try {
-        localStorage.setItem('safar_drivers_v5', JSON.stringify(sorted));
-      } catch {}
-      return sorted;
-    });
-
-    const base = targetDrv || drivers.find(d => d.id === driverId);
-    if (base) {
-      setDoc(doc(db, 'drivers', driverId), sanitizeFirestoreDriverData({
-        ...base,
-        isVerified: false,
-        verificationStatus: 'pending',
-        licenseVerified: false,
-        nidVerified: false,
-        phoneVerified: false,
-        updatedAt: new Date().toISOString()
-      }), { merge: true }).catch(err => console.warn('Firestore revoke error:', err));
-    }
+    setDrivers(prev => prev.map(d => 
+      d.id === driverId 
+        ? { ...d, licenseVerified: false, phoneVerified: false, nidVerified: false, verificationStatus: 'pending' } 
+        : d
+    ));
     showAdminToastMessage('চালকের সকল অনুমোদন পেন্ডিং করা হয়েছে');
+
+    // Firestore revoke
+    updateDoc(doc(db, 'drivers', driverId), {
+      isVerified: false,
+      verificationStatus: 'pending',
+      licenseVerified: false,
+      nidVerified: false,
+      phoneVerified: false,
+      updatedAt: new Date().toISOString()
+    }).catch(err => console.warn('Firestore revoke error:', err));
   };
 
   // Toggle Driver Online Status
   const handleToggleDriverOnline = (driverId: string) => {
-    let targetDrv: Driver | null = null;
-    setDrivers(prev => {
-      const nextDrivers = prev.map(d => {
-        if (d.id === driverId) {
-          const nextOnline = !d.isOnline;
-          const updated = { ...d, isOnline: nextOnline };
-          targetDrv = updated;
-          return updated;
-        }
-        return d;
-      });
-      const sorted = nextDrivers.sort(sortDriversDeterministic);
-      try {
-        localStorage.setItem('safar_drivers_v5', JSON.stringify(sorted));
-      } catch {}
-      return sorted;
-    });
-
-    const base = targetDrv || drivers.find(d => d.id === driverId);
-    if (base) {
-      setDoc(doc(db, 'drivers', driverId), sanitizeFirestoreDriverData({
-        ...base,
-        updatedAt: new Date().toISOString()
-      }), { merge: true }).catch(err => console.warn('Firestore driver online toggle error:', err));
-    }
+    setDrivers(prev => prev.map(d => {
+      if (d.id === driverId) {
+        const nextOnline = !d.isOnline;
+        updateDoc(doc(db, 'drivers', driverId), {
+          isOnline: nextOnline,
+          updatedAt: new Date().toISOString()
+        }).catch(err => console.warn('Firestore driver online toggle error:', err));
+        return { ...d, isOnline: nextOnline };
+      }
+      return d;
+    }));
     showAdminToastMessage('চালকের সক্রিয়তা স্ট্যাটাস পরিবর্তন হয়েছে');
   };
 
   // Delete Driver
   const handleDeleteDriver = (driverId: string, driverName: string) => {
-    setDrivers(prev => {
-      const remaining = prev.filter(d => d.id !== driverId).sort(sortDriversDeterministic);
-      try {
-        localStorage.setItem('safar_drivers_v5', JSON.stringify(remaining));
-      } catch {}
-      return remaining;
-    });
+    setDrivers(prev => prev.filter(d => d.id !== driverId));
     showAdminToastMessage(`চালক '${driverName}' রিমুভ করা হয়েছে`);
 
     // Firestore delete
@@ -3682,8 +3569,6 @@ export default function App() {
       verificationStatus: isAll3Verified ? 'verified' : 'pending',
       regAppId: 'SAFAR-ADM-' + Math.floor(1000 + Math.random() * 9000),
       registeredAt: new Date().toLocaleTimeString('bn-BD', { hour: '2-digit', minute: '2-digit' }),
-      registeredTimestamp: Date.now(),
-      createdAt: new Date().toISOString(),
       standName: targetStand ? targetStand.bengaliName : 'গফরগাঁও রেলওয়ে স্টেশন স্ট্যান্ড',
       lat: targetStand ? targetStand.lat + (Math.random() - 0.5) * 0.005 : 24.5518,
       lng: targetStand ? targetStand.lng + (Math.random() - 0.5) * 0.005 : 90.5512,
@@ -4206,19 +4091,17 @@ export default function App() {
 
                   </div>
 
-                  {/* Side-by-Side (50:50)% Layout: দ্রুত গন্তব্য (Left) & যানবাহন ও ভাড়ার তালিকা (Right) - Default Folded, Equal Height & Side Scroll */}
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-3.5 my-3 items-start">
+                  {/* Side-by-Side (50:50)% Layout: দ্রুত গন্তব্য (Left) & যানবাহন ও ভাড়ার তালিকা (Right) */}
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-3.5 my-3">
                     
-                    {/* LEFT COLUMN: দ্রুত গন্তব্য (50% desktop, 100% mobile) with Dropdown & Side Scroll */}
+                    {/* LEFT COLUMN: দ্রুত গন্তব্য (50% desktop, 100% mobile) with Dropdown & Scroll */}
                     <div className="w-full bg-slate-50/90 rounded-2xl border border-emerald-200/90 shadow-xs overflow-hidden flex flex-col">
-                      {/* Dropdown Header Bar (Equal Height & Parallel with Right Column) */}
+                      {/* Dropdown Header Bar (styled like সফরের দো'আ) */}
                       <button
                         type="button"
                         onClick={() => setIsQuickDestOpen(!isQuickDestOpen)}
                         aria-expanded={isQuickDestOpen}
-                        className={`w-full h-[56px] min-h-[56px] flex items-center justify-between gap-2 px-3.5 py-2 bg-gradient-to-r from-emerald-50 via-teal-50 to-emerald-100/90 hover:from-emerald-100 hover:to-teal-100 transition-all cursor-pointer text-left select-none group ${
-                          isQuickDestOpen ? 'border-b border-emerald-200/80' : ''
-                        }`}
+                        className="w-full flex items-center justify-between gap-2 px-3.5 py-2.5 bg-gradient-to-r from-emerald-50 via-teal-50 to-emerald-100/90 hover:from-emerald-100 hover:to-teal-100 border-b border-emerald-200/80 transition-all cursor-pointer text-left select-none group"
                       >
                         <div className="flex items-center gap-2 min-w-0">
                           <span className="w-7 h-7 rounded-lg bg-emerald-600 text-white flex items-center justify-center shrink-0 shadow-xs group-hover:bg-emerald-700 transition">
@@ -4228,14 +4111,14 @@ export default function App() {
                             <span className="font-extrabold text-xs sm:text-sm text-emerald-950 block leading-tight">
                               দ্রুত গন্তব্য
                             </span>
-                            <span className="text-[10px] text-emerald-700 font-semibold block leading-tight truncate">
-                              {passengerDestination ? `গন্তব্য: ${passengerDestination}` : 'সহজে পছন্দের গন্তব্য নির্বাচন করুন'}
+                            <span className="text-[10px] text-emerald-700 font-semibold block leading-tight">
+                              সহজে পছন্দের গন্তব্য নির্বাচন করুন
                             </span>
                           </div>
                         </div>
 
                         <div className="flex items-center gap-1.5 shrink-0">
-                          <span className="px-2 py-0.5 rounded-full bg-emerald-200/90 text-emerald-900 text-[10px] font-bold truncate max-w-[110px]">
+                          <span className="px-2 py-0.5 rounded-full bg-emerald-200/90 text-emerald-900 text-[10px] font-bold">
                             {passengerDestination ? passengerDestination.split(' ')[0] : 'স্থানসমূহ'}
                           </span>
                           <span className={`w-5 h-5 rounded-full bg-white border border-emerald-300 flex items-center justify-center text-emerald-700 transition-transform duration-200 ${isQuickDestOpen ? 'rotate-180 bg-emerald-600 text-white border-emerald-600' : ''}`}>
@@ -4244,26 +4127,25 @@ export default function App() {
                         </div>
                       </button>
 
-                      {/* Dropdown Content with Side Scroll & Vertical List (Auto Folds on Selection) */}
+                      {/* Dropdown Content with Scroll Option */}
                       {isQuickDestOpen && (
                         <div className="p-3 space-y-2.5 animate-in fade-in slide-in-from-top-1 duration-200">
-                          {/* Side-Scroll Horizontal Chips Row */}
-                          <div className="flex items-center gap-1.5 overflow-x-auto scrollbar-thin pb-1 [touch-action:pan-x]">
+                          {/* Quick Chips Row */}
+                          <div className="flex items-center gap-1.5 overflow-x-auto scrollbar-thin pb-1">
                             <span className="text-[10px] font-bold text-slate-500 shrink-0">চিহ্নিত:</span>
-                            {(appCustomSettings.quickDestinations || []).slice(0, 8).map(dest => {
+                            {(appCustomSettings.quickDestinations || []).slice(0, 5).map(dest => {
                               const isMatch = passengerDestination.trim() === dest.trim();
                               const shortLabel = dest.replace(' স্ট্যান্ড', '').replace(' (হাসপাতাল)', '');
                               return (
                                 <button
-                                  key={`side-chip-${dest}`}
+                                  key={dest}
                                   type="button"
                                   onClick={() => {
                                     setPassengerDestination(dest);
                                     const coords = resolveLocationCoordinates(dest, true);
                                     setDestCoords(coords);
-                                    setIsQuickDestOpen(false); // Auto fold on selection as requested!
                                   }}
-                                  className={`text-[10.5px] font-bold px-2.5 py-1 rounded-lg border shrink-0 transition-all cursor-pointer ${
+                                  className={`text-[10.5px] font-bold px-2 py-0.5 rounded-md border shrink-0 transition-all cursor-pointer ${
                                     isMatch
                                       ? 'bg-emerald-700 text-white border-emerald-800 shadow-xs ring-1 ring-emerald-500'
                                       : 'bg-white hover:bg-emerald-50 text-slate-700 border-slate-200'
@@ -4301,7 +4183,6 @@ export default function App() {
                                     setPassengerDestination(dest);
                                     const coords = resolveLocationCoordinates(dest, true);
                                     setDestCoords(coords);
-                                    setIsQuickDestOpen(false); // Auto fold on selection as requested!
                                   }}
                                   className={`w-full flex items-center justify-between p-2 rounded-xl border text-left transition-all cursor-pointer ${
                                     isMatch
@@ -4331,16 +4212,14 @@ export default function App() {
                       )}
                     </div>
 
-                    {/* RIGHT COLUMN: যানবাহন ও ভাড়ার তালিকা (50% desktop, 100% mobile) with Dropdown & Side Scroll */}
+                    {/* RIGHT COLUMN: যানবাহন ও ভাড়ার তালিকা (50% desktop, 100% mobile) with Dropdown & Scroll */}
                     <div className="w-full bg-slate-50/90 rounded-2xl border border-amber-200/90 shadow-xs overflow-hidden flex flex-col">
-                      {/* Dropdown Header Bar (Equal Height & Parallel with Left Column) */}
+                      {/* Dropdown Header Bar (styled like সফরের দো'আ) */}
                       <button
                         type="button"
                         onClick={() => setIsVehicleFareOpen(!isVehicleFareOpen)}
                         aria-expanded={isVehicleFareOpen}
-                        className={`w-full h-[56px] min-h-[56px] flex items-center justify-between gap-2 px-3.5 py-2 bg-gradient-to-r from-amber-50 via-orange-50 to-amber-100/90 hover:from-amber-100 hover:to-orange-100 transition-all cursor-pointer text-left select-none group ${
-                          isVehicleFareOpen ? 'border-b border-amber-200/80' : ''
-                        }`}
+                        className="w-full flex items-center justify-between gap-2 px-3.5 py-2.5 bg-gradient-to-r from-amber-50 via-orange-50 to-amber-100/90 hover:from-amber-100 hover:to-orange-100 border-b border-amber-200/80 transition-all cursor-pointer text-left select-none group"
                       >
                         <div className="flex items-center gap-2 min-w-0">
                           <span className="w-7 h-7 rounded-lg bg-amber-500 text-slate-950 flex items-center justify-center shrink-0 shadow-xs group-hover:bg-amber-600 transition">
@@ -4350,8 +4229,8 @@ export default function App() {
                             <span className="font-extrabold text-xs sm:text-sm text-amber-950 block leading-tight">
                               যানবাহন ও ভাড়ার তালিকা
                             </span>
-                            <span className="text-[10px] text-amber-800 font-semibold block leading-tight truncate">
-                              নির্বাচিত: {categories.find(c => c.id === passengerSelectedVehicle)?.nameBengali || 'সিএনজি'} • নির্ধারিত ভাড়া: ৳{calculatedFare}
+                            <span className="text-[10px] text-amber-800 font-semibold block leading-tight">
+                              বাহন অনুযায়ী নির্ধারিত ভাড়ার রেট
                             </span>
                           </div>
                         </div>
@@ -4366,44 +4245,9 @@ export default function App() {
                         </div>
                       </button>
 
-                      {/* Dropdown Content with Side Scroll & Vertical List (Auto Folds on Selection) */}
+                      {/* Dropdown Content with Scroll Option */}
                       {isVehicleFareOpen && (
-                        <div className="p-3 space-y-2.5 animate-in fade-in slide-in-from-top-1 duration-200">
-                          {/* Side-Scroll Horizontal Vehicle Cards Row */}
-                          <div className="flex items-center gap-2 overflow-x-auto scrollbar-thin pb-1 [touch-action:pan-x]">
-                            {categories.filter(c => c.id !== 'all').map((cat) => {
-                              const isSelected = passengerSelectedVehicle === cat.id;
-                              const fare = calculateFareForCategory(cat.id, calculatedDistance);
-                              return (
-                                <button
-                                  key={`side-veh-${cat.id}`}
-                                  type="button"
-                                  onClick={() => {
-                                    setPassengerSelectedVehicle(cat.id);
-                                    setSelectedCategory(cat.id);
-                                    setIsVehicleFareOpen(false); // Auto fold on selection as requested!
-                                  }}
-                                  className={`px-3 py-1.5 rounded-xl border shrink-0 text-left transition-all cursor-pointer flex items-center gap-2 ${
-                                    isSelected
-                                      ? 'bg-amber-100 border-amber-500 shadow-xs ring-1 ring-amber-400'
-                                      : 'bg-white hover:bg-amber-50/60 border-slate-200'
-                                  }`}
-                                >
-                                  <CategoryBadgeLogo category={cat.id} size="compact" />
-                                  <div className="truncate">
-                                    <span className="text-[11px] font-bold block leading-tight text-slate-800">
-                                      {cat.nameBengali}
-                                    </span>
-                                    <span className="text-[10px] font-black text-amber-900 block leading-tight">
-                                      {cat.isFree ? 'ফ্রি' : `৳ ${fare}`}
-                                    </span>
-                                  </div>
-                                </button>
-                              );
-                            })}
-                          </div>
-
-                          {/* Scrollable Vehicle List */}
+                        <div className="p-3 space-y-2 animate-in fade-in slide-in-from-top-1 duration-200">
                           <div className="max-h-56 overflow-y-auto scrollbar-thin pr-1 space-y-1.5">
                             {categories.filter(c => c.id !== 'all').map((cat) => {
                               const isSelected = passengerSelectedVehicle === cat.id;
@@ -4417,7 +4261,6 @@ export default function App() {
                                   onClick={() => {
                                     setPassengerSelectedVehicle(cat.id);
                                     setSelectedCategory(cat.id);
-                                    setIsVehicleFareOpen(false); // Auto fold on selection as requested!
                                   }}
                                   className={`w-full flex items-center justify-between p-2 rounded-xl border text-left transition-all cursor-pointer ${
                                     isSelected
@@ -4920,7 +4763,7 @@ export default function App() {
                             <div
                               key={driver.id}
                               onClick={() => setSelectedDriver(driver)}
-                              className={`bg-white rounded-xl p-2 sm:p-2.5 border transition-colors duration-150 hover:shadow-md cursor-pointer flex flex-col justify-between group active:scale-[0.98] ${
+                              className={`bg-white rounded-xl p-2 sm:p-2.5 border transition-all hover:shadow-md cursor-pointer flex flex-col justify-between group active:scale-[0.98] ${
                                 isAmbulance 
                                   ? 'border-red-300 hover:border-red-400 bg-red-50/20' 
                                   : 'border-slate-200 hover:border-emerald-400'
@@ -6901,8 +6744,25 @@ export default function App() {
         onOpenVerificationGate={handleOpenVerificationGate}
         onApproveAllDriver={handleApproveAllDriver}
         onRevokeDriver={handleRevokeDriver}
-        onToggleDriverOnline={handleToggleDriverOnline}
-        onDeleteDriver={handleDeleteDriver}
+        onToggleDriverOnline={(driverId) => {
+          setDrivers(prev => prev.map(d => {
+            if (d.id === driverId) {
+              const nextOnline = !d.isOnline;
+              updateDoc(doc(db, 'drivers', driverId), {
+                isOnline: nextOnline,
+                updatedAt: new Date().toISOString()
+              }).catch(err => console.warn('Firestore driver online toggle error:', err));
+              return { ...d, isOnline: nextOnline };
+            }
+            return d;
+          }));
+          showAdminToastMessage('চালকের সক্রিয়তা স্ট্যাটাস পরিবর্তন হয়েছে');
+        }}
+        onDeleteDriver={(driverId, name) => {
+          setDrivers(prev => prev.filter(d => d.id !== driverId));
+          deleteDoc(doc(db, 'drivers', driverId)).catch(err => console.warn('Firestore driver delete error:', err));
+          showAdminToastMessage(`চালক '${name}' রিমুভ করা হয়েছে`);
+        }}
         customSettings={appCustomSettings}
         onSaveCustomSettings={saveCustomSettings}
         onResetToDefaults={handleResetToDefaults}
@@ -7357,7 +7217,7 @@ export default function App() {
                         (adminDriverVerificationFilter === 'verified' && Boolean(d.licenseVerified && d.phoneVerified && d.nidVerified)) ||
                         (adminDriverVerificationFilter === 'pending' && !Boolean(d.licenseVerified && d.phoneVerified && d.nidVerified));
                       return matchesSearch && matchesCat && matchesStand && matchesVerif;
-                    }).sort(sortDriversDeterministic);
+                    });
 
                     return (
                       <div className="space-y-2.5">
@@ -7378,7 +7238,7 @@ export default function App() {
                               const isAll3 = Boolean(driver.licenseVerified && driver.phoneVerified && driver.nidVerified);
 
                               return (
-                                <div key={driver.id} className="bg-white p-3 rounded-xl border border-slate-200 shadow-xs flex flex-col justify-between hover:border-emerald-300 transition-colors text-xs">
+                                <div key={driver.id} className="bg-white p-3 rounded-xl border border-slate-200 shadow-xs flex flex-col justify-between hover:border-emerald-300 transition-all text-xs">
                                   <div>
                                     <div className="flex items-start justify-between gap-1.5 mb-1.5">
                                       <div>
