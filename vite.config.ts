@@ -46,6 +46,8 @@ export default defineConfig(() => {
           ],
         },
         workbox: {
+          globIgnores: ['**/assets/aistudio/**', '**/*.zip'],
+          maximumFileSizeToCacheInBytes: 6 * 1024 * 1024,
           navigateFallbackDenylist: [/^\/.*\.zip$/, /^\/api\/.*/],
           globPatterns: ['**/*.{js,css,html,ico,png,svg,woff,woff2}'],
           runtimeCaching: [
@@ -95,7 +97,9 @@ export default defineConfig(() => {
               urlPath === '/download-zip' ||
               urlPath === '/api/download-zip'
             ) {
-              const zipPath = path.resolve(process.cwd(), 'public', 'safar-app.zip');
+              const primaryZip = path.resolve(process.cwd(), 'public', 'safar-gafargaon-clean-source.zip');
+              const fallbackZip = path.resolve(process.cwd(), 'public', 'safar-app.zip');
+              const zipPath = fs.existsSync(primaryZip) ? primaryZip : fallbackZip;
               if (fs.existsSync(zipPath)) {
                 const stat = fs.statSync(zipPath);
                 res.writeHead(200, {
