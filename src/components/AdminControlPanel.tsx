@@ -2417,7 +2417,7 @@ export const AdminControlPanel: React.FC<AdminControlPanelProps> = ({
                     ) : (
                       <>
                         <Download className="w-4 h-4 text-slate-950" />
-                        <span>📥 সম্পূর্ণ প্রজেক্ট জিপ ডাউনলোড করুন (৬.০০ MB • অফিশিয়াল ক্লিন বিল্ড)</span>
+                        <span>📥 সম্পূর্ণ প্রজেক্ট জিপ ডাউনলোড করুন (৩.৪১ MB • অফিশিয়াল ক্লিন সোর্স)</span>
                       </>
                     )}
                   </button>
@@ -2428,7 +2428,7 @@ export const AdminControlPanel: React.FC<AdminControlPanelProps> = ({
                     className="inline-flex items-center gap-1.5 bg-white hover:bg-slate-50 text-slate-800 font-bold px-3.5 py-2.5 rounded-xl text-xs sm:text-sm shadow-xs border border-slate-300 cursor-pointer transition"
                   >
                     <Download className="w-3.5 h-3.5 text-slate-600" />
-                    <span>সরাসরি লিঙ্ক (৬.০০ MB)</span>
+                    <span>সরাসরি ডাউনলোড লিঙ্ক (৩.৪১ MB)</span>
                   </a>
 
                   {onOpenSourceCodeModal && (

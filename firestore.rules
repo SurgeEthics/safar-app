@@ -52,6 +52,22 @@ service cloud.firestore {
     // Passengers profile and data
     match /passengers/{passengerId} {
       allow read, write: if true;
+      match /{document=**} {
+        allow read, write: if true;
+      }
+    }
+
+    // Users profile and trips subcollections
+    match /users/{userId} {
+      allow read, write: if true;
+      match /{document=**} {
+        allow read, write: if true;
+      }
+    }
+
+    // WhatsApp OTP & PIN verification sessions
+    match /whatsapp_verifications/{phone} {
+      allow read, write: if true;
     }
 
     // Admins collection

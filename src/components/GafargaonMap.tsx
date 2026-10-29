@@ -17,11 +17,14 @@ import {
   Car,
   Lock,
   Unlock,
+  ChevronDown,
+  ChevronUp,
   X
 } from 'lucide-react';
 import { Stand, Driver, VehicleCategory } from '../types';
 import { LiveDriverLocation, LivePassengerLocation } from '../services/liveLocationService';
 import { toBengaliNumber } from '../utils/calculator';
+import { AutoMarqueeText } from './AutoMarqueeText';
 
 interface GafargaonMapProps {
   // Static/Fallback drivers & stands
@@ -68,8 +71,14 @@ interface GafargaonMapProps {
     currentDriverLng: number;
     passengerLat: number;
     passengerLng: number;
+    destLat?: number;
+    destLng?: number;
+    pickupTitle?: string;
+    destTitle?: string;
     distanceKm: number;
     etaMinutes: number;
+    fare?: number;
+    status?: 'en_route' | 'arrived' | 'in_transit' | 'completed';
   } | null;
 
   onSelectPickupPlace?: (placeName: string) => void;
@@ -120,6 +129,7 @@ export const GafargaonMap: React.FC<GafargaonMapProps> = ({
     }
     return false;
   });
+  const [isRouteOverlayCollapsed, setIsRouteOverlayCollapsed] = useState<boolean>(false);
   const [showLockNotification, setShowLockNotification] = useState<boolean>(false);
   const lockNotificationTimerRef = useRef<any>(null);
   const lastFittedRouteKeyRef = useRef<string>('');
@@ -580,10 +590,10 @@ export const GafargaonMap: React.FC<GafargaonMapProps> = ({
           <div style="position: relative;">
             <div style="position: absolute; width: 44px; height: 44px; border-radius: 50%; background: rgba(37, 99, 235, 0.4); animation: ping 2s cubic-bezier(0, 0, 0.2, 1) infinite; top: -6px; left: -6px;"></div>
             <div style="background-color: #2563eb; color: white; width: 32px; height: 32px; border-radius: 50%; display: flex; align-items: center; justify-content: center; box-shadow: 0 4px 12px rgba(37, 99, 235, 0.5); border: 2.5px solid #ffffff; font-weight: 900; font-size: 14px;">
-              📍
+              A
             </div>
             <div style="position: absolute; bottom: -18px; left: 50%; transform: translateX(-50%); background: #1e3a8a; color: white; font-size: 9.5px; font-weight: 800; white-space: nowrap; padding: 1px 6px; border-radius: 10px;">
-              পিকআপ পয়েন্ট
+              পিকআপ (A)
             </div>
           </div>
         `,
@@ -592,10 +602,49 @@ export const GafargaonMap: React.FC<GafargaonMapProps> = ({
         popupAnchor: [0, -18]
       });
       const bPassMarker = L.marker([activeBooking.passengerLat, activeBooking.passengerLng], { icon: passPickupIcon });
-      bPassMarker.bindTooltip('📍 আপনার পিকআপ অবস্থান', { direction: 'top', offset: [0, -18] });
+      bPassMarker.bindTooltip(`📍 পিকআপ (A): ${activeBooking.pickupTitle || pickupTitle || 'যাত্রী পিকআপ'}`, { direction: 'top', offset: [0, -18] });
       markersGroup.addLayer(bPassMarker);
 
-      // 3. Dynamic Curved/Direct Polyline Connecting Driver and Passenger
+      // 3. Destination Marker (B) & Connecting Line
+      const effectiveDestLat = activeBooking.destLat || destCoords?.lat;
+      const effectiveDestLng = activeBooking.destLng || destCoords?.lng;
+      if (effectiveDestLat && effectiveDestLng) {
+        const destIcon = L.divIcon({
+          className: 'custom-active-destination-marker',
+          html: `
+            <div style="position: relative;">
+              <div style="position: absolute; width: 44px; height: 44px; border-radius: 50%; background: rgba(220, 38, 38, 0.4); animation: ping 2s cubic-bezier(0, 0, 0.2, 1) infinite; top: -6px; left: -6px;"></div>
+              <div style="background-color: #dc2626; color: white; width: 32px; height: 32px; border-radius: 50%; display: flex; align-items: center; justify-content: center; box-shadow: 0 4px 12px rgba(220, 38, 38, 0.5); border: 2.5px solid #ffffff; font-weight: 900; font-size: 14px;">
+                B
+              </div>
+              <div style="position: absolute; bottom: -18px; left: 50%; transform: translateX(-50%); background: #991b1b; color: white; font-size: 9.5px; font-weight: 800; white-space: nowrap; padding: 1px 6px; border-radius: 10px;">
+                গন্তব্য (B)
+              </div>
+            </div>
+          `,
+          iconSize: [32, 32],
+          iconAnchor: [16, 16],
+          popupAnchor: [0, -18]
+        });
+        const bDestMarker = L.marker([effectiveDestLat, effectiveDestLng], { icon: destIcon });
+        bDestMarker.bindTooltip(`🏁 গন্তব্য (B): ${activeBooking.destTitle || destTitle || 'গন্তব্য স্থান'}`, { direction: 'top', offset: [0, -18] });
+        markersGroup.addLayer(bDestMarker);
+
+        // Connecting route from Pickup to Destination (emerald line)
+        const destRoutePoints: [number, number][] = [
+          [activeBooking.passengerLat, activeBooking.passengerLng],
+          [effectiveDestLat, effectiveDestLng]
+        ];
+        L.polyline(destRoutePoints, {
+          color: '#059669',
+          weight: 4,
+          opacity: 0.85,
+          dashArray: '6, 6',
+          lineCap: 'round'
+        }).addTo(map);
+      }
+
+      // 4. Dynamic Curved/Direct Polyline Connecting Driver and Passenger
       const routePoints: [number, number][] = [
         [activeBooking.currentDriverLat, activeBooking.currentDriverLng],
         [
@@ -615,15 +664,19 @@ export const GafargaonMap: React.FC<GafargaonMapProps> = ({
 
       routePolylineRef.current = polyline;
 
-      // Fit bounds so both Driver and Passenger are fully framed with comfortable padding
-      const bookingKey = `${activeBooking.currentDriverLat.toFixed(4)},${activeBooking.passengerLat.toFixed(4)}`;
+      // Fit bounds so Driver, Passenger Pickup, and Destination are all framed with comfortable padding
+      const bookingKey = `${activeBooking.currentDriverLat.toFixed(4)},${activeBooking.passengerLat.toFixed(4)},${effectiveDestLat?.toFixed(4) || '0'}`;
       if (lastFittedBookingIdRef.current !== bookingKey) {
         lastFittedBookingIdRef.current = bookingKey;
-        const bounds = L.latLngBounds([
+        const pointsToFit: [number, number][] = [
           [activeBooking.currentDriverLat, activeBooking.currentDriverLng],
           [activeBooking.passengerLat, activeBooking.passengerLng]
-        ]);
-        map.fitBounds(bounds, { padding: [60, 60], maxZoom: 16 });
+        ];
+        if (effectiveDestLat && effectiveDestLng) {
+          pointsToFit.push([effectiveDestLat, effectiveDestLng]);
+        }
+        const bounds = L.latLngBounds(pointsToFit);
+        map.fitBounds(bounds, { padding: [55, 55], maxZoom: 15 });
       }
     }
     // F. Route Planning Preview (A to B)
@@ -964,53 +1017,122 @@ export const GafargaonMap: React.FC<GafargaonMapProps> = ({
           </div>
         )}
 
-        {/* 3. Floating Route Distance & Live Stats Overlay when pickup & dest are set (Transparent, solid black on hover, no blur) */}
-        {pickupCoords && destCoords && (pickupCoords.lat !== destCoords.lat || pickupCoords.lng !== destCoords.lng) && Boolean(calculatedDistance && calculatedDistance > 0) && (
-          <div 
-            className="absolute top-2.5 left-2.5 z-20 bg-black/60 hover:bg-black/90 text-white rounded-xl p-2.5 shadow-md border border-white/30 max-w-[280px] animate-in fade-in transition-colors duration-200"
-            style={{ textShadow: '0 1px 3px rgba(0,0,0,0.95)' }}
-          >
-            <div className="flex items-center justify-between gap-1 mb-1">
-              <div className="flex items-center gap-1.5 text-emerald-400 font-extrabold text-[11px]">
+        {/* 3. Floating Route Distance & Live Stats Overlay (Responsive, Collapsible on Mobile, with Smooth Marquee) */}
+        {((pickupCoords && destCoords && (pickupCoords.lat !== destCoords.lat || pickupCoords.lng !== destCoords.lng) && Boolean(calculatedDistance && calculatedDistance > 0)) || Boolean(activeBooking)) && (() => {
+          const effectivePickup = activeBooking?.pickupTitle || pickupTitle || 'পিকআপ';
+          const effectiveDest = activeBooking?.destTitle || destTitle || 'গন্তব্য';
+          const effectiveDistance = activeBooking?.distanceKm || calculatedDistance || 1.2;
+          const effectiveDuration = activeBooking?.etaMinutes || calculatedDurationMinutes || Math.max(2, Math.round(effectiveDistance * 2.5));
+
+          let googleMapsUrl = '';
+          let googleMapsLabel = 'গুগল ম্যাপে লাইভ রুট (GPS)';
+
+          if (activeBooking) {
+            if (activeBooking.status === 'in_transit') {
+              const targetLat = activeBooking.destLat || destCoords?.lat;
+              const targetLng = activeBooking.destLng || destCoords?.lng;
+              if (targetLat && targetLng) {
+                googleMapsUrl = `https://www.google.com/maps/dir/?api=1&origin=${activeBooking.passengerLat},${activeBooking.passengerLng}&destination=${targetLat},${targetLng}&travelmode=driving`;
+                googleMapsLabel = 'গুগল ম্যাপে GPS (পিকআপ ➔ গন্তব্য)';
+              }
+            } else {
+              googleMapsUrl = `https://www.google.com/maps/dir/?api=1&origin=${activeBooking.currentDriverLat},${activeBooking.currentDriverLng}&destination=${activeBooking.passengerLat},${activeBooking.passengerLng}&travelmode=driving`;
+              googleMapsLabel = 'গুগল ম্যাপে GPS (চালক ➔ পিকআপ)';
+            }
+          }
+          if (!googleMapsUrl && pickupCoords && destCoords) {
+            googleMapsUrl = `https://www.google.com/maps/dir/?api=1&origin=${pickupCoords.lat},${pickupCoords.lng}&destination=${destCoords.lat},${destCoords.lng}&travelmode=driving`;
+            googleMapsLabel = 'গুগল ম্যাপে লাইভ রুট (GPS)';
+          }
+
+          if (isRouteOverlayCollapsed) {
+            return (
+              <button
+                type="button"
+                onClick={() => setIsRouteOverlayCollapsed(false)}
+                className="absolute top-2.5 left-2.5 z-20 bg-slate-900/85 hover:bg-slate-900 text-white rounded-xl px-3 py-1.5 shadow-lg border border-white/20 flex items-center gap-1.5 cursor-pointer text-xs font-bold transition-all animate-in fade-in"
+                title="রুট বিবরণ বড় করুন"
+              >
                 <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
-                <span>রুট প্ল্যান ও নির্ভুল দূরত্ব</span>
+                <span>{toBengaliNumber(effectiveDistance)} কিমি রুট</span>
+                <ChevronDown className="w-3.5 h-3.5 text-slate-300 ml-0.5" />
+              </button>
+            );
+          }
+
+          return (
+            <div 
+              className="absolute top-2.5 left-2.5 z-20 bg-slate-950/80 hover:bg-slate-950/95 text-white rounded-2xl p-2.5 sm:p-3 shadow-xl border border-white/25 w-[260px] xs:w-[285px] sm:w-[320px] max-w-[calc(100vw-24px)] animate-in fade-in transition-all duration-200"
+              style={{ textShadow: '0 1px 3px rgba(0,0,0,0.95)' }}
+            >
+              <div className="flex items-center justify-between gap-1 mb-1">
+                <div className="flex items-center gap-1.5 text-emerald-400 font-extrabold text-[11px] truncate">
+                  <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse shrink-0"></span>
+                  <span className="truncate">{activeBooking ? 'সক্রিয় ট্রিপ রুট' : 'রুট প্ল্যান ও নির্ভুল দূরত্ব'}</span>
+                </div>
+                <div className="flex items-center gap-0.5 shrink-0">
+                  <button
+                    type="button"
+                    onClick={() => setIsRouteOverlayCollapsed(true)}
+                    className="p-1 hover:bg-white/20 rounded-md text-slate-300 hover:text-white transition-colors cursor-pointer"
+                    title="সংক্ষেপ করুন (ম্যাপ দেখতে)"
+                  >
+                    <ChevronUp className="w-3.5 h-3.5" />
+                  </button>
+                  {onClearRoute && !activeBooking && (
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        onClearRoute();
+                      }}
+                      className="p-1 hover:bg-white/20 rounded-md text-slate-300 hover:text-white transition-colors cursor-pointer"
+                      title="রুট মুছুন"
+                    >
+                      <X className="w-3.5 h-3.5" />
+                    </button>
+                  )}
+                </div>
               </div>
-              {onClearRoute && (
-                <button
-                  type="button"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    onClearRoute();
-                  }}
-                  className="p-1 hover:bg-white/20 rounded-md text-slate-300 hover:text-white transition-colors cursor-pointer"
-                  title="রুট মুছুন"
+
+              <div className="flex items-baseline gap-2 mb-1.5">
+                <span className="text-base sm:text-lg font-black text-white">
+                  {toBengaliNumber(effectiveDistance)} কিমি
+                </span>
+                <span className="text-[11px] text-emerald-300 font-bold">
+                  (~{toBengaliNumber(effectiveDuration)} মিনিট)
+                </span>
+                {activeBooking?.fare && (
+                  <span className="text-[11px] text-amber-300 font-extrabold ml-auto bg-amber-400/20 px-1.5 py-0.5 rounded-md border border-amber-400/30">
+                    ৳ {toBengaliNumber(activeBooking.fare)}
+                  </span>
+                )}
+              </div>
+
+              {/* Marquee Animated Full Route text */}
+              <div className="border-t border-white/20 pt-1.5 overflow-hidden w-full">
+                <AutoMarqueeText
+                  text={`A: ${effectivePickup} ➔ B: ${effectiveDest}`}
+                  className="text-[10.5px] font-bold text-slate-100"
+                  speed={32}
+                  pauseAtEndMs={1500}
+                />
+              </div>
+
+              {googleMapsUrl && (
+                <a
+                  href={googleMapsUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="mt-2 flex items-center justify-center gap-1.5 w-full bg-blue-600 hover:bg-blue-500 text-white font-extrabold text-[11px] py-1.5 px-2.5 rounded-xl transition-all shadow-md active:scale-98"
                 >
-                  <X className="w-3.5 h-3.5" />
-                </button>
+                  <Navigation className="w-3.5 h-3.5 text-white shrink-0" />
+                  <span className="truncate">{googleMapsLabel}</span>
+                </a>
               )}
             </div>
-            <div className="flex items-baseline gap-2">
-              <span className="text-base sm:text-lg font-black text-white">
-                {toBengaliNumber(calculatedDistance || 0)} কিমি
-              </span>
-              <span className="text-[11px] text-emerald-300 font-bold">
-                (~{toBengaliNumber(calculatedDurationMinutes || 5)} মিনিট)
-              </span>
-            </div>
-            <div className="text-[10px] text-slate-200 truncate mt-1 border-t border-white/20 pt-1">
-              <span className="text-emerald-400 font-bold">A:</span> {pickupTitle?.slice(0, 18) || 'পিকআপ'} ➔ <span className="text-red-400 font-bold">B:</span> {destTitle?.slice(0, 18) || 'গন্তব্য'}
-            </div>
-            <a
-              href={`https://www.google.com/maps/dir/?api=1&origin=${pickupCoords.lat},${pickupCoords.lng}&destination=${destCoords.lat},${destCoords.lng}`}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="mt-2 flex items-center justify-center gap-1.5 w-full bg-blue-600 hover:bg-blue-500 text-white font-bold text-[10px] py-1 px-2 rounded-lg transition-all shadow-xs"
-            >
-              <Navigation className="w-3 h-3 text-white" />
-              <span>গুগল ম্যাপে লাইভ রুট (GPS)</span>
-            </a>
-          </div>
-        )}
+          );
+        })()}
 
         {/* Floating live legend at bottom-right (Semi-Transparent Frosted Glass) */}
         <div className="absolute bottom-2 right-2 z-20 bg-white/75 backdrop-blur-md rounded-xl p-2 shadow-md border border-slate-200/80 text-[10px] font-semibold space-y-1 hidden xs:block">

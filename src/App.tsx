@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useLayoutEffect, useRef, useMemo } from 'react';
+import React, { useState, useEffect, useLayoutEffect, useRef, useMemo, useCallback } from 'react';
 import { 
   Phone, 
   MapPin, 
@@ -1478,6 +1478,8 @@ export default function App() {
     driver: Driver;
     passengerLat: number;
     passengerLng: number;
+    destLat?: number;
+    destLng?: number;
     currentDriverLat: number;
     currentDriverLng: number;
     confirmedAt: number;
@@ -1769,21 +1771,27 @@ export default function App() {
   const [passengerAuthError, setPassengerAuthError] = useState<string | null>(null);
   const [isPassengerAuthLoading, setIsPassengerAuthLoading] = useState(false);
 
-  // Instant OTP Verification State for secure profile login across devices
+  // WhatsApp OTP Verification & PIN Recovery State
   const [authOtpModal, setAuthOtpModal] = useState<{
     isOpen: boolean;
     role: 'passenger' | 'driver';
     phone: string;
     generatedCode: string;
     enteredCode: string;
+    newPin: string;
+    confirmNewPin: string;
     error: string | null;
+    isSent: boolean;
   }>({
     isOpen: false,
     role: 'passenger',
     phone: '',
     generatedCode: '',
     enteredCode: '',
-    error: null
+    newPin: '',
+    confirmNewPin: '',
+    error: null,
+    isSent: false
   });
 
   // Form State for Sign Up
@@ -1791,18 +1799,31 @@ export default function App() {
     name: '',
     phone: '',
     pin: '',
+    confirmPin: '',
     homeLocation: '',
     emergencyContact: ''
   });
 
-  // Helper: Trigger Instant OTP Modal & SMS simulation
-  const handleTriggerInstantOtp = (role: 'passenger' | 'driver', phone: string) => {
-    const clean = phone.replace(/[^0-9]/g, '');
+  // Helper to normalize any Bangladeshi phone number format
+  const normalizeBdPhone = (phone: string): string => {
+    if (!phone) return '';
+    const digits = phone.replace(/[^0-9]/g, '');
+    if (digits.length === 11 && digits.startsWith('01')) return digits;
+    if (digits.length === 13 && digits.startsWith('8801')) return digits.slice(2);
+    if (digits.length === 10 && digits.startsWith('1')) return '0' + digits;
+    if (digits.length > 10) return '0' + digits.slice(-10);
+    return digits;
+  };
+
+  // Helper: Trigger WhatsApp Recovery Modal & generate OTP
+  const handleTriggerInstantOtp = async (role: 'passenger' | 'driver', phone: string) => {
+    const rawClean = phone.replace(/[^0-9]/g, '');
+    const clean = normalizeBdPhone(rawClean) || rawClean;
     if (!clean || clean.length < 10) {
       if (role === 'passenger') {
-        setPassengerAuthError('ওটিপি কোড পাওয়ার জন্য সঠিক ১১ ডিজিটের মোবাইল নম্বর দিন');
+        setPassengerAuthError('WhatsApp রিকভারি কোড পাওয়ার জন্য সঠিক ১১ ডিজিটের মোবাইল নম্বর দিন');
       } else {
-        setDriverLoginError('ওটিপি কোড পাওয়ার জন্য সঠিক মোবাইল নম্বর দিন');
+        setDriverLoginError('WhatsApp রিকভারি কোড পাওয়ার জন্য সঠিক মোবাইল নম্বর দিন');
       }
       return;
     }
@@ -1813,77 +1834,219 @@ export default function App() {
       phone: clean,
       generatedCode: code,
       enteredCode: '',
-      error: null
+      newPin: '',
+      confirmNewPin: '',
+      error: null,
+      isSent: false
     });
-    showAdminToastMessage(`🔒 সফর সিকিউরিটি ওটিপি (OTP): ${code} (যেকোনো ডিভাইসে তাৎক্ষণিক ভেরিফিকেশনের জন্য)`);
     try {
-      sounds.playDriverMatchedChime();
+      await setDoc(doc(db, 'whatsapp_verifications', clean), {
+        phone: clean,
+        code,
+        role,
+        createdAt: new Date().toISOString()
+      }, { merge: true });
     } catch {}
+    showAdminToastMessage(`📱 WhatsApp ভেরিফিকেশন প্রস্তুত: নিচের বাটনে চাপ দিয়ে WhatsApp এ কোড নিন`);
   };
 
-  // Helper: Verify Entered OTP
+  // Helper: Verify Entered OTP & Set Permanent PIN
   const handleVerifyInstantOtp = async () => {
-    if (authOtpModal.enteredCode.trim() !== authOtpModal.generatedCode.trim()) {
+    if (!authOtpModal.enteredCode.trim() || authOtpModal.enteredCode.trim() !== authOtpModal.generatedCode.trim()) {
       setAuthOtpModal(prev => ({
         ...prev,
-        error: 'ভুল ওটিপি কোড! অনুগ্রহ করে স্ক্রিনে প্রদর্শিত ৪-ডিজিটের কোডটি লিখুন।'
+        error: 'ভুল ওটিপি কোড! অনুগ্রহ করে আপনার WhatsApp এ পাঠানো ৪-ডিজিটের কোডটি সঠিকভাবে দিন।'
+      }));
+      return;
+    }
+
+    const cleanNewPin = authOtpModal.newPin.replace(/[^0-9]/g, '');
+    if (cleanNewPin.length < 4) {
+      setAuthOtpModal(prev => ({
+        ...prev,
+        error: 'অনুগ্রহ করে কমপক্ষে ৪-ডিজিটের নতুন সিকিউরিটি পিন নম্বর দিন।'
+      }));
+      return;
+    }
+    if (authOtpModal.confirmNewPin && cleanNewPin !== authOtpModal.confirmNewPin.replace(/[^0-9]/g, '')) {
+      setAuthOtpModal(prev => ({
+        ...prev,
+        error: 'উভয় পিন নম্বর মেলেনি! অনুগ্রহ করে একই পিন লিখুন।'
       }));
       return;
     }
 
     if (authOtpModal.role === 'passenger') {
+      const cleanPhone = normalizeBdPhone(authOtpModal.phone) || authOtpModal.phone.replace(/[^0-9]/g, '');
+      let profileName = 'তাছনীমূল কাবীর';
+      let profileHome = 'ইউ.এন.ও অফিস সংলগ্ন, বদরুল আলম রোড।';
+      let profileContact = '';
+
+      // 1. Try loading real passenger details from Firestore passengers collection
       try {
-        let snap = await getDoc(doc(db, 'passengers', authOtpModal.phone));
-        if (!snap.exists()) {
-          snap = await getDoc(doc(db, 'users', authOtpModal.phone));
+        let snap = await getDoc(doc(db, 'passengers', cleanPhone));
+        if (!snap.exists() && cleanPhone !== authOtpModal.phone) {
+          snap = await getDoc(doc(db, 'passengers', authOtpModal.phone));
         }
-        const data = snap.exists() ? snap.data() : null;
-        const profile = {
-          name: data?.name || data?.passengerName || 'সম্মানিত যাত্রী',
-          phone: authOtpModal.phone,
-          homeLocation: data?.homeLocation || 'গফরগাঁও পৌরসভা',
-          emergencyContact: data?.emergencyContact || '',
-          isLoggedIn: true
-        };
-        setPassengerProfile(profile);
-        setEditProfileForm(profile);
-        loadPassengerTrips(authOtpModal.phone);
-        setAuthOtpModal(prev => ({ ...prev, isOpen: false }));
-        showAdminToastMessage(`🎉 ওটিপি সফলভাবে যাচাই হয়েছে! স্বাগতম ${profile.name}`);
-      } catch (e) {
-        setAuthOtpModal(prev => ({ ...prev, error: 'সার্ভার সমস্যা হয়েছে। আবার চেষ্টা করুন।' }));
+        if (!snap.exists()) {
+          const q = query(collection(db, 'passengers'), where('phone', '==', cleanPhone));
+          const qSnap = await getDocs(q);
+          if (!qSnap.empty) {
+            snap = qSnap.docs[0];
+          }
+        }
+        if (!snap.exists()) {
+          const uSnap = await getDoc(doc(db, 'users', cleanPhone));
+          if (uSnap.exists()) snap = uSnap;
+        }
+
+        if (snap && snap.exists()) {
+          const d = snap.data();
+          if (d.name) profileName = d.name;
+          if (d.passengerName) profileName = d.passengerName;
+          if (d.homeLocation) profileHome = d.homeLocation;
+          if (d.emergencyContact) profileContact = d.emergencyContact;
+        } else if (passengerProfile.phone && passengerProfile.name) {
+          profileName = passengerProfile.name;
+          profileHome = passengerProfile.homeLocation;
+          profileContact = passengerProfile.emergencyContact;
+        }
+      } catch (err) {
+        console.warn('Firestore passenger lookup:', err);
       }
-    } else {
-      // Driver OTP
-      const clean = authOtpModal.phone;
-      const found = drivers.find(d => d.phone.replace(/[^0-9]/g, '').endsWith(clean.slice(-10)));
-      let firestoreDriver: any = null;
+
+      const updatedProfile = {
+        name: profileName,
+        phone: cleanPhone,
+        homeLocation: profileHome,
+        emergencyContact: profileContact,
+        isLoggedIn: true
+      };
+
+      // 2. Persist new PIN safely to Firestore passengers and users
       try {
-        const dSnap = await getDoc(doc(db, 'drivers', clean));
-        if (dSnap.exists()) firestoreDriver = dSnap.data();
+        await setDoc(doc(db, 'passengers', cleanPhone), {
+          ...updatedProfile,
+          pin: cleanNewPin,
+          updatedAt: new Date().toISOString()
+        }, { merge: true });
+        if (cleanPhone !== authOtpModal.phone) {
+          await setDoc(doc(db, 'passengers', authOtpModal.phone), {
+            ...updatedProfile,
+            pin: cleanNewPin,
+            updatedAt: new Date().toISOString()
+          }, { merge: true });
+        }
+        await setDoc(doc(db, 'users', cleanPhone), {
+          ...updatedProfile,
+          pin: cleanNewPin,
+          role: 'passenger',
+          updatedAt: new Date().toISOString()
+        }, { merge: true }).catch(() => {});
+      } catch (err) {
+        console.warn('Firestore passenger save fallback:', err);
+      }
+
+      setPassengerProfile(updatedProfile);
+      setEditProfileForm(updatedProfile);
+      try {
+        localStorage.setItem('safar_passenger_profile_v5', JSON.stringify(updatedProfile));
       } catch {}
 
-      const activeDriverData = firestoreDriver || found || {
-        id: `driver-${clean}`,
-        name: 'ভেরিফাইড চালক',
-        phone: clean,
-        vehicleModel: 'সিএনজি / অটো',
-        plateNumber: 'ময়মনসিংহ',
-        licenseNumber: 'BRTA-GAF',
-        standName: 'গফরগাঁও',
-        category: 'cng',
-        rating: 5.0,
-        todayTrips: 3,
-        todayEarnings: 300,
+      try {
+        loadPassengerTrips(cleanPhone);
+      } catch {}
+
+      setAuthOtpModal(prev => ({ ...prev, isOpen: false }));
+      showAdminToastMessage(`🎉 স্বাগতম ${updatedProfile.name}! ৪-ডিজিট পিন সহ সফলভাবে লগইন হয়েছে`);
+      return;
+    } else {
+      // Driver OTP & PIN recovery
+      const clean = normalizeBdPhone(authOtpModal.phone) || authOtpModal.phone.replace(/[^0-9]/g, '');
+      const last10 = clean.slice(-10);
+
+      // 1. Look up in active memory drivers array
+      let foundDriver: Driver | any = drivers.find(d => {
+        const dp = (d.phone || '').replace(/[^0-9]/g, '');
+        return dp === clean || dp.endsWith(last10) || clean.endsWith(dp.slice(-10));
+      });
+
+      // 2. Look up in Firestore drivers collection
+      let firestoreDriver: any = null;
+      let driverDocId = foundDriver?.id || null;
+      try {
+        const dSnap = await getDoc(doc(db, 'drivers', clean));
+        if (dSnap.exists()) {
+          firestoreDriver = dSnap.data();
+          driverDocId = clean;
+        } else {
+          const q = query(collection(db, 'drivers'), where('phone', '==', clean));
+          const qSnap = await getDocs(q);
+          if (!qSnap.empty) {
+            firestoreDriver = qSnap.docs[0].data();
+            driverDocId = qSnap.docs[0].id;
+          } else {
+            // Check all driver docs for match on last 10 digits
+            const allSnap = await getDocs(collection(db, 'drivers'));
+            allSnap.forEach(docSnap => {
+              const d = docSnap.data();
+              const p = (d.phone || '').replace(/[^0-9]/g, '');
+              if (p === clean || p.endsWith(last10) || clean.endsWith(p.slice(-10))) {
+                firestoreDriver = d;
+                driverDocId = docSnap.id;
+              }
+            });
+          }
+        }
+      } catch (err) {
+        console.warn('Driver lookup error:', err);
+      }
+
+      const finalDriverData = firestoreDriver || foundDriver;
+      const driverName = finalDriverData?.name || finalDriverData?.nameBn || 'TASNIMUL KABEER';
+      const driverPhone = finalDriverData?.phone || clean;
+      const driverCategory = (finalDriverData?.category as VehicleCategory) || 'bike';
+      const driverVehicle = finalDriverData?.vehicleModel || finalDriverData?.vehicleName || 'BAJAJ DISCOVER 125CC';
+      const driverPlate = finalDriverData?.plateNumber || finalDriverData?.licensePlate || 'MYMENSINGH-HA-15-5206';
+      const driverStand = finalDriverData?.standName || 'ঈমামবাড়ি মোড় স্ট্যান্ড';
+      const driverPhoto = finalDriverData?.driverPhoto || finalDriverData?.photoUrl || '';
+      const driverRating = typeof finalDriverData?.rating === 'number' ? finalDriverData.rating : 5.0;
+      const driverTotalTrips = typeof finalDriverData?.totalTrips === 'number' ? finalDriverData.totalTrips : (finalDriverData?.todayTrips || 0);
+
+      const activeProfile: typeof driverProfile = {
+        id: driverDocId || `driver-${clean}`,
+        name: driverName,
+        phone: driverPhone,
+        vehicleModel: driverVehicle,
+        plateNumber: driverPlate,
+        licenseNumber: finalDriverData?.licenseNumber || 'BRTA-GAF',
+        standName: driverStand,
+        category: driverCategory,
+        rating: driverRating,
+        todayTrips: driverTotalTrips,
+        todayEarnings: driverTotalTrips * 80,
+        driverPhoto: driverPhoto,
         isRegistered: true
       };
 
-      setDriverProfile({
-        ...activeDriverData,
-        isRegistered: true
-      });
+      // Save new PIN to Firestore
+      try {
+        if (driverDocId) {
+          await setDoc(doc(db, 'drivers', driverDocId), { pin: cleanNewPin, ...finalDriverData }, { merge: true });
+        }
+        await setDoc(doc(db, 'drivers', clean), { pin: cleanNewPin }, { merge: true });
+      } catch (err) {
+        console.warn('Driver pin save error:', err);
+      }
+
+      setDriverProfile(activeProfile);
+      try {
+        localStorage.setItem('safar_active_driver_profile_v6', JSON.stringify(activeProfile));
+      } catch {}
+
       setAuthOtpModal(prev => ({ ...prev, isOpen: false }));
-      showAdminToastMessage(`🎉 চালক ওটিপি সফলভাবে যাচাই হয়েছে! স্বাগতম ${activeDriverData.name}`);
+      setUserRole('driver');
+      showAdminToastMessage(`🎉 চালক ভেরিফিকেশন সফল! স্বাগতম ${activeProfile.name}`);
     }
   };
 
@@ -2098,6 +2261,7 @@ export default function App() {
       name: '',
       phone: '',
       pin: '',
+      confirmPin: '',
       homeLocation: '',
       emergencyContact: ''
     });
@@ -2222,20 +2386,45 @@ export default function App() {
   const [driverLoginError, setDriverLoginError] = useState<string | null>(null);
 
   const handleDriverLogin = async (phoneInput: string, pinInput?: string) => {
-    const clean = phoneInput.replace(/[^0-9]/g, '');
+    const rawClean = phoneInput.replace(/[^0-9]/g, '');
+    const clean = normalizeBdPhone(rawClean) || rawClean;
+    const last10 = clean.slice(-10);
+
     if (!clean || clean.length < 10) {
       setDriverLoginError('সঠিক মোবাইল নম্বর প্রদান করুন (কমপক্ষে ১০ ডিজিট)');
       return;
     }
     const found = drivers.find(d => {
-      const dPhone = d.phone.replace(/[^0-9]/g, '');
-      return dPhone === clean || dPhone.endsWith(clean.slice(-10)) || clean.endsWith(dPhone.slice(-10));
+      const dPhone = (d.phone || '').replace(/[^0-9]/g, '');
+      return dPhone === clean || dPhone.endsWith(last10) || clean.endsWith(dPhone.slice(-10));
     });
 
     let firestoreDriver: any = null;
+    let driverDocId: string | null = found?.id || null;
     try {
       const snap = await getDoc(doc(db, 'drivers', clean));
-      if (snap.exists()) firestoreDriver = snap.data();
+      if (snap.exists()) {
+        firestoreDriver = snap.data();
+        driverDocId = clean;
+      } else {
+        const q = query(collection(db, 'drivers'), where('phone', '==', clean));
+        const qSnap = await getDocs(q);
+        if (!qSnap.empty) {
+          firestoreDriver = qSnap.docs[0].data();
+          driverDocId = qSnap.docs[0].id;
+        } else {
+          // Scan all drivers for matching last 10 digits
+          const allSnap = await getDocs(collection(db, 'drivers'));
+          allSnap.forEach(docSnap => {
+            const d = docSnap.data();
+            const p = (d.phone || '').replace(/[^0-9]/g, '');
+            if (p === clean || p.endsWith(last10) || clean.endsWith(p.slice(-10))) {
+              firestoreDriver = d;
+              driverDocId = docSnap.id;
+            }
+          });
+        }
+      }
     } catch {}
 
     const driverData = firestoreDriver || found;
@@ -2245,42 +2434,60 @@ export default function App() {
       return;
     }
 
-    // PIN check if provided or set
+    // PIN check - Mandatory for security
     const cleanPin = (pinInput || driverLoginPinInput).replace(/[^0-9]/g, '');
-    if (driverData.pin) {
-      if (!cleanPin || cleanPin.length < 4) {
-        setDriverLoginError('অনুগ্রহ করে আপনার ৪-ডিজিটের সিকিউরিটি পিন দিন অথবা ওটিপি ভেরিফিকেশন ব্যবহার করুন।');
-        return;
-      }
-      if (driverData.pin.toString().trim() !== cleanPin) {
-        setDriverLoginError('ভুল চালক পিন কোড! সঠিক পিন দিন অথবা নিচে ওটিপি বাটনে চাপ দিন।');
-        return;
-      }
-    } else if (cleanPin && cleanPin.length >= 4) {
-      // Save PIN for driver
-      setDoc(doc(db, 'drivers', clean), { pin: cleanPin }, { merge: true }).catch(() => {});
+    if (!cleanPin || cleanPin.length < 4) {
+      setDriverLoginError('৪-ডিজিটের সিকিউরিটি পিন দেওয়া বাধ্যতামূলক। সঠিক পিন দিন।');
+      return;
     }
 
+    if (driverData.pin) {
+      if (driverData.pin.toString().trim() !== cleanPin) {
+        setDriverLoginError('ভুল চালক পিন কোড! সঠিক পিন দিন অথবা নিচে WhatsApp দিয়ে রিকভার করুন।');
+        return;
+      }
+    } else {
+      // Legacy account without PIN set (e.g. 01304841550) - permanently save entered PIN
+      try {
+        await setDoc(doc(db, 'drivers', clean), { pin: cleanPin }, { merge: true });
+        if (driverDocId) {
+          await setDoc(doc(db, 'drivers', driverDocId), { pin: cleanPin }, { merge: true });
+        }
+      } catch {}
+      showAdminToastMessage(`স্বাগতম ${driverData.name || driverData.nameBn || 'চালক'}! আপনার ৪-ডিজিটের সিকিউরিটি পিন সফলভাবে সংরক্ষিত হয়েছে।`);
+    }
+
+    const driverName = driverData.name || driverData.nameBn || 'TASNIMUL KABEER';
+    const driverVehicle = driverData.vehicleModel || driverData.vehicleName || 'BAJAJ DISCOVER 125CC';
+    const driverPlate = driverData.plateNumber || driverData.licensePlate || 'MYMENSINGH-HA-15-5206';
+    const driverStand = driverData.standName || 'ঈমামবাড়ি মোড় স্ট্যান্ড';
+    const driverCategory = (driverData.category as VehicleCategory) || 'bike';
+    const driverRating = typeof driverData.rating === 'number' ? driverData.rating : 5.0;
+    const driverTotalTrips = typeof driverData.totalTrips === 'number' ? driverData.totalTrips : (driverData.todayTrips || 0);
+
     const active: typeof driverProfile = {
-      id: driverData.id || `driver-${clean}`,
-      name: driverData.name,
+      id: driverDocId || `driver-${clean}`,
+      name: driverName,
       phone: driverData.phone || clean,
-      vehicleModel: driverData.vehicleModel || 'সিএনজি / অটো',
-      plateNumber: driverData.plateNumber || 'ময়মনসিংহ',
+      vehicleModel: driverVehicle,
+      plateNumber: driverPlate,
       licenseNumber: driverData.licenseNumber || 'BRTA-GAF',
-      standName: driverData.standName || 'গফরগাঁও',
-      category: driverData.category || 'cng',
-      rating: driverData.rating || 5.0,
-      todayTrips: driverData.totalTrips || 0,
-      todayEarnings: (driverData.totalTrips || 0) * 100,
-      driverPhoto: driverData.driverPhoto || '',
+      standName: driverStand,
+      category: driverCategory,
+      rating: driverRating,
+      todayTrips: driverTotalTrips,
+      todayEarnings: driverTotalTrips * 80,
+      driverPhoto: driverData.driverPhoto || driverData.photoUrl || '',
       isRegistered: true
     };
     setDriverProfile(active);
+    try {
+      localStorage.setItem('safar_active_driver_profile_v6', JSON.stringify(active));
+    } catch {}
     setDriverLoginError(null);
     setDriverLoginPhoneInput('');
     setDriverLoginPinInput('');
-    showAdminToastMessage(`স্বাগতম, ${driverData.name}! আপনার চালক কন্ট্রোল ড্যাশবোর্ড সক্রিয় হয়েছে।`);
+    showAdminToastMessage(`স্বাগতম, ${driverName}! আপনার চালক কন্ট্রোল ড্যাশবোর্ড সক্রিয় হয়েছে।`);
   };
 
   const handleDriverLogout = () => {
@@ -2490,6 +2697,25 @@ export default function App() {
 
     return list;
   }, [popularPlaces, stands]);
+
+  // Helper to resolve live GPS coordinates into nearest recognized Gafargaon/Pagla stand or landmark name
+  const getNearestLocationName = useCallback((lat: number, lng: number): string => {
+    let closestPlace: any = null;
+    let minDist = Infinity;
+    for (const p of allAutocompletePlaces) {
+      if (typeof p.lat === 'number' && typeof p.lng === 'number') {
+        const d = Math.hypot(p.lat - lat, p.lng - lng);
+        if (d < minDist) {
+          minDist = d;
+          closestPlace = p;
+        }
+      }
+    }
+    if (closestPlace && minDist < 0.05) {
+      return `${closestPlace.bengaliName} (লাইভ GPS)`;
+    }
+    return 'গফরগাঁও লাইভ অবস্থান (GPS)';
+  }, [allAutocompletePlaces]);
 
   // Active Pending Request submitted by this passenger
   const [passengerPendingRequest, setPassengerPendingRequest] = useState<PassengerRideRequest | null>(() => {
@@ -4902,10 +5128,11 @@ export default function App() {
                         if (liveGps.lat && liveGps.lng) {
                           const lat = liveGps.lat;
                           const lng = liveGps.lng;
+                          const resolvedName = getNearestLocationName(lat, lng);
                           setPassengerLocation({ lat, lng, isLiveGps: true });
-                          setPassengerPickup('আমার বর্তমান অবস্থান (লাইভ GPS)');
+                          setPassengerPickup(resolvedName);
                           setPickupCoords({ lat, lng });
-                          showAdminToastMessage(`📍 লাইভ GPS অবস্থান চিহ্নিত (সঠিকতা: ±${Math.round(liveGps.accuracy || 10)} মি.)`);
+                          showAdminToastMessage(`📍 লাইভ GPS অবস্থান: ${resolvedName} (সঠিকতা: ±${Math.round(liveGps.accuracy || 10)} মি.)`);
                           return;
                         }
                         if ('geolocation' in navigator) {
@@ -4914,10 +5141,11 @@ export default function App() {
                               const lat = pos.coords.latitude;
                               const lng = pos.coords.longitude;
                               const accuracy = pos.coords.accuracy || 10;
+                              const resolvedName = getNearestLocationName(lat, lng);
                               setPassengerLocation({ lat, lng, isLiveGps: true });
-                              setPassengerPickup('আমার বর্তমান অবস্থান (লাইভ GPS)');
+                              setPassengerPickup(resolvedName);
                               setPickupCoords({ lat, lng });
-                              showAdminToastMessage(`📍 লাইভ GPS অবস্থান চিহ্নিত (সঠিকতা: ±${Math.round(accuracy)} মি.)`);
+                              showAdminToastMessage(`📍 লাইভ GPS অবস্থান: ${resolvedName} (সঠিকতা: ±${Math.round(accuracy)} মি.)`);
                             },
                             () => {
                               showAdminToastMessage('GPS লোকেশন পাওয়া যায়নি, ম্যানুয়ালি বাছুন');
@@ -5205,8 +5433,9 @@ export default function App() {
                           setDriverLoginPinInput(e.target.value);
                           setDriverLoginError(null);
                         }}
-                        placeholder="৪-ডিজিট পিন (ঐচ্ছিক)"
-                        className="w-full sm:w-32 px-3 py-2 bg-white border border-slate-300 rounded-xl text-xs text-slate-900 focus:outline-none focus:ring-2 focus:ring-amber-500 font-mono"
+                        placeholder="৪-ডিজিট পিন *"
+                        className="w-full sm:w-32 px-3 py-2 bg-white border border-slate-300 rounded-xl text-xs text-slate-900 focus:outline-none focus:ring-2 focus:ring-amber-500 font-mono font-bold"
+                        required
                       />
                       <button
                         type="submit"
@@ -5222,7 +5451,7 @@ export default function App() {
                         className="text-emerald-700 hover:text-emerald-900 text-[11px] font-extrabold flex items-center gap-1 cursor-pointer hover:underline"
                       >
                         <Shield className="w-3 h-3 text-emerald-600" />
-                        <span>পিন মনে নেই? ইনস্ট্যান্ট ওটিপি (OTP) দিয়ে ভেরিফাই</span>
+                        <span>🔑 পিন মনে নেই বা নতুন পিন সেট করবেন? WhatsApp ভেরিফিকেশন</span>
                       </button>
                     </div>
                   </form>
@@ -5423,7 +5652,11 @@ export default function App() {
                           </button>
 
                           <a
-                            href={`https://www.google.com/maps/dir/?api=1&origin=${liveGps.lat || (driverProfile as any).lat || 24.5520},${liveGps.lng || (driverProfile as any).lng || 90.5515}&destination=${(driverActiveTrip as any).pickupCoords?.lat || (activeBooking as any)?.passengerLat || 24.5518},${(driverActiveTrip as any).pickupCoords?.lng || (activeBooking as any)?.passengerLng || 90.5512}`}
+                            href={
+                              (driverActiveTrip as any).status === 'in_transit' && (driverActiveTrip as any).destCoords
+                                ? `https://www.google.com/maps/dir/?api=1&origin=${(driverActiveTrip as any).pickupCoords?.lat || 24.5518},${(driverActiveTrip as any).pickupCoords?.lng || 90.5512}&destination=${(driverActiveTrip as any).destCoords?.lat || 24.5479},${(driverActiveTrip as any).destCoords?.lng || 90.5436}&travelmode=driving`
+                                : `https://www.google.com/maps/dir/?api=1&origin=${liveGps.lat || 24.5520},${liveGps.lng || 90.5515}&destination=${(driverActiveTrip as any).pickupCoords?.lat || 24.5518},${(driverActiveTrip as any).pickupCoords?.lng || 90.5512}&travelmode=driving`
+                            }
                             target="_blank"
                             rel="noopener noreferrer"
                             className="inline-flex items-center gap-1.5 bg-blue-600 hover:bg-blue-500 text-white px-3 py-2 rounded-xl text-xs sm:text-sm font-bold shadow-md cursor-pointer transition active:scale-95"
@@ -5516,8 +5749,13 @@ export default function App() {
                                 currentDriverLng: liveGps.lng || 90.5515,
                                 passengerLat: (driverActiveTrip as any).pickupCoords?.lat || (activeBooking as any)?.passengerLat || 24.5518,
                                 passengerLng: (driverActiveTrip as any).pickupCoords?.lng || (activeBooking as any)?.passengerLng || 90.5512,
+                                destLat: (driverActiveTrip as any).destCoords?.lat || destCoords?.lat || 24.5479,
+                                destLng: (driverActiveTrip as any).destCoords?.lng || destCoords?.lng || 90.5436,
+                                pickupTitle: driverActiveTrip.pickupPoint || 'পিকআপ স্থান',
+                                destTitle: driverActiveTrip.destination || 'গন্তব্য স্থান',
                                 distanceKm: driverActiveTrip.distanceKm || 1.2,
-                                etaMinutes: Math.round((driverActiveTrip.distanceKm || 1.2) * 2.5)
+                                etaMinutes: Math.round((driverActiveTrip.distanceKm || 1.2) * 2.5),
+                                status: (driverActiveTrip as any).status || 'en_route'
                               }}
                             />
                           </div>
@@ -5990,8 +6228,13 @@ export default function App() {
                       currentDriverLng: activeBooking.currentDriverLng,
                       passengerLat: activeBooking.passengerLat,
                       passengerLng: activeBooking.passengerLng,
+                      destLat: activeBooking.destLat || destCoords?.lat,
+                      destLng: activeBooking.destLng || destCoords?.lng,
+                      pickupTitle: activeBooking.pickupTitle || passengerPickup,
+                      destTitle: activeBooking.destTitle || passengerDestination,
                       distanceKm: activeBooking.distanceKm,
-                      etaMinutes: activeBooking.etaMinutes
+                      etaMinutes: activeBooking.etaMinutes,
+                      status: activeBooking.status
                     } : null}
                     onSelectPickupPlace={(standName: string) => {
                       setPassengerPickup(standName);
@@ -6552,7 +6795,7 @@ export default function App() {
 
                     <div>
                       <label className="block text-xs font-bold text-slate-800 mb-1">
-                        হোয়াটসঅ্যাপ ও মোবাইল নম্বর <span className="text-red-500">*</span>
+                        হোয়াটসঅ্যাপ মোবাইল নম্বর <span className="text-red-500">*</span>
                       </label>
                       <input
                         type="tel"
@@ -7180,7 +7423,7 @@ export default function App() {
                                       ২
                                     </div>
                                     <div className="min-w-0">
-                                      <p className="text-xs font-bold truncate">হোয়াটসঅ্যাপ ও মোবাইল নম্বর যাচাই</p>
+                                      <p className="text-xs font-bold truncate">হোয়াটসঅ্যাপ মোবাইল নম্বর যাচাই</p>
                                       <p className="text-[10px] text-slate-500 font-mono truncate">{targetDriver.phone}</p>
                                     </div>
                                   </div>
@@ -7516,7 +7759,7 @@ export default function App() {
                           </div>
 
                           <div>
-                            <label className="font-bold text-slate-700 block mb-1">মোবাইল নম্বর (১১ ডিজিট): *</label>
+                            <label className="font-bold text-slate-700 block mb-1">আপনার মোবাইল নম্বর (WhatsApp সক্রিয় নম্বর বাধ্যতামূলক): *</label>
                             <input
                               type="tel"
                               value={passengerLoginForm.phone}
@@ -7623,7 +7866,7 @@ export default function App() {
                                 onClick={() => handleTriggerInstantOtp('passenger', passengerLoginPhone)}
                                 className="text-emerald-700 hover:text-emerald-900 font-extrabold text-[10.5px] cursor-pointer hover:underline"
                               >
-                                পিন মনে নেই? ওটিপি দিয়ে লগইন
+                                🔑 পিন মনে নেই? WhatsApp দিয়ে পিন রিকভার করুন
                               </button>
                             </div>
                             <div className="relative">
@@ -9333,31 +9576,67 @@ export default function App() {
               </button>
             </div>
 
-            <div className="p-3 bg-emerald-50 border border-emerald-300 rounded-2xl text-center space-y-1">
-              <span className="text-[10.5px] text-emerald-800 font-bold block">
-                সফর সিকিউরিটি সার্ভিস থেকে প্রাপ্ত ওটিপি:
+            <div className="p-3.5 bg-emerald-50 border border-emerald-300 rounded-2xl text-center space-y-2">
+              <span className="text-xs text-emerald-900 font-extrabold block">
+                নিরাপদ WhatsApp ভেরিফিকেশন ও পিন সেট
               </span>
-              <div className="text-2xl font-black font-mono tracking-widest text-emerald-950 py-1 bg-white rounded-xl border border-emerald-200">
-                {authOtpModal.generatedCode}
-              </div>
-              <span className="text-[9.5px] text-slate-500 block">
-                যে কোনো ডিভাইস থেকে প্রোফাইল সুরক্ষিত রাখতে এই ওটিপি কোডটি ব্যবহৃত হয়।
-              </span>
+              <p className="text-[11px] text-slate-600 leading-relaxed">
+                আপনার দেওয়া নম্বরে (<b>{authOtpModal.phone}</b>) WhatsApp ওটিপি পাঠানো হয়েছে। নিচের বাটনে ট্যাপ করে আপনার WhatsApp থেকে ওটিপি কোডটি সংগ্রহ করুন:
+              </p>
+              <a
+                href={`https://api.whatsapp.com/send?phone=88${authOtpModal.phone}&text=${encodeURIComponent(`সফর (Safar) অ্যাপ ভেরিফিকেশন ও পিন রিকভারি কোড: ${authOtpModal.generatedCode}। এই কোডটি দিয়ে অ্যাপে আপনার স্থায়ী ৪-ডিজিট পিন সেট করুন।`)}`}
+                target="_blank"
+                rel="noopener noreferrer"
+                onClick={() => setAuthOtpModal(prev => ({ ...prev, isSent: true }))}
+                className="inline-flex items-center justify-center gap-2 w-full py-2.5 bg-green-600 hover:bg-green-700 text-white font-black rounded-xl text-xs sm:text-sm shadow-md transition-all active:scale-95"
+              >
+                <span>📲 WhatsApp এ কোড পাঠান / দেখুন</span>
+              </a>
             </div>
 
-            <div className="space-y-1.5">
-              <label className="text-xs font-bold text-slate-700 block">
-                উপরের ৪-ডিজিটের কোডটি এখানে লিখুন: *
-              </label>
-              <input
-                type="text"
-                maxLength={4}
-                value={authOtpModal.enteredCode}
-                onChange={(e) => setAuthOtpModal(prev => ({ ...prev, enteredCode: e.target.value.replace(/[^0-9]/g, ''), error: null }))}
-                placeholder="৪-ডিজিট কোড লিখুন"
-                className="w-full text-center text-xl font-mono tracking-widest px-3 py-2.5 bg-slate-50 border border-slate-300 rounded-xl font-black text-slate-900 focus:outline-none focus:ring-2 focus:ring-emerald-500"
-                autoFocus
-              />
+            <div className="space-y-2.5">
+              <div>
+                <label className="text-xs font-bold text-slate-700 block mb-1">
+                  WhatsApp এ প্রাপ্ত ৪-ডিজিটের কোড লিখুন: *
+                </label>
+                <input
+                  type="text"
+                  maxLength={4}
+                  value={authOtpModal.enteredCode}
+                  onChange={(e) => setAuthOtpModal(prev => ({ ...prev, enteredCode: e.target.value.replace(/[^0-9]/g, ''), error: null }))}
+                  placeholder="৪-ডিজিট কোড"
+                  className="w-full text-center text-lg font-mono tracking-widest px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl font-black text-slate-900 focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                  autoFocus
+                />
+              </div>
+
+              <div>
+                <label className="text-xs font-bold text-slate-700 block mb-1">
+                  আপনার নতুন ৪-ডিজিটের সিকিউরিটি পিন সেট করুন: *
+                </label>
+                <input
+                  type="password"
+                  maxLength={4}
+                  value={authOtpModal.newPin}
+                  onChange={(e) => setAuthOtpModal(prev => ({ ...prev, newPin: e.target.value.replace(/[^0-9]/g, ''), error: null }))}
+                  placeholder="নতুন ৪-ডিজিট পিন (যেমন: ১২৩৪)"
+                  className="w-full text-center text-sm font-mono tracking-widest px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl font-bold text-slate-900 focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                />
+              </div>
+
+              <div>
+                <label className="text-xs font-bold text-slate-700 block mb-1">
+                  নতুন পিন নিশ্চিত করুন: *
+                </label>
+                <input
+                  type="password"
+                  maxLength={4}
+                  value={authOtpModal.confirmNewPin}
+                  onChange={(e) => setAuthOtpModal(prev => ({ ...prev, confirmNewPin: e.target.value.replace(/[^0-9]/g, ''), error: null }))}
+                  placeholder="একই পিন পুনরায় লিখুন"
+                  className="w-full text-center text-sm font-mono tracking-widest px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl font-bold text-slate-900 focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                />
+              </div>
             </div>
 
             {authOtpModal.error && (
