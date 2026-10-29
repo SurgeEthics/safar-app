@@ -16,11 +16,13 @@ import {
   CheckCircle2,
   Car,
   Lock,
-  Unlock
+  Unlock,
+  X
 } from 'lucide-react';
 import { Stand, Driver, VehicleCategory } from '../types';
 import { LiveDriverLocation, LivePassengerLocation } from '../services/liveLocationService';
 import { toBengaliNumber } from '../utils/calculator';
+import { AutoMarqueeText } from './AutoMarqueeText';
 
 interface GafargaonMapProps {
   // Static/Fallback drivers & stands
@@ -69,10 +71,14 @@ interface GafargaonMapProps {
     passengerLng: number;
     distanceKm: number;
     etaMinutes: number;
+    tripStatus?: string;
+    destLat?: number;
+    destLng?: number;
   } | null;
 
   onSelectPickupPlace?: (placeName: string) => void;
   onSelectDestPlace?: (placeName: string) => void;
+  onClearRoute?: () => void;
 }
 
 export const GafargaonMap: React.FC<GafargaonMapProps> = ({
@@ -98,7 +104,8 @@ export const GafargaonMap: React.FC<GafargaonMapProps> = ({
   calculatedDurationMinutes,
   activeBooking,
   onSelectPickupPlace,
-  onSelectDestPlace
+  onSelectDestPlace,
+  onClearRoute
 }) => {
   const mapContainerRef = useRef<HTMLDivElement>(null);
   const mapInstanceRef = useRef<L.Map | null>(null);
@@ -118,6 +125,7 @@ export const GafargaonMap: React.FC<GafargaonMapProps> = ({
     return false;
   });
   const [showLockNotification, setShowLockNotification] = useState<boolean>(false);
+  const [isRouteStickerCollapsed, setIsRouteStickerCollapsed] = useState<boolean>(false);
   const lockNotificationTimerRef = useRef<any>(null);
   const lastFittedRouteKeyRef = useRef<string>('');
   const lastFittedBookingIdRef = useRef<string>('');
@@ -258,7 +266,7 @@ export const GafargaonMap: React.FC<GafargaonMapProps> = ({
       marker.bindPopup(`
         <div style="font-family: 'Hind Siliguri', sans-serif; padding: 4px; min-width: 175px;">
           <h4 style="font-weight: 800; color: #065f46; margin: 0 0 4px 0; font-size: 13.5px;">${standBn}</h4>
-          <p style="font-size: 11px; color: #334155; margin: 0 0 6px 0;">সক্রিয় যানবাহন: <b>${toBengaliNumber(count)} জন</b></p>
+          <p style="font-size: 11px; color: #334155; margin: 0 0 6px 0;">সক্রিয় যানবাহন: <b>${toBengaliNumber(count)} টি</b></p>
           <div style="display: flex; flex-direction: column; gap: 4px;">
             <button onclick="window.__selectPickupPlace && window.__selectPickupPlace('${standBn}')" 
                     style="width: 100%; background: #059669; color: white; border: none; padding: 5px 8px; border-radius: 6px; font-size: 11px; font-weight: 700; cursor: pointer;">
@@ -271,6 +279,13 @@ export const GafargaonMap: React.FC<GafargaonMapProps> = ({
           </div>
         </div>
       `);
+
+      marker.bindTooltip(`
+        <div style="font-family: 'Hind Siliguri', sans-serif; font-weight: 700; font-size: 11px; padding: 1px 4px;">
+          📍 ${standBn} <span style="color: #059669; font-weight: 800;">(${toBengaliNumber(count)}টি গাড়ি)</span>
+        </div>
+      `, { direction: 'top', offset: [0, -32], opacity: 0.95 });
+
       markersGroup.addLayer(marker);
     });
 
@@ -393,9 +408,19 @@ export const GafargaonMap: React.FC<GafargaonMapProps> = ({
           </div>
         `);
 
+        // Smooth Hover Sticker Tooltip
+        marker.bindTooltip(`
+          <div style="font-family: 'Hind Siliguri', sans-serif; padding: 2px 5px; font-size: 11px; font-weight: 700; display: flex; align-items: center; gap: 4px;">
+            <span>${catInfo.symbol}</span>
+            <span>${driver.name}</span>
+            <span style="color: #0284c7; font-size: 10px;">(${driver.vehicleModel})</span>
+            <span style="color: #d97706; font-size: 10px;">★${toBengaliNumber(driver.rating)}</span>
+          </div>
+        `, { direction: 'top', offset: [0, -20], opacity: 0.95 });
+
         marker.on('click', () => {
-          const matched = drivers.find(d => d.id === driver.id);
-          if (matched) onSelectDriver(matched);
+          const matched = drivers.find(d => d.id === driver.id) || (driver as any);
+          if (matched && onSelectDriver) onSelectDriver(matched);
         });
 
         markersGroup.addLayer(marker);
@@ -478,13 +503,109 @@ export const GafargaonMap: React.FC<GafargaonMapProps> = ({
       userMarkerRef.current = myMarker;
     }
 
-    // E. Mutual Live Booking Tracking Line
+    // E. Mutual Live Booking Tracking Line & Markers
     if (activeBooking) {
+      const catDetails = getCategoryDetails(activeBooking.driverCategory);
+
+      // 1. Driver Marker (Moving towards passenger)
+      const driverLiveIcon = L.divIcon({
+        className: 'custom-active-driver-tracking-marker',
+        html: `
+          <div style="position: relative; cursor: pointer;">
+            <div style="position: absolute; width: 48px; height: 48px; border-radius: 50%; background: rgba(5, 150, 105, 0.45); animation: ping 1.8s cubic-bezier(0, 0, 0.2, 1) infinite; top: -5px; left: -5px;"></div>
+            <div style="
+              background: linear-gradient(135deg, #059669 0%, #047857 100%);
+              color: white;
+              width: 38px;
+              height: 38px;
+              border-radius: 50%;
+              display: flex;
+              align-items: center;
+              justify-content: center;
+              box-shadow: 0 4px 14px rgba(4, 120, 87, 0.6);
+              border: 3px solid #facc15;
+              font-size: 16px;
+              font-weight: 900;
+            ">
+              ${catDetails.symbol}
+            </div>
+            <div style="
+              position: absolute;
+              bottom: -18px;
+              left: 50%;
+              transform: translateX(-50%);
+              background: #0f172a;
+              color: #facc15;
+              font-size: 9.5px;
+              font-weight: 800;
+              white-space: nowrap;
+              padding: 1px 6px;
+              border-radius: 10px;
+              border: 1px solid #facc15;
+              box-shadow: 0 2px 5px rgba(0,0,0,0.4);
+            ">
+              চালক আসছে
+            </div>
+          </div>
+        `,
+        iconSize: [38, 38],
+        iconAnchor: [19, 19],
+        popupAnchor: [0, -22]
+      });
+
+      const bDriverMarker = L.marker([activeBooking.currentDriverLat, activeBooking.currentDriverLng], { icon: driverLiveIcon });
+      bDriverMarker.bindPopup(`
+        <div style="font-family: 'Hind Siliguri', sans-serif; padding: 4px; min-width: 205px;">
+          <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 4px;">
+            <span style="font-size: 10px; background: #ecfdf5; color: #047857; font-weight: 800; padding: 2px 6px; border-radius: 4px; border: 1px solid #a7f3d0;">
+              🟢 চালক আপনার দিকে রওনা দিয়েছেন
+            </span>
+            <span style="font-size: 11px; color: #0284c7; font-weight: 800;">${activeBooking.distanceKm} কিমি</span>
+          </div>
+          <h4 style="font-weight: 900; color: #0f172a; margin: 2px 0; font-size: 14px;">${activeBooking.driverName}</h4>
+          <div style="font-size: 11px; color: #475569; margin-bottom: 5px;">বাহন: <b>${catDetails.name}</b> • সময়: <b>~${activeBooking.etaMinutes} মিনিট</b></div>
+          <a href="tel:${activeBooking.driverPhone.replace(/[^0-9]/g, '')}" 
+             style="display: block; text-align: center; background: #059669; color: white; padding: 6px 10px; border-radius: 8px; font-weight: 800; font-size: 11.5px; text-decoration: none; margin-bottom: 4px;">
+            📞 চালককে সরাসরি কল (${activeBooking.driverPhone})
+          </a>
+          <a href="https://www.google.com/maps/dir/?api=1&origin=${activeBooking.currentDriverLat},${activeBooking.currentDriverLng}&destination=${activeBooking.passengerLat},${activeBooking.passengerLng}"
+             target="_blank" rel="noopener noreferrer"
+             style="display: block; text-align: center; background: #2563eb; color: white; padding: 6px 10px; border-radius: 8px; font-weight: 800; font-size: 11px; text-decoration: none;">
+            🗺️ গুগল ম্যাপে টার্ন-বাই-টার্ন লাইভ রুট (GPS)
+          </a>
+        </div>
+      `);
+      bDriverMarker.bindTooltip(`🚗 চালক: ${activeBooking.driverName} (~${activeBooking.etaMinutes} মি.)`, { direction: 'top', offset: [0, -22], opacity: 0.95 });
+      markersGroup.addLayer(bDriverMarker);
+
+      // 2. Passenger Pickup Point Marker
+      const passPickupIcon = L.divIcon({
+        className: 'custom-active-passenger-pickup-marker',
+        html: `
+          <div style="position: relative;">
+            <div style="position: absolute; width: 44px; height: 44px; border-radius: 50%; background: rgba(37, 99, 235, 0.4); animation: ping 2s cubic-bezier(0, 0, 0.2, 1) infinite; top: -6px; left: -6px;"></div>
+            <div style="background-color: #2563eb; color: white; width: 32px; height: 32px; border-radius: 50%; display: flex; align-items: center; justify-content: center; box-shadow: 0 4px 12px rgba(37, 99, 235, 0.5); border: 2.5px solid #ffffff; font-weight: 900; font-size: 14px;">
+              📍
+            </div>
+            <div style="position: absolute; bottom: -18px; left: 50%; transform: translateX(-50%); background: #1e3a8a; color: white; font-size: 9.5px; font-weight: 800; white-space: nowrap; padding: 1px 6px; border-radius: 10px;">
+              পিকআপ পয়েন্ট
+            </div>
+          </div>
+        `,
+        iconSize: [32, 32],
+        iconAnchor: [16, 16],
+        popupAnchor: [0, -18]
+      });
+      const bPassMarker = L.marker([activeBooking.passengerLat, activeBooking.passengerLng], { icon: passPickupIcon });
+      bPassMarker.bindTooltip('📍 আপনার পিকআপ অবস্থান', { direction: 'top', offset: [0, -18] });
+      markersGroup.addLayer(bPassMarker);
+
+      // 3. Dynamic Curved/Direct Polyline Connecting Driver and Passenger
       const routePoints: [number, number][] = [
         [activeBooking.currentDriverLat, activeBooking.currentDriverLng],
         [
-          (activeBooking.currentDriverLat + activeBooking.passengerLat) / 2 + 0.0006,
-          (activeBooking.currentDriverLng + activeBooking.passengerLng) / 2 - 0.0005
+          (activeBooking.currentDriverLat + activeBooking.passengerLat) / 2 + 0.0004,
+          (activeBooking.currentDriverLng + activeBooking.passengerLng) / 2 - 0.0003
         ],
         [activeBooking.passengerLat, activeBooking.passengerLng]
       ];
@@ -499,15 +620,15 @@ export const GafargaonMap: React.FC<GafargaonMapProps> = ({
 
       routePolylineRef.current = polyline;
 
-      // Fit bounds only when booking starts, not on background driver movement pings
-      const bookingKey = `${activeBooking.currentDriverLat.toFixed(3)},${activeBooking.passengerLat.toFixed(3)}`;
+      // Fit bounds so both Driver and Passenger are fully framed with comfortable padding
+      const bookingKey = `${activeBooking.currentDriverLat.toFixed(4)},${activeBooking.passengerLat.toFixed(4)}`;
       if (lastFittedBookingIdRef.current !== bookingKey) {
         lastFittedBookingIdRef.current = bookingKey;
         const bounds = L.latLngBounds([
           [activeBooking.currentDriverLat, activeBooking.currentDriverLng],
           [activeBooking.passengerLat, activeBooking.passengerLng]
         ]);
-        map.fitBounds(bounds, { padding: [50, 50] });
+        map.fitBounds(bounds, { padding: [60, 60], maxZoom: 16 });
       }
     }
     // F. Route Planning Preview (A to B)
@@ -848,27 +969,115 @@ export const GafargaonMap: React.FC<GafargaonMapProps> = ({
           </div>
         )}
 
-        {/* 3. Floating Route Distance & Live Stats Overlay when pickup & dest are set (Transparent, solid black on hover, no blur) */}
+        {/* 3. Floating Route Distance & Live Stats Overlay when pickup & dest are set */}
         {pickupCoords && destCoords && (pickupCoords.lat !== destCoords.lat || pickupCoords.lng !== destCoords.lng) && Boolean(calculatedDistance && calculatedDistance > 0) && (
           <div 
-            className="absolute top-2.5 left-2.5 z-20 bg-black/25 hover:bg-black hover:border-black text-white rounded-xl p-2.5 shadow-md border border-white/25 max-w-[280px] animate-in fade-in transition-colors duration-200 cursor-pointer"
+            className="absolute top-2.5 right-2.5 sm:top-2.5 sm:left-14 z-20 bg-black/75 hover:bg-black/95 text-white rounded-2xl p-2.5 sm:p-3 shadow-xl border border-white/20 w-[230px] sm:w-[280px] max-w-[calc(100%-70px)] backdrop-blur-xs animate-in fade-in transition-all duration-200"
             style={{ textShadow: '0 1px 3px rgba(0,0,0,0.95)' }}
           >
-            <div className="flex items-center gap-1.5 text-emerald-400 font-extrabold text-[11px] mb-1">
-              <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
-              <span>রুট প্ল্যান ও নির্ভুল দূরত্ব</span>
+            <div className="flex items-center justify-between gap-1 mb-1">
+              <div className="flex items-center gap-1.5 text-emerald-400 font-extrabold text-[11px] overflow-hidden">
+                <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse shrink-0"></span>
+                <span className="truncate">রুট প্ল্যান ও দূরত্ব</span>
+              </div>
+              <div className="flex items-center gap-1 shrink-0">
+                <button
+                  type="button"
+                  onClick={() => setIsRouteStickerCollapsed(!isRouteStickerCollapsed)}
+                  className="p-1 hover:bg-white/20 rounded-md text-slate-300 hover:text-white transition-colors cursor-pointer text-[10px]"
+                  title={isRouteStickerCollapsed ? 'বিস্তারিত দেখুন' : 'সংক্ষেপ করুন'}
+                >
+                  {isRouteStickerCollapsed ? '▼' : '▲'}
+                </button>
+                {onClearRoute && (
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      onClearRoute();
+                    }}
+                    className="p-1 hover:bg-white/20 rounded-md text-slate-300 hover:text-white transition-colors cursor-pointer"
+                    title="রুট মুছুন"
+                  >
+                    <X className="w-3.5 h-3.5" />
+                  </button>
+                )}
+              </div>
             </div>
-            <div className="flex items-baseline gap-2">
-              <span className="text-base sm:text-lg font-black text-white">
-                {toBengaliNumber(calculatedDistance || 0)} কিমি
-              </span>
-              <span className="text-[11px] text-emerald-300 font-bold">
-                (~{toBengaliNumber(calculatedDurationMinutes || 5)} মিনিট)
-              </span>
-            </div>
-            <div className="text-[10px] text-slate-200 truncate mt-1 border-t border-white/20 pt-1">
-              <span className="text-emerald-400 font-bold">A:</span> {pickupTitle?.slice(0, 18) || 'পিকআপ'} ➔ <span className="text-red-400 font-bold">B:</span> {destTitle?.slice(0, 18) || 'গন্তব্য'}
-            </div>
+
+            {!isRouteStickerCollapsed && (
+              <>
+                <div className="flex items-baseline gap-2">
+                  <span className="text-base sm:text-lg font-black text-white">
+                    {toBengaliNumber(calculatedDistance || 0)} কিমি
+                  </span>
+                  <span className="text-[11px] text-emerald-300 font-bold">
+                    (~{toBengaliNumber(calculatedDurationMinutes || 5)} মিনিট)
+                  </span>
+                </div>
+
+                {/* Marquee styled A (Pickup) and B (Destination) locations with driver card popup rule */}
+                <div className="space-y-1 mt-1.5 border-t border-white/20 pt-1.5 text-[10.5px]">
+                  <div className="flex items-center gap-1.5 overflow-hidden">
+                    <span className="shrink-0 px-1.5 py-0.2 bg-emerald-500 text-slate-950 font-black rounded text-[9px] shadow-xs">A</span>
+                    <div className="flex-1 overflow-hidden">
+                      <AutoMarqueeText text={pickupTitle || 'পিকআপ পয়েন্ট'} className="text-slate-100 font-bold text-[10.5px]" speed={32} />
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-1.5 overflow-hidden">
+                    <span className="shrink-0 px-1.5 py-0.2 bg-red-500 text-white font-black rounded text-[9px] shadow-xs">B</span>
+                    <div className="flex-1 overflow-hidden">
+                      <AutoMarqueeText text={destTitle || 'গন্তব্য পয়েন্ট'} className="text-slate-100 font-bold text-[10.5px]" speed={32} />
+                    </div>
+                  </div>
+                </div>
+
+                {/* Dynamic Google Live Route button: Driver ---> Passenger OR Pickup ---> Destination */}
+                {(() => {
+                  let navOriginLat = pickupCoords.lat;
+                  let navOriginLng = pickupCoords.lng;
+                  let navDestLat = destCoords.lat;
+                  let navDestLng = destCoords.lng;
+
+                  if (activeBooking) {
+                    const isEnRoute = !activeBooking.tripStatus || activeBooking.tripStatus === 'en_route' || activeBooking.tripStatus === 'accepted';
+                    if (isEnRoute) {
+                      // Driver heading to Passenger Pickup
+                      navOriginLat = activeBooking.currentDriverLat;
+                      navOriginLng = activeBooking.currentDriverLng;
+                      navDestLat = activeBooking.passengerLat;
+                      navDestLng = activeBooking.passengerLng;
+                    } else {
+                      // Driver reached / picked up passenger: heading to Destination
+                      navOriginLat = activeBooking.passengerLat;
+                      navOriginLng = activeBooking.passengerLng;
+                      navDestLat = activeBooking.destLat || destCoords.lat;
+                      navDestLng = activeBooking.destLng || destCoords.lng;
+                    }
+                  }
+
+                  // Prevent identical coordinates error
+                  if (Math.abs(navOriginLat - navDestLat) < 0.0001 && Math.abs(navOriginLng - navDestLng) < 0.0001) {
+                    navDestLat = Number((navDestLat + 0.003).toFixed(5));
+                    navDestLng = Number((navDestLng + 0.003).toFixed(5));
+                  }
+
+                  const gNavUrl = `https://www.google.com/maps/dir/?api=1&origin=${navOriginLat},${navOriginLng}&destination=${navDestLat},${navDestLng}&travelmode=driving`;
+
+                  return (
+                    <a
+                      href={gNavUrl}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="mt-2.5 flex items-center justify-center gap-1.5 w-full bg-blue-600 hover:bg-blue-500 active:scale-95 text-white font-bold text-[11px] py-1.5 px-2 rounded-xl transition-all shadow-md cursor-pointer"
+                    >
+                      <Navigation className="w-3.5 h-3.5 text-white shrink-0" />
+                      <span>গুগল ম্যাপে লাইভ রুট (GPS)</span>
+                    </a>
+                  );
+                })()}
+              </>
+            )}
           </div>
         )}
 

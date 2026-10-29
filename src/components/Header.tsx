@@ -1,5 +1,5 @@
 import React from 'react';
-import { User, Car, Database, UserPlus, PhoneCall, ShieldAlert, Download } from 'lucide-react';
+import { User, Car, Database, UserPlus, PhoneCall, ShieldAlert } from 'lucide-react';
 
 interface HeaderProps {
   mode: 'passenger' | 'driver';
@@ -8,7 +8,6 @@ interface HeaderProps {
   onOpenDriverRegister: () => void;
   onOpenEmergencyDirectory: () => void;
   totalDriversCount: number;
-  onOpenDownloadModal?: () => void;
 }
 
 export const Header: React.FC<HeaderProps> = ({
@@ -17,19 +16,16 @@ export const Header: React.FC<HeaderProps> = ({
   onOpenDataManager,
   onOpenDriverRegister,
   onOpenEmergencyDirectory,
-  totalDriversCount,
-  onOpenDownloadModal
+  totalDriversCount
 }) => {
   return (
     <header className="bg-emerald-800 text-white shadow-md sticky top-0 z-40 transition-colors">
       <div className="max-w-7xl mx-auto px-3 sm:px-4 py-2.5 flex items-center justify-between gap-2 flex-wrap">
         {/* Brand identity */}
         <div className="flex items-center gap-2.5 sm:gap-3 cursor-pointer select-none">
-          <img 
-            src="/safar-logo.svg" 
-            alt="সফর লোগো" 
-            className="w-9 h-9 sm:w-10 sm:h-10 rounded-xl shadow-md border border-emerald-300/40 object-contain hover:scale-105 transition-transform" 
-          />
+          <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-xl bg-white/10 border border-white/25 flex items-center justify-center font-bold text-2xl text-white shadow-inner">
+            <span className="font-serif">S</span>
+          </div>
           <div>
             <div className="flex items-center gap-2">
               <h1 className="text-xl sm:text-2xl font-bold tracking-tight text-white leading-none">
@@ -73,7 +69,7 @@ export const Header: React.FC<HeaderProps> = ({
             </button>
           </div>
 
-          {/* Data Manager & Backup */}
+          {/* Data Manager & Backup (Answers user's prompt on managing AI Studio project data) */}
           <button
             onClick={onOpenDataManager}
             title="অন্য AI Studio প্রজেক্টের সাথে ডেটা আদান-প্রদান ও ব্যাকআপ"

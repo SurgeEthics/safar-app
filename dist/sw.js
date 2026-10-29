@@ -67,7 +67,7 @@ if (!self.define) {
     });
   };
 }
-define(['./workbox-afac4cd2'], (function (workbox) { 'use strict';
+define(['./workbox-7e5eb42b'], (function (workbox) { 'use strict';
 
   self.skipWaiting();
   workbox.clientsClaim();
@@ -84,74 +84,57 @@ define(['./workbox-afac4cd2'], (function (workbox) { 'use strict';
     "revision": "1872c500de691dce40960bb85481de07"
   }, {
     "url": "pwa-maskable-512x512.png",
-    "revision": "424b0ddeffc660c348dde536838f238f"
+    "revision": "aa64e2a2ec3d5930b80154c5ff19ac81"
   }, {
     "url": "pwa-512x512.png",
-    "revision": "b939c8f0cf4bf04e5f824257d38bc4ce"
+    "revision": "dfabb0826464234196508f50c82ba4c3"
   }, {
     "url": "pwa-192x192.png",
-    "revision": "968e2740b061116784f61b61304a0e07"
+    "revision": "e93d1b2ef00e870bcc528a64cf254c1f"
   }, {
     "url": "index.html",
-    "revision": "c19d1d155aafc0375bfeaad97918203e"
+    "revision": "f723f2cf1f2b3e0fef25ef3646100952"
   }, {
     "url": "icon.svg",
-    "revision": "2656b652288f2dc2146deee1452b7349"
+    "revision": "100db9b0aec1c7c52f95824ba8f2a733"
   }, {
     "url": "favicon.png",
     "revision": "c48568c4b5a6df7bf2c0bc060531dba0"
   }, {
     "url": "favicon.ico",
-    "revision": "c91f4713b49633cff485a7bee25c82b4"
+    "revision": "b0a0ce0b545bba4ac7cfe0b6ecf350c1"
+  }, {
+    "url": "download.html",
+    "revision": "e39dca1f6ea7cdb8bb9f8534aa6a7e89"
   }, {
     "url": "apple-touch-icon.png",
-    "revision": "9c56b5edc561a53f807b294c64b4234f"
+    "revision": "e5986937e92f3e84bb6c0fdf6e2f3177"
   }, {
-    "url": "assets/index-lpGBEJ79.js",
+    "url": "assets/index-gGiQlODn.css",
     "revision": null
   }, {
-    "url": "assets/index-CFVHuRSt.css",
+    "url": "assets/index-CV-mxxGW.js",
     "revision": null
   }, {
     "url": "apple-touch-icon.png",
-    "revision": "9c56b5edc561a53f807b294c64b4234f"
+    "revision": "e5986937e92f3e84bb6c0fdf6e2f3177"
   }, {
     "url": "favicon.ico",
-    "revision": "c91f4713b49633cff485a7bee25c82b4"
+    "revision": "b0a0ce0b545bba4ac7cfe0b6ecf350c1"
   }, {
     "url": "pwa-192x192.png",
-    "revision": "968e2740b061116784f61b61304a0e07"
+    "revision": "e93d1b2ef00e870bcc528a64cf254c1f"
   }, {
     "url": "pwa-512x512.png",
-    "revision": "b939c8f0cf4bf04e5f824257d38bc4ce"
+    "revision": "dfabb0826464234196508f50c82ba4c3"
   }, {
     "url": "pwa-maskable-512x512.png",
-    "revision": "424b0ddeffc660c348dde536838f238f"
+    "revision": "aa64e2a2ec3d5930b80154c5ff19ac81"
   }, {
     "url": "manifest.webmanifest",
-    "revision": "28884cb39ce6d01034507bc3e2dc82ea"
+    "revision": "9c179612996508a46fb555515df92abe"
   }], {});
   workbox.cleanupOutdatedCaches();
-  workbox.registerRoute(new workbox.NavigationRoute(workbox.createHandlerBoundToURL("index.html"), {
-    denylist: [/^\/.*\.zip$/, /^\/api\/.*/]
-  }));
-  workbox.registerRoute(/^https:\/\/fonts\.googleapis\.com\/.*/i, new workbox.CacheFirst({
-    "cacheName": "google-fonts-cache",
-    plugins: [new workbox.ExpirationPlugin({
-      maxEntries: 10,
-      maxAgeSeconds: 31536000
-    }), new workbox.CacheableResponsePlugin({
-      statuses: [0, 200]
-    })]
-  }), 'GET');
-  workbox.registerRoute(/^https:\/\/fonts\.gstatic\.com\/.*/i, new workbox.CacheFirst({
-    "cacheName": "gstatic-fonts-cache",
-    plugins: [new workbox.ExpirationPlugin({
-      maxEntries: 10,
-      maxAgeSeconds: 31536000
-    }), new workbox.CacheableResponsePlugin({
-      statuses: [0, 200]
-    })]
-  }), 'GET');
+  workbox.registerRoute(new workbox.NavigationRoute(workbox.createHandlerBoundToURL("index.html")));
 
 }));
