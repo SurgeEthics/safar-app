@@ -12,7 +12,7 @@ export interface DriverIncomingAlertProps {
     category: string;
     distanceKm: number;
     estFare: number;
-    status: 'pending' | 'accepted' | 'declined';
+    status: 'pending' | 'accepted' | 'declined' | 'completed' | 'cancelled';
   } | null;
   onAccept: (requestId: string) => void;
   onDecline: (requestId: string) => void;

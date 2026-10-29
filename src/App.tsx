@@ -71,7 +71,7 @@ import { PassengerRideCockpit } from './components/PassengerRideCockpit';
 import { DriverIncomingAlert } from './components/DriverIncomingAlert';
 import { AdminControlPanel, AppCustomSettings } from './components/AdminControlPanel';
 import { AutoMarqueeText } from './components/AutoMarqueeText';
-import { collection, doc, setDoc, onSnapshot, updateDoc, deleteDoc } from 'firebase/firestore';
+import { collection, doc, setDoc, getDoc, getDocs, onSnapshot, updateDoc, deleteDoc, query, where, orderBy, limit } from 'firebase/firestore';
 import { db, handleFirestoreError, OperationType } from './lib/firebase';
 
 import { LocationAutocomplete } from './components/LocationAutocomplete';
@@ -127,7 +127,17 @@ export interface PassengerRideRequest {
   requestedAt: string;
   distanceKm: number;
   estFare: number;
-  status: 'pending' | 'accepted' | 'declined';
+  status: 'pending' | 'accepted' | 'declined' | 'completed' | 'cancelled';
+  driverId?: string;
+  driverName?: string;
+  driverPhone?: string;
+  driverCategory?: string;
+  driverLat?: number;
+  driverLng?: number;
+  driverVehicleModel?: string;
+  driverLicensePlate?: string;
+  driverRating?: number;
+  otp?: string;
 }
 
 export interface Driver {
@@ -1746,7 +1756,13 @@ export default function App() {
   });
   const [profileSaveToast, setProfileSaveToast] = useState(false);
 
-  // Passenger Registration & Login Form State
+  // Passenger Authentication (Sign Up vs Login) & Profile States
+  const [passengerAuthMode, setPassengerAuthMode] = useState<'signup' | 'login'>('signup');
+  const [passengerLoginPhone, setPassengerLoginPhone] = useState('');
+  const [passengerAuthError, setPassengerAuthError] = useState<string | null>(null);
+  const [isPassengerAuthLoading, setIsPassengerAuthLoading] = useState(false);
+
+  // Form State for Sign Up
   const [passengerLoginForm, setPassengerLoginForm] = useState({
     name: '',
     phone: '',
@@ -1754,29 +1770,168 @@ export default function App() {
     emergencyContact: ''
   });
 
-  const handlePassengerLoginSubmit = (e: React.FormEvent) => {
+  // Load Trips for a Passenger from Firestore
+  const loadPassengerTrips = async (phone: string) => {
+    const clean = phone.replace(/[^0-9]/g, '');
+    if (!clean) return;
+    try {
+      const q = query(
+        collection(db, 'users', clean, 'trips'),
+        orderBy('createdAt', 'desc'),
+        limit(20)
+      );
+      const snapshot = await getDocs(q);
+      const trips: PassengerTripRecord[] = [];
+      snapshot.forEach(docSnap => {
+        const d = docSnap.data();
+        trips.push({
+          id: docSnap.id,
+          date: d.date || 'পূর্বে',
+          pickupPoint: d.pickupPoint || '',
+          destination: d.destination || '',
+          driverName: d.driverName || 'চালক',
+          driverPhone: d.driverPhone || '',
+          vehicleCategory: d.vehicleCategory || 'auto',
+          vehicleModel: d.vehicleModel || '',
+          plateNumber: d.plateNumber || '',
+          fare: Number(d.fare) || 40,
+          status: d.status || 'সম্পন্ন',
+          ratingGiven: Number(d.ratingGiven) || 5.0
+        });
+      });
+      if (trips.length > 0) {
+        setTripHistory(trips);
+      }
+    } catch (err) {
+      console.warn('Error loading trips from Firestore:', err);
+    }
+  };
+
+  // Handle New Passenger Sign Up
+  const handlePassengerSignUpSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!passengerLoginForm.name.trim() || !passengerLoginForm.phone.trim()) {
-      showAdminToastMessage('নাম ও মোবাইল নম্বর পূরণ করুন');
+    setPassengerAuthError(null);
+    const cleanPhone = passengerLoginForm.phone.replace(/[^0-9]/g, '');
+    const cleanName = passengerLoginForm.name.trim();
+
+    if (!cleanName) {
+      setPassengerAuthError('আপনার নাম লিখুন');
       return;
     }
-    const updated = {
-      name: passengerLoginForm.name.trim(),
-      phone: passengerLoginForm.phone.trim(),
-      homeLocation: passengerLoginForm.homeLocation.trim() || 'গফরগাঁও পৌরসভা',
-      emergencyContact: passengerLoginForm.emergencyContact.trim() || '০১৭০০-১১২২৩৩ (পরিবার)',
-      isLoggedIn: true
-    };
-    setPassengerProfile(updated);
-    setEditProfileForm(updated);
-    setDoc(doc(db, 'users', updated.phone), {
-      ...updated,
-      role: 'passenger',
-      updatedAt: new Date().toISOString()
-    }, { merge: true }).catch(() => {});
-    setProfileSaveToast(true);
-    setTimeout(() => setProfileSaveToast(false), 3000);
-    showAdminToastMessage(`স্বাগতম ${updated.name}! আপনার প্রোফাইল সক্রিয় হয়েছে`);
+    if (cleanPhone.length !== 11) {
+      setPassengerAuthError('সঠিক ১১ ডিজিটের মোবাইল নম্বর দিন (যেমন: 017XXXXXXXX)');
+      return;
+    }
+
+    setIsPassengerAuthLoading(true);
+    try {
+      // Check if user already exists in Firestore
+      const userRef = doc(db, 'passengers', cleanPhone);
+      const userSnap = await getDoc(userRef);
+
+      if (userSnap.exists()) {
+        const existingData = userSnap.data();
+        const profile = {
+          name: existingData.name || cleanName,
+          phone: cleanPhone,
+          homeLocation: existingData.homeLocation || passengerLoginForm.homeLocation.trim() || 'গফরগাঁও',
+          emergencyContact: existingData.emergencyContact || passengerLoginForm.emergencyContact.trim() || '',
+          isLoggedIn: true
+        };
+        setPassengerProfile(profile);
+        setEditProfileForm(profile);
+        loadPassengerTrips(cleanPhone);
+        setProfileSaveToast(true);
+        setTimeout(() => setProfileSaveToast(false), 3000);
+        showAdminToastMessage(`স্বাগতম ${profile.name}! আপনার পূর্ববর্তী অ্যাকাউন্ট লোড হয়েছে`);
+        setIsPassengerAuthLoading(false);
+        return;
+      }
+
+      // Create new profile
+      const newProfile = {
+        name: cleanName,
+        phone: cleanPhone,
+        homeLocation: passengerLoginForm.homeLocation.trim() || 'গফরগাঁও পৌরসভা',
+        emergencyContact: passengerLoginForm.emergencyContact.trim() || '',
+        isLoggedIn: true
+      };
+
+      await setDoc(doc(db, 'passengers', cleanPhone), {
+        ...newProfile,
+        createdAt: new Date().toISOString()
+      });
+      await setDoc(doc(db, 'users', cleanPhone), {
+        ...newProfile,
+        role: 'passenger',
+        updatedAt: new Date().toISOString()
+      }, { merge: true });
+
+      setPassengerProfile(newProfile);
+      setEditProfileForm(newProfile);
+      setProfileSaveToast(true);
+      setTimeout(() => setProfileSaveToast(false), 3000);
+      showAdminToastMessage(`🎉 স্বাগতম ${newProfile.name}! নতুন যাত্রী প্রোফাইল তৈরি হয়েছে`);
+    } catch (err) {
+      console.warn('Sign Up error:', err);
+      // Fallback local save
+      const fallbackProfile = {
+        name: cleanName,
+        phone: cleanPhone,
+        homeLocation: passengerLoginForm.homeLocation.trim() || 'গফরগাঁও পৌরসভা',
+        emergencyContact: passengerLoginForm.emergencyContact.trim() || '',
+        isLoggedIn: true
+      };
+      setPassengerProfile(fallbackProfile);
+      setEditProfileForm(fallbackProfile);
+      showAdminToastMessage(`স্বাগতম ${fallbackProfile.name}! প্রোফাইল সক্রিয় হয়েছে`);
+    } finally {
+      setIsPassengerAuthLoading(false);
+    }
+  };
+
+  // Handle Existing Passenger Login (by Phone Number)
+  const handlePassengerLoginSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setPassengerAuthError(null);
+    const cleanPhone = passengerLoginPhone.replace(/[^0-9]/g, '');
+
+    if (cleanPhone.length !== 11) {
+      setPassengerAuthError('অনুগ্রহ করে সঠিক ১১ ডিজিটের মোবাইল নম্বর দিন (যেমন: 017XXXXXXXX)');
+      return;
+    }
+
+    setIsPassengerAuthLoading(true);
+    try {
+      let snap = await getDoc(doc(db, 'passengers', cleanPhone));
+      if (!snap.exists()) {
+        snap = await getDoc(doc(db, 'users', cleanPhone));
+      }
+
+      if (snap.exists()) {
+        const data = snap.data();
+        const loadedProfile = {
+          name: data.name || data.passengerName || 'সম্মানিত যাত্রী',
+          phone: cleanPhone,
+          homeLocation: data.homeLocation || 'গফরগাঁও পৌরসভা',
+          emergencyContact: data.emergencyContact || '',
+          isLoggedIn: true
+        };
+        setPassengerProfile(loadedProfile);
+        setEditProfileForm(loadedProfile);
+        loadPassengerTrips(cleanPhone);
+        setProfileSaveToast(true);
+        setTimeout(() => setProfileSaveToast(false), 3000);
+        showAdminToastMessage(`🎉 স্বাগতম ${loadedProfile.name}! অ্যাকাউন্টে সফলভাবে লগইন হয়েছে`);
+      } else {
+        setPassengerAuthError(`এই মোবাইল নম্বরে (${cleanPhone}) কোনো অ্যাকাউন্ট পাওয়া যায়নি। অনুগ্রহ করে প্রথমে 'সাইন আপ' করুন।`);
+      }
+    } catch (err) {
+      console.warn('Login lookup error:', err);
+      setPassengerAuthError('নেটওয়ার্ক সমস্যা হয়েছে। ইন্টারনেট সংযোগ চেক করুন।');
+    } finally {
+      setIsPassengerAuthLoading(false);
+    }
   };
 
   const handlePassengerLogout = () => {
@@ -1793,6 +1948,8 @@ export default function App() {
       homeLocation: '',
       emergencyContact: ''
     });
+    setPassengerLoginPhone('');
+    setPassengerAuthError(null);
     setTripHistory([]);
     try {
       localStorage.removeItem('safar_trip_history_v7');
@@ -1969,58 +2126,16 @@ export default function App() {
     showAdminToastMessage('চালক একাউন্ট থেকে সফলভাবে লগআউট করা হয়েছে।');
   };
 
-  // Simulated Incoming Passenger Requests in Driver Cockpit with LocalStorage sync
+  // Real-Time Incoming Passenger Requests in Driver Cockpit (Synced Live with Firestore)
+  // Default is clean [] - NO hardcoded dummy/fake accounts or fake requests
   const [passengerRequests, setPassengerRequests] = useState<PassengerRideRequest[]>(() => {
     try {
-      const saved = localStorage.getItem('safar_passenger_requests_v3');
-      if (saved) return JSON.parse(saved);
+      localStorage.removeItem('safar_passenger_requests_v3');
     } catch (e) {}
-    return [
-      {
-        id: 'req-1',
-        passengerName: 'মো: জামান মিয়া',
-        passengerPhone: '01712334455',
-        pickupPoint: 'উপজেলা স্বাস্থ্য কমপ্লেক্স গেট',
-        destination: 'গফরগাঁও রেলওয়ে স্টেশন',
-        category: 'cng',
-        requestedAt: '২ মিনিট আগে',
-        distanceKm: 1.4,
-        estFare: 60,
-        status: 'pending'
-      },
-      {
-        id: 'req-2',
-        passengerName: 'রাশেদুল ইসলাম',
-        passengerPhone: '01918776655',
-        pickupPoint: 'পৌরসভা চত্বর মোড়',
-        destination: 'পাগলা বাজার মোড়',
-        category: 'cng',
-        requestedAt: '৫ মিনিট আগে',
-        distanceKm: 8.5,
-        estFare: 220,
-        status: 'pending'
-      },
-      {
-        id: 'req-3',
-        passengerName: 'ডা: ফারহানা হক',
-        passengerPhone: '01815998877',
-        pickupPoint: 'শিবগঞ্জ বাজার মোড়',
-        destination: 'উপজেলা স্বাস্থ্য কমপ্লেক্স',
-        category: 'cng',
-        requestedAt: '৮ মিনিট আগে',
-        distanceKm: 2.2,
-        estFare: 80,
-        status: 'pending'
-      }
-    ];
+    return [];
   });
 
-  // Automatically persist passenger requests
-  useEffect(() => {
-    try {
-      localStorage.setItem('safar_passenger_requests_v3', JSON.stringify(passengerRequests));
-    } catch (e) {}
-  }, [passengerRequests]);
+
 
   // Passenger Ride Booking Hub State (Dynamic Pickup, Destination & Fare Calculation)
   // Default is empty so no dummy route or distance line is drawn until user selects locations
@@ -2216,6 +2331,104 @@ export default function App() {
     } catch (e) {}
   }, [passengerPendingRequest]);
 
+  // Real-Time Firestore Synchronization for Live Ride Requests
+  useEffect(() => {
+    const q = query(
+      collection(db, 'ride_requests'),
+      orderBy('requestedAt', 'desc'),
+      limit(30)
+    );
+
+    const unsubscribe = onSnapshot(q, (snapshot) => {
+      const liveList: PassengerRideRequest[] = [];
+      snapshot.forEach((docSnap) => {
+        const data = docSnap.data();
+        if (data && data.status && data.status !== 'cancelled' && data.status !== 'completed') {
+          liveList.push({
+            id: docSnap.id,
+            passengerName: data.passengerName || 'সম্মানিত যাত্রী',
+            passengerPhone: data.passengerPhone || '',
+            pickupPoint: data.pickupPoint || data.pickupLocation || '',
+            destination: data.destination || data.destinationLocation || '',
+            category: data.category || data.vehicleCategory || 'cng',
+            requestedAt: 'এইমাত্র',
+            distanceKm: Number(data.distanceKm) || 1.2,
+            estFare: Number(data.estFare || data.estimatedFare) || 40,
+            status: data.status,
+            driverId: data.driverId,
+            driverName: data.driverName,
+            driverPhone: data.driverPhone,
+            driverCategory: data.driverCategory,
+            driverLat: data.driverLat,
+            driverLng: data.driverLng,
+            driverVehicleModel: data.driverVehicleModel,
+            driverLicensePlate: data.driverLicensePlate,
+            driverRating: data.driverRating,
+            otp: data.otp
+          });
+        }
+      });
+
+      // Update Driver Cockpit list
+      setPassengerRequests(liveList);
+
+      // Check if current passenger's pending request was accepted by a driver
+      if (passengerPendingRequest) {
+        const myActiveDoc = liveList.find(r => r.id === passengerPendingRequest.id);
+        if (myActiveDoc && myActiveDoc.status === 'accepted' && myActiveDoc.driverId) {
+          const matchedDriver: Driver = drivers.find(d => d.id === myActiveDoc.driverId) || {
+            id: myActiveDoc.driverId,
+            name: myActiveDoc.driverName || 'ভেরিফাইড চালক',
+            phone: myActiveDoc.driverPhone || '০১৭১১-২২৩৩৪৪',
+            category: myActiveDoc.category,
+            categoryBengali: categories.find(c => c.id === myActiveDoc.category)?.nameBengali || 'যানবাহন',
+            lat: myActiveDoc.driverLat || 24.5520,
+            lng: myActiveDoc.driverLng || 90.5515,
+            rating: myActiveDoc.driverRating || 5.0,
+            totalTrips: 25,
+            isOnline: true,
+            vehicleModel: myActiveDoc.driverVehicleModel || 'যানবাহন',
+            licenseNumber: myActiveDoc.driverLicensePlate || 'BRTA-GAF-2026',
+            plateNumber: 'ময়মনসিংহ-থ-১২-৩৪৫৬',
+            licenseType: 'পেশাদার (Professional)',
+            nidNumber: '19886112345678901',
+            nidVerified: true,
+            licenseVerified: true,
+            standName: 'গফরগাঁও',
+            avatarBg: 'bg-emerald-600',
+            approxSpeedKmh: 25
+          };
+
+          const pCoords = pickupCoords || { lat: 24.5518, lng: 90.5512 };
+          setActiveBooking({
+            driver: matchedDriver,
+            passengerLat: pCoords.lat,
+            passengerLng: pCoords.lng,
+            currentDriverLat: matchedDriver.lat,
+            currentDriverLng: matchedDriver.lng,
+            confirmedAt: Date.now(),
+            etaMinutes: Math.max(2, Math.round(myActiveDoc.distanceKm * 2.5)),
+            distanceKm: myActiveDoc.distanceKm,
+            status: 'en_route',
+            otp: myActiveDoc.otp || '5201',
+            pickupTitle: myActiveDoc.pickupPoint,
+            destTitle: myActiveDoc.destination,
+            fare: myActiveDoc.estFare
+          });
+          setPassengerPendingRequest(null);
+          try {
+            sounds.playDriverMatchedChime();
+          } catch {}
+          showAdminToastMessage(`🎉 চালক '${matchedDriver.name}' আপনার ট্রিপ গ্রহণ করেছেন! চালক আপনার লোকেশনে রওনা দিয়েছেন।`);
+        }
+      }
+    }, (err) => {
+      console.warn('Firestore ride_requests snapshot sync error:', err);
+    });
+
+    return () => unsubscribe();
+  }, [passengerPendingRequest?.id, drivers, pickupCoords]);
+
   // Real-Time Live Tracking Hook (Cloudflare Worker Edge + Native GPS Sync)
   const {
     gps: liveGps,
@@ -2380,8 +2593,32 @@ export default function App() {
     showAdminToastMessage('পিকআপ ও গন্তব্য অদল-বদল করা হয়েছে');
   };
 
-  // Submit Passenger Ride Request (with real-time automatic driver search & matching)
+  // Submit Passenger Ride Request (Real-Time Live Driver Matching via Firestore)
   const handlePassengerCreateRideRequest = () => {
+    // Enforce Passenger Sign Up / Login before sending requests
+    if (!passengerProfile.isLoggedIn || !passengerProfile.phone) {
+      showAdminToastMessage('যাত্রার অনুরোধ পাঠানোর পূর্বে অনুগ্রহ করে সাইন আপ বা লগইন করুন');
+      setShowPassengerModal(true);
+      setPassengerTab('profile');
+      setPassengerAuthMode('signup');
+      return;
+    }
+
+    // Prevent duplicate spam requests if user already has a pending request
+    if (passengerPendingRequest) {
+      showAdminToastMessage('আপনার একটি অনুরোধ ইতোমধ্যে অপেক্ষমাণ রয়েছে। চালকের কনফার্মেশনের জন্য অপেক্ষা করুন।');
+      const cockpitEl = document.getElementById('passenger-ride-cockpit-section');
+      if (cockpitEl) {
+        cockpitEl.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      }
+      return;
+    }
+
+    if (activeBooking) {
+      showAdminToastMessage('আপনার একটি ট্রিপ বর্তমানে চলমান রয়েছে!');
+      return;
+    }
+
     const pickupTitle = passengerPickup.trim() || 'যাত্রীর লাইভ অবস্থান';
     const destTitle = passengerDestination.trim() || 'উপজেলা স্বাস্থ্য কমপ্লেক্স';
 
@@ -2390,128 +2627,64 @@ export default function App() {
       return;
     }
 
+    const validFare = (calculatedFare && calculatedFare > 0) ? calculatedFare : (categories.find(c => c.id === passengerSelectedVehicle)?.baseFare || 40);
+    const validDistance = calculatedDistance > 0 ? calculatedDistance : 1.2;
+
     const newRequest: PassengerRideRequest = {
       id: `req-${Date.now()}`,
-      passengerName: passengerProfile.name || 'সম্মানিত যাত্রী',
-      passengerPhone: passengerProfile.phone || '০১৭১১-২২৩৩৪৪',
+      passengerName: passengerProfile.name,
+      passengerPhone: passengerProfile.phone,
       pickupPoint: pickupTitle,
       destination: destTitle,
       category: passengerSelectedVehicle,
       requestedAt: 'এইমাত্র',
-      distanceKm: calculatedDistance,
-      estFare: calculatedFare,
+      distanceKm: validDistance,
+      estFare: validFare,
       status: 'pending'
     };
 
-    setPassengerRequests(prev => [newRequest, ...prev]);
     setPassengerPendingRequest(newRequest);
 
-    // Sync to Firestore
+    // Sync to Firestore for real-time broadcast to all drivers
     setDoc(doc(db, 'ride_requests', newRequest.id), {
+      id: newRequest.id,
       passengerName: newRequest.passengerName,
       passengerPhone: newRequest.passengerPhone,
-      pickupLocation: newRequest.pickupPoint,
-      destinationLocation: newRequest.destination,
-      vehicleCategory: newRequest.category,
+      pickupPoint: newRequest.pickupPoint,
+      destination: newRequest.destination,
+      category: newRequest.category,
+      distanceKm: newRequest.distanceKm,
+      estFare: newRequest.estFare,
+      pickupCoords: pickupCoords || { lat: 24.5518, lng: 90.5512 },
+      destCoords: destCoords || { lat: 24.5535, lng: 90.5518 },
       status: 'pending',
-      estimatedFare: newRequest.estFare,
-      createdAt: new Date().toISOString()
+      requestedAt: new Date().toISOString()
     }).catch(err => {
       console.warn('Firestore offline fallback for ride request:', err);
     });
-    showAdminToastMessage(`নিকটস্থ চালকদের কাছে সিগন্যাল পাঠানো হয়েছে... চালক অনুসন্ধান চলছে`);
 
-    // Auto-scroll to active ride / request cockpit box
+    showAdminToastMessage(`নিকটস্থ চালকদের কাছে আপনার অনুরোধ পাঠানো হয়েছে... চালক গ্রহণের অপেক্ষায়`);
+
+    // Auto-scroll to active request cockpit box
     setTimeout(() => {
       const cockpitEl = document.getElementById('passenger-ride-cockpit-section');
       if (cockpitEl) {
         cockpitEl.scrollIntoView({ behavior: 'smooth', block: 'start' });
       }
     }, 100);
-
-    // Automatic Realistic Driver Matching Simulation (after 3.2 seconds)
-    const reqId = newRequest.id;
-    setTimeout(() => {
-      setPassengerPendingRequest(currentReq => {
-        if (!currentReq || currentReq.id !== reqId) return null; // user cancelled
-
-        // Realistic driver matching:
-        // Priority 1: If passenger filtered by a specific stand (e.g. ঈমামবাড়ি মোড়), match online driver at that stand
-        let matchedDriver: Driver | undefined;
-        const cleanSelectedStand = selectedStand !== 'all' ? selectedStand.replace(' স্ট্যান্ড', '').trim() : '';
-
-        if (cleanSelectedStand) {
-          // Look for an online driver at this selected stand matching the category
-          matchedDriver = drivers.find(d => 
-            d.isOnline && 
-            d.standName.includes(cleanSelectedStand) && 
-            d.category === newRequest.category
-          );
-          // Or ANY online driver at this stand
-          if (!matchedDriver) {
-            matchedDriver = drivers.find(d => 
-              d.isOnline && 
-              d.standName.includes(cleanSelectedStand)
-            );
-          }
-        }
-
-        // Priority 2: Look for an online driver across Gafargaon matching requested vehicle category
-        if (!matchedDriver) {
-          matchedDriver = drivers.find(d => d.isOnline && d.category === newRequest.category);
-        }
-
-        // Priority 3: Fall back to any active online driver
-        if (!matchedDriver) {
-          matchedDriver = drivers.find(d => d.isOnline);
-        }
-
-        // Priority 4: Fallback
-        if (!matchedDriver) {
-          matchedDriver = drivers[0];
-        }
-
-        // Seamlessly sync passenger vehicle selection to the matched driver's vehicle
-        if (matchedDriver && matchedDriver.category !== passengerSelectedVehicle) {
-          setPassengerSelectedVehicle(matchedDriver.category);
-        }
-
-        const pCoords = pickupCoords || { lat: 24.5518, lng: 90.5512 };
-        const dist = calculatedDistance > 0 ? calculatedDistance : 1.2;
-        const eta = Math.max(2, Math.round(dist * 2.5));
-        const otpCode = String(Math.floor(1000 + Math.random() * 9000));
-        const validFare = (calculatedFare && calculatedFare > 0)
-          ? calculatedFare
-          : (calculateFareForCategory(matchedDriver.category, dist) || categories.find(c => c.id === matchedDriver.category)?.baseFare || 40);
-
-        setActiveBooking({
-          driver: matchedDriver,
-          passengerLat: pCoords.lat,
-          passengerLng: pCoords.lng,
-          currentDriverLat: matchedDriver.lat,
-          currentDriverLng: matchedDriver.lng,
-          confirmedAt: Date.now(),
-          etaMinutes: eta,
-          distanceKm: dist,
-          status: 'en_route',
-          otp: otpCode,
-          pickupTitle: pickupTitle,
-          destTitle: destTitle,
-          fare: validFare
-        });
-
-        showAdminToastMessage(`🎉 চালক '${matchedDriver.name}' (${matchedDriver.standName}) আপনার রাইড গ্রহণ করেছেন!`);
-        return null;
-      });
-    }, 3200);
   };
 
   // Cancel Pending Request
-  const handleCancelPassengerPendingRequest = () => {
+  const handleCancelPassengerPendingRequest = async () => {
     if (passengerPendingRequest) {
-      setPassengerRequests(prev => prev.filter(r => r.id !== passengerPendingRequest.id));
+      const reqId = passengerPendingRequest.id;
       setPassengerPendingRequest(null);
-      showAdminToastMessage('যাত্রার অনুরোধ বাতিল করা হয়েছে');
+      try {
+        await deleteDoc(doc(db, 'ride_requests', reqId));
+      } catch (err) {
+        console.warn('Failed to delete pending ride_request from Firestore:', err);
+      }
+      showAdminToastMessage('যাত্রার অনুরোধ সফলভাবে বাতিল করা হয়েছে');
     }
   };
 
@@ -2534,38 +2707,98 @@ export default function App() {
     showAdminToastMessage('সফর হোমপেজে ফিরে এসেছেন');
   };
 
-  // Driver accepts request
-  const handleDriverAcceptRequest = (requestId: string) => {
-    setPassengerRequests(prev => prev.map(req => 
-      req.id === requestId ? { ...req, status: 'accepted' } : req
-    ));
+  // Driver accepts request (Real-Time Firestore Update)
+  const handleDriverAcceptRequest = async (requestId: string) => {
+    const driverStand = stands.find(s => s.name === driverProfile.standName || s.bengaliName === driverProfile.standName);
+    const driverLat = driverStand ? driverStand.lat : 24.5520;
+    const driverLng = driverStand ? driverStand.lng : 90.5515;
 
-    const acceptedReq = passengerRequests.find(r => r.id === requestId);
-    if (acceptedReq) {
-      const matchingDriver = drivers.find(d => d.category === acceptedReq.category) || drivers[0];
-      const pCoords = getCoordinatesForLocation(acceptedReq.pickupPoint) || { lat: 24.5518, lng: 90.5512 };
+    const activeDriver: Driver = (userRole === 'driver' && driverProfile.id)
+      ? {
+          id: driverProfile.id,
+          name: driverProfile.name || 'ভেরিফাইড চালক',
+          phone: driverProfile.phone || '০১৭১১-২২৩৩৪৪',
+          category: driverProfile.category,
+          categoryBengali: categories.find(c => c.id === driverProfile.category)?.nameBengali || 'যানবাহন',
+          lat: driverLat,
+          lng: driverLng,
+          rating: driverProfile.rating || 5.0,
+          totalTrips: driverProfile.todayTrips || 25,
+          isOnline: true,
+          vehicleModel: driverProfile.vehicleModel || 'যানবাহন',
+          licenseNumber: driverProfile.licenseNumber || driverProfile.plateNumber || 'BRTA-GAF-2026',
+          plateNumber: driverProfile.plateNumber || 'ময়মনসিংহ-থ-১২-৩৪৫৬',
+          licenseType: 'পেশাদার (Professional)',
+          nidNumber: '19886112345678901',
+          nidVerified: true,
+          licenseVerified: true,
+          standName: driverProfile.standName || 'গফরগাঁও',
+          avatarBg: 'bg-emerald-600',
+          approxSpeedKmh: 25
+        }
+      : (drivers[0] || {
+          id: 'driver-default',
+          name: 'ভেরিফাইড চালক',
+          phone: '০১৭১১-২২৩৩৪৪',
+          category: 'cng',
+          categoryBengali: 'সিএনজি',
+          lat: 24.5520,
+          lng: 90.5515,
+          rating: 5.0,
+          totalTrips: 20,
+          isOnline: true,
+          vehicleModel: 'সিএনজি',
+          licenseNumber: 'BRTA-GAF',
+          plateNumber: 'ময়মনসিংহ-থ-১২-৩৪৫৬',
+          licenseType: 'পেশাদার (Professional)',
+          nidNumber: '19886112345678901',
+          nidVerified: true,
+          licenseVerified: true,
+          standName: 'গফরগাঁও',
+          avatarBg: 'bg-emerald-600',
+          approxSpeedKmh: 25
+        });
 
-      setActiveBooking({
-        driver: matchingDriver,
-        passengerLat: pCoords.lat,
-        passengerLng: pCoords.lng,
-        currentDriverLat: matchingDriver.lat,
-        currentDriverLng: matchingDriver.lng,
-        confirmedAt: Date.now(),
-        etaMinutes: Math.max(3, Math.round(acceptedReq.distanceKm * 2.5)),
-        distanceKm: acceptedReq.distanceKm,
-        status: 'en_route'
+    const otpCode = String(Math.floor(1000 + Math.random() * 9000));
+
+    try {
+      await updateDoc(doc(db, 'ride_requests', requestId), {
+        status: 'accepted',
+        driverId: activeDriver.id,
+        driverName: activeDriver.name,
+        driverPhone: activeDriver.phone,
+        driverCategory: activeDriver.category,
+        driverLat: activeDriver.lat,
+        driverLng: activeDriver.lng,
+        driverVehicleModel: activeDriver.vehicleModel,
+        driverLicensePlate: activeDriver.licenseNumber,
+        driverRating: activeDriver.rating,
+        otp: otpCode,
+        acceptedAt: new Date().toISOString()
       });
-      setPassengerPendingRequest(null);
-      showAdminToastMessage(`যাত্রী '${acceptedReq.passengerName}'-এর ট্রিপ কনফার্ম হয়েছে!`);
+      showAdminToastMessage('ট্রিপ সফলভাবে গ্রহণ করা হয়েছে! যাত্রীর লোকেশনে রওনা দিন।');
+    } catch (err) {
+      console.warn('Firestore update ride_request error:', err);
+      // Local optimistic update
+      setPassengerRequests(prev => prev.map(req => 
+        req.id === requestId ? { ...req, status: 'accepted', driverId: activeDriver.id, driverName: activeDriver.name } : req
+      ));
     }
   };
 
   // Driver declines request
-  const handleDriverDeclineRequest = (requestId: string) => {
-    setPassengerRequests(prev => prev.map(req => 
-      req.id === requestId ? { ...req, status: 'declined' } : req
-    ));
+  const handleDriverDeclineRequest = async (requestId: string) => {
+    try {
+      await updateDoc(doc(db, 'ride_requests', requestId), {
+        status: 'declined',
+        declinedAt: new Date().toISOString()
+      });
+      showAdminToastMessage('অনুরোধটি বাতিল করা হয়েছে');
+    } catch (err) {
+      setPassengerRequests(prev => prev.map(req => 
+        req.id === requestId ? { ...req, status: 'declined' } : req
+      ));
+    }
   };
 
   // Refs & Synchronized Height State for Category and Active Drivers
@@ -4714,7 +4947,14 @@ export default function App() {
 
                   {/* Request Cards Grid */}
                   <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-2.5">
-                    {passengerRequests.map((req) => (
+                    {passengerRequests.length === 0 ? (
+                      <div className="col-span-full py-8 text-center bg-slate-50 rounded-xl border border-dashed border-slate-200">
+                        <Users className="w-8 h-8 text-slate-300 mx-auto mb-1.5" />
+                        <p className="text-xs font-bold text-slate-600">বর্তমানে কোনো অপেক্ষমাণ যাত্রার অনুরোধ নেই</p>
+                        <p className="text-[11px] text-slate-400 mt-0.5">যাত্রী পিকআপ ও গন্তব্য নির্ধারণ করে অনুরোধ পাঠালে তা রিয়েল-টাইমে এখানে প্রদর্শিত হবে</p>
+                      </div>
+                    ) : (
+                      passengerRequests.map((req) => (
                       <div 
                         key={req.id}
                         className={`p-3 rounded-xl border transition-all ${
@@ -4804,7 +5044,7 @@ export default function App() {
                           </div>
                         )}
                       </div>
-                    ))}
+                    )))}
                   </div>
                 </div>
 
@@ -6618,70 +6858,198 @@ export default function App() {
 
                   {!passengerProfile.isLoggedIn ? (
                     <div className="bg-white rounded-2xl p-4 sm:p-5 border border-slate-200 shadow-xs space-y-3.5">
+                      {/* Top Header */}
                       <div className="flex items-center gap-3 pb-3 border-b border-slate-100">
                         <div className="w-12 h-12 rounded-2xl bg-emerald-100 text-emerald-800 flex items-center justify-center font-bold text-xl border border-emerald-200 shrink-0">
                           👤
                         </div>
                         <div>
-                          <h4 className="font-extrabold text-slate-900 text-sm sm:text-base">যাত্রী প্রোফাইল তৈরি ও লগইন</h4>
-                          <p className="text-xs text-slate-500 mt-0.5">গফরগাঁও পৌরসভা ও পাগলা থানা এলাকার নিরাপদ যাতায়াতে তথ্য দিন</p>
+                          <h4 className="font-extrabold text-slate-900 text-sm sm:text-base">
+                            {passengerAuthMode === 'signup' ? 'নতুন যাত্রী প্রোফাইল সাইন আপ' : 'পূর্বের একাউন্টে লগইন'}
+                          </h4>
+                          <p className="text-xs text-slate-500 mt-0.5">
+                            {passengerAuthMode === 'signup'
+                              ? 'গফরগাঁও ও পাগলা থানা এলাকার নিরাপদ যাতায়াতে তথ্য দিয়ে অ্যাকাউন্ট তৈরি করুন'
+                              : 'যে কোনো ডিভাইস থেকে আপনার সংরক্ষিত প্রোফাইল ও পূর্বের রাইড ইতিহাস ফিরে পান'}
+                          </p>
                         </div>
                       </div>
 
-                      <form onSubmit={handlePassengerLoginSubmit} className="space-y-3 text-xs">
-                        <div>
-                          <label className="font-bold text-slate-700 block mb-1">আপনার পূর্ণ নাম: *</label>
-                          <input
-                            type="text"
-                            value={passengerLoginForm.name}
-                            onChange={(e) => setPassengerLoginForm({ ...passengerLoginForm, name: e.target.value })}
-                            placeholder="যেমন: তানভীর আহমেদ"
-                            className="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl text-slate-900 focus:outline-none focus:ring-2 focus:ring-emerald-500 font-bold"
-                            required
-                          />
-                        </div>
-
-                        <div>
-                          <label className="font-bold text-slate-700 block mb-1">মোবাইল নম্বর (১১ ডিজিট): *</label>
-                          <input
-                            type="tel"
-                            value={passengerLoginForm.phone}
-                            onChange={(e) => setPassengerLoginForm({ ...passengerLoginForm, phone: e.target.value })}
-                            placeholder="০১XXXXXXXXX"
-                            className="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl text-slate-900 font-mono focus:outline-none focus:ring-2 focus:ring-emerald-500"
-                            required
-                          />
-                        </div>
-
-                        <div>
-                          <label className="font-bold text-slate-700 block mb-1">নিয়মিত ঠিকানা / প্রিয় স্থান:</label>
-                          <input
-                            type="text"
-                            value={passengerLoginForm.homeLocation}
-                            onChange={(e) => setPassengerLoginForm({ ...passengerLoginForm, homeLocation: e.target.value })}
-                            placeholder="যেমন: পৌরসভা চত্বর, গফরগাঁও"
-                            className="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl text-slate-900 focus:outline-none focus:ring-2 focus:ring-emerald-500"
-                          />
-                        </div>
-
-                        <div>
-                          <label className="font-bold text-slate-700 block mb-1">জরুরি পারিবারিক কন্টাক্ট নম্বর (ঐচ্ছিক):</label>
-                          <input
-                            type="text"
-                            value={passengerLoginForm.emergencyContact}
-                            onChange={(e) => setPassengerLoginForm({ ...passengerLoginForm, emergencyContact: e.target.value })}
-                            placeholder="যেমন: ০১৭০০-১১২২৩৩ (পরিবার)"
-                            className="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl text-slate-900 focus:outline-none focus:ring-2 focus:ring-emerald-500"
-                          />
-                        </div>
-
+                      {/* 2 Separate Options: <sign up> | <login> */}
+                      <div className="grid grid-cols-2 p-1 bg-slate-100 rounded-xl border border-slate-200">
                         <button
-                          type="submit"
-                          className="w-full py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white font-extrabold rounded-xl text-xs sm:text-sm shadow-xs cursor-pointer transition active:scale-95"
+                          type="button"
+                          onClick={() => {
+                            setPassengerAuthMode('signup');
+                            setPassengerAuthError(null);
+                          }}
+                          className={`py-2 text-xs font-black rounded-lg transition-all flex items-center justify-center gap-1.5 cursor-pointer ${
+                            passengerAuthMode === 'signup'
+                              ? 'bg-emerald-600 text-white shadow-xs'
+                              : 'text-slate-600 hover:text-slate-900'
+                          }`}
                         >
-                          প্রোফাইল তৈরি ও লগইন করুন
+                          <UserPlus className="w-3.5 h-3.5" />
+                          <span>সাইন আপ (Sign Up)</span>
                         </button>
-                      </form>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setPassengerAuthMode('login');
+                            setPassengerAuthError(null);
+                          }}
+                          className={`py-2 text-xs font-black rounded-lg transition-all flex items-center justify-center gap-1.5 cursor-pointer ${
+                            passengerAuthMode === 'login'
+                              ? 'bg-emerald-600 text-white shadow-xs'
+                              : 'text-slate-600 hover:text-slate-900'
+                          }`}
+                        >
+                          <LogIn className="w-3.5 h-3.5" />
+                          <span>লগইন (Login)</span>
+                        </button>
+                      </div>
+
+                      {/* Error Banner */}
+                      {passengerAuthError && (
+                        <div className="p-2.5 bg-red-50 text-red-800 border border-red-200 rounded-xl text-xs flex items-center gap-2 animate-in fade-in">
+                          <AlertCircle className="w-4 h-4 text-red-600 shrink-0" />
+                          <span className="font-semibold">{passengerAuthError}</span>
+                        </div>
+                      )}
+
+                      {/* SIGN UP FORM */}
+                      {passengerAuthMode === 'signup' ? (
+                        <form onSubmit={handlePassengerSignUpSubmit} className="space-y-3 text-xs">
+                          <div>
+                            <label className="font-bold text-slate-700 block mb-1">আপনার পূর্ণ নাম: *</label>
+                            <input
+                              type="text"
+                              value={passengerLoginForm.name}
+                              onChange={(e) => setPassengerLoginForm({ ...passengerLoginForm, name: e.target.value })}
+                              placeholder="যেমন: তানভীর আহমেদ"
+                              className="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl text-slate-900 focus:outline-none focus:ring-2 focus:ring-emerald-500 font-bold"
+                              required
+                            />
+                          </div>
+
+                          <div>
+                            <label className="font-bold text-slate-700 block mb-1">মোবাইল নম্বর (১১ ডিজিট): *</label>
+                            <input
+                              type="tel"
+                              value={passengerLoginForm.phone}
+                              onChange={(e) => setPassengerLoginForm({ ...passengerLoginForm, phone: e.target.value })}
+                              placeholder="০১XXXXXXXXX"
+                              className="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl text-slate-900 font-mono focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                              required
+                            />
+                          </div>
+
+                          <div>
+                            <label className="font-bold text-slate-700 block mb-1">নিয়মিত ঠিকানা / প্রিয় স্থান (ঐচ্ছিক):</label>
+                            <input
+                              type="text"
+                              value={passengerLoginForm.homeLocation}
+                              onChange={(e) => setPassengerLoginForm({ ...passengerLoginForm, homeLocation: e.target.value })}
+                              placeholder="যেমন: পৌরসভা চত্বর, গফরগাঁও"
+                              className="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl text-slate-900 focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                            />
+                          </div>
+
+                          <div>
+                            <label className="font-bold text-slate-700 block mb-1">জরুরি পারিবারিক কন্টাক্ট নম্বর (ঐচ্ছিক):</label>
+                            <input
+                              type="text"
+                              value={passengerLoginForm.emergencyContact}
+                              onChange={(e) => setPassengerLoginForm({ ...passengerLoginForm, emergencyContact: e.target.value })}
+                              placeholder="যেমন: ০১৭০০-১১২২৩৩ (পরিবার)"
+                              className="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl text-slate-900 focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                            />
+                          </div>
+
+                          <button
+                            type="submit"
+                            disabled={isPassengerAuthLoading}
+                            className="w-full py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white font-extrabold rounded-xl text-xs sm:text-sm shadow-xs cursor-pointer transition active:scale-95 flex items-center justify-center gap-2"
+                          >
+                            {isPassengerAuthLoading ? (
+                              <>
+                                <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                                <span>অ্যাকাউন্ট তৈরি হচ্ছে...</span>
+                              </>
+                            ) : (
+                              <>
+                                <UserPlus className="w-4 h-4" />
+                                <span>নতুন একাউন্ট সাইন আপ করুন</span>
+                              </>
+                            )}
+                          </button>
+
+                          <div className="text-center pt-1 border-t border-slate-100">
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setPassengerAuthMode('login');
+                                setPassengerAuthError(null);
+                              }}
+                              className="text-emerald-700 hover:text-emerald-800 text-[11px] font-bold cursor-pointer"
+                            >
+                              পূর্বে তৈরি করা অ্যাকাউন্ট আছে? <strong>এখানে লগইন করুন</strong>
+                            </button>
+                          </div>
+                        </form>
+                      ) : (
+                        /* LOGIN FORM */
+                        <form onSubmit={handlePassengerLoginSubmit} className="space-y-3.5 text-xs">
+                          <div>
+                            <label className="font-bold text-slate-700 block mb-1">আপনার নিবন্ধিত মোবাইল নম্বর (১১ ডিজিট): *</label>
+                            <div className="relative">
+                              <Phone className="w-4 h-4 text-emerald-600 absolute left-3 top-2.5" />
+                              <input
+                                type="tel"
+                                value={passengerLoginPhone}
+                                onChange={(e) => setPassengerLoginPhone(e.target.value)}
+                                placeholder="০১XXXXXXXXX"
+                                className="w-full pl-9 pr-3 py-2 bg-slate-50 border border-slate-300 rounded-xl text-slate-900 font-mono text-sm font-bold focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                                required
+                              />
+                            </div>
+                            <p className="text-[10px] text-slate-500 mt-1">
+                              পূর্বে যেকোনো ডিভাইস (মোবাইল বা পিসি) থেকে যে নম্বর দিয়ে সাইন আপ করেছিলেন তা দিন।
+                            </p>
+                          </div>
+
+                          <button
+                            type="submit"
+                            disabled={isPassengerAuthLoading}
+                            className="w-full py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white font-extrabold rounded-xl text-xs sm:text-sm shadow-xs cursor-pointer transition active:scale-95 flex items-center justify-center gap-2"
+                          >
+                            {isPassengerAuthLoading ? (
+                              <>
+                                <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                                <span>লগইন যাচাই হচ্ছে...</span>
+                              </>
+                            ) : (
+                              <>
+                                <LogIn className="w-4 h-4" />
+                                <span>অ্যাকাউন্টে লগইন করুন</span>
+                              </>
+                            )}
+                          </button>
+
+                          <div className="text-center pt-1 border-t border-slate-100">
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setPassengerAuthMode('signup');
+                                setPassengerAuthError(null);
+                              }}
+                              className="text-emerald-700 hover:text-emerald-800 text-[11px] font-bold cursor-pointer"
+                            >
+                              নতুন যাত্রী? <strong>এখানে সাইন আপ করুন</strong>
+                            </button>
+                          </div>
+                        </form>
+                      )}
                     </div>
                   ) : (
                     <div className="bg-white rounded-2xl p-4 border border-slate-200 shadow-xs space-y-3">
