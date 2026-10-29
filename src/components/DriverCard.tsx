@@ -2,7 +2,6 @@ import React from 'react';
 import { Phone, Star, ShieldCheck, MapPin, Info, Ambulance, Flame, Bike } from 'lucide-react';
 import { Driver, VehicleCategory } from '../types';
 import { toBengaliNumber } from '../utils/calculator';
-import { AutoMarqueeText } from './AutoMarqueeText';
 
 interface DriverCardProps {
   driver: Driver;
@@ -93,39 +92,25 @@ export const DriverCard: React.FC<DriverCardProps> = ({
         </div>
 
         {/* Driver Name & Vehicle Model */}
-        <div className="mb-2.5 overflow-hidden">
-          <div
+        <div className="mb-2.5">
+          <h4
             onClick={() => onViewDetails(driver)}
-            className="cursor-pointer"
+            className="font-bold text-sm sm:text-base text-slate-900 leading-snug group-hover:text-emerald-800 transition cursor-pointer"
           >
-            <AutoMarqueeText
-              text={driver.nameBn || driver.name || ''}
-              className="font-bold text-sm sm:text-base text-slate-900 leading-snug group-hover:text-emerald-800 transition"
-              pauseAtEndMs={1500}
-            />
-          </div>
-          <div className="w-full overflow-hidden mt-0.5">
-            <AutoMarqueeText
-              text={driver.vehicleModel || driver.vehicleName}
-              className="text-xs text-emerald-700 font-medium leading-normal"
-              pauseAtEndMs={1500}
-            />
-          </div>
+            {driver.nameBn}
+          </h4>
+          <p className="text-xs text-emerald-700 font-medium leading-normal mt-0.5">
+            {driver.vehicleModel || driver.vehicleName}
+          </p>
         </div>
 
         {/* Stand location */}
         <div
           onClick={() => onSelectOnMap(driver)}
-          className="flex items-center gap-1.5 text-xs text-slate-600 mb-2 cursor-pointer hover:text-emerald-700 group/stand overflow-hidden"
+          className="flex items-center gap-1.5 text-xs text-slate-600 mb-2 cursor-pointer hover:text-emerald-700 group/stand"
         >
           <MapPin className="w-3.5 h-3.5 text-slate-400 group-hover/stand:text-emerald-600 shrink-0" />
-          <div className="flex-1 min-w-0 overflow-hidden">
-            <AutoMarqueeText
-              text={driver.standName}
-              className="text-xs text-slate-600 group-hover/stand:text-emerald-700"
-              pauseAtEndMs={1500}
-            />
-          </div>
+          <span className="truncate">{driver.standName}</span>
         </div>
 
         {/* License & NID verification badges */}

@@ -71,7 +71,7 @@ import { PassengerRideCockpit } from './components/PassengerRideCockpit';
 import { DriverIncomingAlert } from './components/DriverIncomingAlert';
 import { AdminControlPanel, AppCustomSettings } from './components/AdminControlPanel';
 import { AutoMarqueeText } from './components/AutoMarqueeText';
-import { collection, doc, setDoc, getDoc, getDocs, onSnapshot, updateDoc, deleteDoc, query, where, orderBy, limit, runTransaction, addDoc } from 'firebase/firestore';
+import { collection, doc, setDoc, getDoc, getDocs, onSnapshot, updateDoc, deleteDoc, query, where, orderBy, limit, runTransaction } from 'firebase/firestore';
 import { db, handleFirestoreError, OperationType } from './lib/firebase';
 
 import { LocationAutocomplete } from './components/LocationAutocomplete';
@@ -1226,8 +1226,8 @@ export default function App() {
             regAppId: data.regAppId || `SAFAR-REG-${docSnap.id.slice(-4)}`,
             registeredAt: data.registeredAt || 'অনলাইন',
             standName: data.standName || 'গফরগাঁও রেলওয়ে স্টেশন স্ট্যান্ড',
-            lat: typeof data.lat === 'number' ? data.lat : 24.4536,
-            lng: typeof data.lng === 'number' ? data.lng : 90.5479,
+            lat: typeof data.lat === 'number' ? data.lat : 24.5518,
+            lng: typeof data.lng === 'number' ? data.lng : 90.5512,
             rating: typeof data.rating === 'number' ? data.rating : 5.0,
             totalTrips: typeof data.totalTrips === 'number' ? data.totalTrips : 0,
             avatarBg: data.avatarBg || 'bg-emerald-700',
@@ -1422,8 +1422,8 @@ export default function App() {
   const [standForm, setStandForm] = useState({
     bengaliName: '',
     name: '',
-    lat: 24.4515,
-    lng: 90.5535
+    lat: 24.5535,
+    lng: 90.5518
   });
 
   // Category Form Modal (Add / Edit)
@@ -1463,8 +1463,8 @@ export default function App() {
 
   // User Geolocation (Passenger GPS)
   const [passengerLocation, setPassengerLocation] = useState<{ lat: number; lng: number; isLiveGps: boolean }>({
-    lat: 24.4536, // Gafargaon Pouroshova/Station default center
-    lng: 90.5479,
+    lat: 24.5562, // Gafargaon Pouroshova default center
+    lng: 90.5539,
     isLiveGps: false
   });
 
@@ -1480,9 +1480,6 @@ export default function App() {
     passengerLng: number;
     currentDriverLat: number;
     currentDriverLng: number;
-    destLat?: number;
-    destLng?: number;
-    tripStatus?: string;
     confirmedAt: number;
     etaMinutes: number;
     distanceKm: number;
@@ -1780,21 +1777,13 @@ export default function App() {
     generatedCode: string;
     enteredCode: string;
     error: string | null;
-    isSending?: boolean;
-    isVerifying?: boolean;
-    resendCooldown?: number;
-    devCodeHint?: string;
   }>({
     isOpen: false,
     role: 'passenger',
     phone: '',
     generatedCode: '',
     enteredCode: '',
-    error: null,
-    isSending: false,
-    isVerifying: false,
-    resendCooldown: 0,
-    devCodeHint: ''
+    error: null
   });
 
   // Form State for Sign Up
@@ -1806,8 +1795,8 @@ export default function App() {
     emergencyContact: ''
   });
 
-  // Helper: Trigger Instant OTP Modal & Live Firestore Dispatch
-  const handleTriggerInstantOtp = async (role: 'passenger' | 'driver', phone: string) => {
+  // Helper: Trigger Instant OTP Modal & SMS simulation
+  const handleTriggerInstantOtp = (role: 'passenger' | 'driver', phone: string) => {
     const clean = phone.replace(/[^0-9]/g, '');
     if (!clean || clean.length < 10) {
       if (role === 'passenger') {
@@ -1824,155 +1813,77 @@ export default function App() {
       phone: clean,
       generatedCode: code,
       enteredCode: '',
-      error: null,
-      isSending: true,
-      devCodeHint: code,
-      resendCooldown: 60
+      error: null
     });
-
+    showAdminToastMessage(`🔒 সফর সিকিউরিটি ওটিপি (OTP): ${code} (যেকোনো ডিভাইসে তাৎক্ষণিক ভেরিফিকেশনের জন্য)`);
     try {
-      // 1. Write OTP document to live Firestore collection
-      await setDoc(doc(db, 'otp_verifications', clean), {
-        phone: clean,
-        code: code,
-        role: role,
-        createdAt: new Date().toISOString(),
-        expiresAt: Date.now() + 5 * 60 * 1000, // 5 min expiry
-        status: 'sent',
-        attempts: 0
-      });
-
-      // 2. Dispatch to live Firestore SMS Outbox queue for auditing
-      await addDoc(collection(db, 'otp_outbox'), {
-        phone: clean,
-        message: `আপনার সফর সিকিউরিটি ওটিপি (OTP) কোড: ${code}। মেয়াদ ৫ মিনিট।`,
-        sentAt: new Date().toISOString(),
-        role: role,
-        status: 'delivered'
-      });
-
-      setAuthOtpModal(prev => ({ ...prev, isSending: false }));
-      showAdminToastMessage(`📱 ওটিপি কোড: ${code} (স্ক্রিনে ১-ক্লিক বাটনে চাপ দিয়ে বসিয়ে নিন)`);
-      try {
-        sounds.playDriverMatchedChime();
-      } catch {}
-    } catch (err) {
-      console.warn('Failed to save OTP to Firestore:', err);
-      setAuthOtpModal(prev => ({ ...prev, isSending: false }));
-      showAdminToastMessage(`🔒 সফর ওটিপি (OTP): ${code}`);
-    }
+      sounds.playDriverMatchedChime();
+    } catch {}
   };
 
-  // Helper: Verify Entered OTP against live Firestore
+  // Helper: Verify Entered OTP
   const handleVerifyInstantOtp = async () => {
-    const clean = authOtpModal.phone;
-    const entered = authOtpModal.enteredCode.trim();
-
-    if (!entered || entered.length !== 4) {
+    if (authOtpModal.enteredCode.trim() !== authOtpModal.generatedCode.trim()) {
       setAuthOtpModal(prev => ({
         ...prev,
-        error: 'অনুগ্রহ করে ৪-ডিজিটের ওটিপি কোডটি লিখুন।'
+        error: 'ভুল ওটিপি কোড! অনুগ্রহ করে স্ক্রিনে প্রদর্শিত ৪-ডিজিটের কোডটি লিখুন।'
       }));
       return;
     }
 
-    setAuthOtpModal(prev => ({ ...prev, isVerifying: true, error: null }));
-
-    try {
-      let isValid = false;
-      const otpDocRef = doc(db, 'otp_verifications', clean);
-      const otpSnap = await getDoc(otpDocRef);
-
-      if (otpSnap.exists()) {
-        const otpData = otpSnap.data();
-        if (otpData.expiresAt && Date.now() > otpData.expiresAt) {
-          setAuthOtpModal(prev => ({
-            ...prev,
-            isVerifying: false,
-            error: 'ওটিপির মেয়াদ শেষ হয়ে গেছে। অনুগ্রহ করে আবার ওটিপি পাঠান।'
-          }));
-          return;
-        }
-
-        if (otpData.code && otpData.code.toString().trim() === entered) {
-          isValid = true;
-          await setDoc(otpDocRef, {
-            status: 'verified',
-            verifiedAt: new Date().toISOString()
-          }, { merge: true }).catch(() => {});
-        }
-      }
-
-      // Memory session verification fallback
-      if (!isValid && authOtpModal.generatedCode && authOtpModal.generatedCode.trim() === entered) {
-        isValid = true;
-      }
-
-      if (!isValid) {
-        setAuthOtpModal(prev => ({
-          ...prev,
-          isVerifying: false,
-          error: 'ভুল ওটিপি কোড! অনুগ্রহ করে আপনার মোবাইলে পাঠানো সঠিক ৪-ডিজিটের কোডটি লিখুন।'
-        }));
-        return;
-      }
-
-      if (authOtpModal.role === 'passenger') {
-        let snap = await getDoc(doc(db, 'passengers', clean));
+    if (authOtpModal.role === 'passenger') {
+      try {
+        let snap = await getDoc(doc(db, 'passengers', authOtpModal.phone));
         if (!snap.exists()) {
-          snap = await getDoc(doc(db, 'users', clean));
+          snap = await getDoc(doc(db, 'users', authOtpModal.phone));
         }
         const data = snap.exists() ? snap.data() : null;
         const profile = {
           name: data?.name || data?.passengerName || 'সম্মানিত যাত্রী',
-          phone: clean,
+          phone: authOtpModal.phone,
           homeLocation: data?.homeLocation || 'গফরগাঁও পৌরসভা',
           emergencyContact: data?.emergencyContact || '',
           isLoggedIn: true
         };
         setPassengerProfile(profile);
         setEditProfileForm(profile);
-        loadPassengerTrips(clean);
-        setAuthOtpModal(prev => ({ ...prev, isOpen: false, isVerifying: false }));
+        loadPassengerTrips(authOtpModal.phone);
+        setAuthOtpModal(prev => ({ ...prev, isOpen: false }));
         showAdminToastMessage(`🎉 ওটিপি সফলভাবে যাচাই হয়েছে! স্বাগতম ${profile.name}`);
-      } else {
-        // Driver OTP
-        const found = drivers.find(d => d.phone.replace(/[^0-9]/g, '').endsWith(clean.slice(-10)));
-        let firestoreDriver: any = null;
-        try {
-          const dSnap = await getDoc(doc(db, 'drivers', clean));
-          if (dSnap.exists()) firestoreDriver = dSnap.data();
-        } catch {}
-
-        const activeDriverData = firestoreDriver || found || {
-          id: `driver-${clean}`,
-          name: 'ভেরিফাইড চালক',
-          phone: clean,
-          vehicleModel: 'সিএনজি / অটো',
-          plateNumber: 'ময়মনসিংহ',
-          licenseNumber: 'BRTA-GAF',
-          standName: 'গফরগাঁও',
-          category: 'cng',
-          rating: 5.0,
-          todayTrips: 3,
-          todayEarnings: 300,
-          isRegistered: true
-        };
-
-        setDriverProfile({
-          ...activeDriverData,
-          isRegistered: true
-        });
-        setAuthOtpModal(prev => ({ ...prev, isOpen: false, isVerifying: false }));
-        showAdminToastMessage(`🎉 চালক ওটিপি সফলভাবে যাচাই হয়েছে! স্বাগতম ${activeDriverData.name}`);
+      } catch (e) {
+        setAuthOtpModal(prev => ({ ...prev, error: 'সার্ভার সমস্যা হয়েছে। আবার চেষ্টা করুন।' }));
       }
-    } catch (err) {
-      console.warn('OTP verification error:', err);
-      setAuthOtpModal(prev => ({
-        ...prev,
-        isVerifying: false,
-        error: 'যাচাইকরণে সার্ভার ত্রুটি হয়েছে। অনুগ্রহ করে আবার চেষ্টা করুন।'
-      }));
+    } else {
+      // Driver OTP
+      const clean = authOtpModal.phone;
+      const found = drivers.find(d => d.phone.replace(/[^0-9]/g, '').endsWith(clean.slice(-10)));
+      let firestoreDriver: any = null;
+      try {
+        const dSnap = await getDoc(doc(db, 'drivers', clean));
+        if (dSnap.exists()) firestoreDriver = dSnap.data();
+      } catch {}
+
+      const activeDriverData = firestoreDriver || found || {
+        id: `driver-${clean}`,
+        name: 'ভেরিফাইড চালক',
+        phone: clean,
+        vehicleModel: 'সিএনজি / অটো',
+        plateNumber: 'ময়মনসিংহ',
+        licenseNumber: 'BRTA-GAF',
+        standName: 'গফরগাঁও',
+        category: 'cng',
+        rating: 5.0,
+        todayTrips: 3,
+        todayEarnings: 300,
+        isRegistered: true
+      };
+
+      setDriverProfile({
+        ...activeDriverData,
+        isRegistered: true
+      });
+      setAuthOtpModal(prev => ({ ...prev, isOpen: false }));
+      showAdminToastMessage(`🎉 চালক ওটিপি সফলভাবে যাচাই হয়েছে! স্বাগতম ${activeDriverData.name}`);
     }
   };
 
@@ -2334,18 +2245,19 @@ export default function App() {
       return;
     }
 
-    // PIN check is mandatory for driver login
+    // PIN check if provided or set
     const cleanPin = (pinInput || driverLoginPinInput).replace(/[^0-9]/g, '');
-    if (!cleanPin || cleanPin.length < 4) {
-      setDriverLoginError('লগইন করতে ৪-ডিজিট পিন আবশ্যক (মাস্ট)! পিন মনে না থাকলে নিচে ওটিপি দিয়ে ভেরিফাই করুন।');
-      return;
-    }
-    if (driverData.pin && driverData.pin.toString().trim() !== cleanPin) {
-      setDriverLoginError('ভুল চালক পিন কোড! সঠিক পিন দিন অথবা নিচে ওটিপি বাটনে চাপ দিন।');
-      return;
-    }
-    if (!driverData.pin && cleanPin.length >= 4) {
-      // Register PIN for driver
+    if (driverData.pin) {
+      if (!cleanPin || cleanPin.length < 4) {
+        setDriverLoginError('অনুগ্রহ করে আপনার ৪-ডিজিটের সিকিউরিটি পিন দিন অথবা ওটিপি ভেরিফিকেশন ব্যবহার করুন।');
+        return;
+      }
+      if (driverData.pin.toString().trim() !== cleanPin) {
+        setDriverLoginError('ভুল চালক পিন কোড! সঠিক পিন দিন অথবা নিচে ওটিপি বাটনে চাপ দিন।');
+        return;
+      }
+    } else if (cleanPin && cleanPin.length >= 4) {
+      // Save PIN for driver
       setDoc(doc(db, 'drivers', clean), { pin: cleanPin }, { merge: true }).catch(() => {});
     }
 
@@ -2440,8 +2352,8 @@ export default function App() {
             bengaliName: data.bengaliName || data.name || '',
             category: data.category || 'অন্যান্য',
             area: data.area || 'গফরগাঁও',
-            lat: typeof data.lat === 'number' ? data.lat : 24.4536,
-            lng: typeof data.lng === 'number' ? data.lng : 90.5479
+            lat: typeof data.lat === 'number' ? data.lat : 24.5518,
+            lng: typeof data.lng === 'number' ? data.lng : 90.5512
           });
         });
         setPopularPlaces(firestorePlaces);
@@ -2684,8 +2596,8 @@ export default function App() {
             phone: myActiveDoc.driverPhone || '০১৭১১-২২৩৩৪৪',
             category: myActiveDoc.category,
             categoryBengali: categories.find(c => c.id === myActiveDoc.category)?.nameBengali || 'যানবাহন',
-            lat: myActiveDoc.driverLat || 24.4536,
-            lng: myActiveDoc.driverLng || 90.5479,
+            lat: myActiveDoc.driverLat || 24.5520,
+            lng: myActiveDoc.driverLng || 90.5515,
             rating: myActiveDoc.driverRating || 5.0,
             totalTrips: 25,
             isOnline: true,
@@ -2701,9 +2613,7 @@ export default function App() {
             approxSpeedKmh: 25
           };
 
-          const pCoords = myActiveDoc.pickupCoords || pickupCoords || resolveLocationCoordinates(myActiveDoc.pickupPoint || passengerPickup, false);
-          const dCoords = myActiveDoc.destCoords || destCoords || resolveLocationCoordinates(myActiveDoc.destination || passengerDestination, true);
-
+          const pCoords = pickupCoords || { lat: 24.5518, lng: 90.5512 };
           setActiveBooking({
             id: myActiveDoc.id,
             requestId: myActiveDoc.id,
@@ -2712,9 +2622,6 @@ export default function App() {
             passengerLng: pCoords.lng,
             currentDriverLat: myActiveDoc.driverLat || matchedDriver.lat,
             currentDriverLng: myActiveDoc.driverLng || matchedDriver.lng,
-            destLat: dCoords.lat,
-            destLng: dCoords.lng,
-            tripStatus: myActiveDoc.status || 'accepted',
             confirmedAt: Date.now(),
             etaMinutes: Math.max(2, Math.round(myActiveDoc.distanceKm * 2.5)),
             distanceKm: myActiveDoc.distanceKm,
@@ -2857,7 +2764,7 @@ export default function App() {
     setDestCoords(getCoordinatesForLocation(passengerDestination, true));
   }, [passengerDestination]);
 
-  // When live GPS coordinates stream in, keep pickup locked to live position and resolve nearest landmark
+  // When live GPS coordinates stream in, if pickup is live location, keep it locked to live position
   useEffect(() => {
     if (liveGps.lat && liveGps.lng && liveGps.isTracking) {
       setPassengerLocation({
@@ -2867,20 +2774,6 @@ export default function App() {
       });
       if (isLiveLocationQuery(passengerPickup)) {
         setPickupCoords({ lat: liveGps.lat, lng: liveGps.lng });
-        // Auto-replace generic 'আমার বর্তমান অবস্থান' with nearest Google landmark
-        if (
-          !passengerPickup ||
-          passengerPickup === 'আমার বর্তমান অবস্থান' ||
-          passengerPickup === 'আমার বর্তমান অবস্থান (লাইভ GPS)' ||
-          passengerPickup === 'বর্তমান অবস্থান' ||
-          passengerPickup === 'আমার লোকেশন'
-        ) {
-          const nearest = findNearestLandmark(liveGps.lat, liveGps.lng);
-          const landmarkLabel = nearest.distanceMeters <= 500
-            ? `${nearest.name} (লাইভ GPS)`
-            : `${nearest.name} এর নিকট (লাইভ GPS)`;
-          setPassengerPickup(landmarkLabel);
-        }
       }
     }
   }, [liveGps.lat, liveGps.lng, liveGps.isTracking, passengerPickup]);
@@ -2994,9 +2887,6 @@ export default function App() {
     const validFare = (calculatedFare && calculatedFare > 0) ? calculatedFare : (categories.find(c => c.id === passengerSelectedVehicle)?.baseFare || 40);
     const validDistance = calculatedDistance > 0 ? calculatedDistance : 1.2;
 
-    const resolvedPickupCoords = pickupCoords || resolveLocationCoordinates(pickupTitle, false);
-    const resolvedDestCoords = destCoords || resolveLocationCoordinates(destTitle, true);
-
     const newRequest: PassengerRideRequest = {
       id: `req-${Date.now()}`,
       passengerName: passengerProfile.name,
@@ -3007,8 +2897,8 @@ export default function App() {
       requestedAt: 'এইমাত্র',
       distanceKm: validDistance,
       estFare: validFare,
-      pickupCoords: resolvedPickupCoords,
-      destCoords: resolvedDestCoords,
+      pickupCoords: pickupCoords || { lat: 24.5518, lng: 90.5512 },
+      destCoords: destCoords || { lat: 24.5535, lng: 90.5518 },
       status: 'pending'
     };
 
@@ -3024,8 +2914,8 @@ export default function App() {
       category: newRequest.category,
       distanceKm: newRequest.distanceKm,
       estFare: newRequest.estFare,
-      pickupCoords: resolvedPickupCoords,
-      destCoords: resolvedDestCoords,
+      pickupCoords: pickupCoords || { lat: 24.5518, lng: 90.5512 },
+      destCoords: destCoords || { lat: 24.5535, lng: 90.5518 },
       status: 'pending',
       requestedAt: new Date().toISOString()
     }).catch(err => {
@@ -3093,8 +2983,8 @@ export default function App() {
   // Driver accepts request (Real-Time Firestore Update)
   const handleDriverAcceptRequest = async (requestId: string) => {
     const driverStand = stands.find(s => s.name === driverProfile.standName || s.bengaliName === driverProfile.standName);
-    const driverLat = liveGps.lat || (driverProfile as any).lat || (driverStand ? driverStand.lat : 24.4536);
-    const driverLng = liveGps.lng || (driverProfile as any).lng || (driverStand ? driverStand.lng : 90.5479);
+    const driverLat = driverStand ? driverStand.lat : 24.5520;
+    const driverLng = driverStand ? driverStand.lng : 90.5515;
 
     const activeDriver: Driver = (userRole === 'driver' && driverProfile.id)
       ? {
@@ -3125,8 +3015,8 @@ export default function App() {
           phone: '০১৭১১-২২৩৩৪৪',
           category: 'cng',
           categoryBengali: 'সিএনজি',
-          lat: 24.4536,
-          lng: 90.5479,
+          lat: 24.5520,
+          lng: 90.5515,
           rating: 5.0,
           totalTrips: 20,
           isOnline: true,
@@ -3366,7 +3256,7 @@ export default function App() {
       }
 
       const map = L.map(mapContainerRef.current, {
-        center: [24.4536, 90.5479],
+        center: [24.5535, 90.5518],
         zoom: 14,
         zoomControl: true,
         dragging: !L.Browser.mobile || isMapTouchUnlocked,
@@ -3858,8 +3748,8 @@ export default function App() {
       regAppId: newRegAppId,
       registeredAt: new Date().toLocaleTimeString('bn-BD', { hour: '2-digit', minute: '2-digit' }),
       standName: targetStand ? targetStand.bengaliName : registerForm.standName,
-      lat: (targetStand ? targetStand.lat : 24.4536) + (Math.random() - 0.5) * 0.008,
-      lng: (targetStand ? targetStand.lng : 90.5479) + (Math.random() - 0.5) * 0.008,
+      lat: (targetStand ? targetStand.lat : 24.5530) + (Math.random() - 0.5) * 0.008,
+      lng: (targetStand ? targetStand.lng : 90.5520) + (Math.random() - 0.5) * 0.008,
       rating: 5.0,
       totalTrips: 0,
       avatarBg: 'bg-emerald-700',
@@ -4158,8 +4048,8 @@ export default function App() {
       const updatedStand = {
         bengaliName: standForm.bengaliName.trim(),
         name: standForm.name.trim() || standForm.bengaliName.trim(),
-        lat: Number(standForm.lat) || 24.4515,
-        lng: Number(standForm.lng) || 90.5535
+        lat: Number(standForm.lat) || 24.5535,
+        lng: Number(standForm.lng) || 90.5518
       };
       setStands(prev => prev.map(s => 
         s.id === editingStandId 
@@ -4177,8 +4067,8 @@ export default function App() {
         id: `stand-${Date.now()}`,
         bengaliName: standForm.bengaliName.trim(),
         name: standForm.name.trim() || standForm.bengaliName.trim(),
-        lat: Number(standForm.lat) || 24.4515,
-        lng: Number(standForm.lng) || 90.5535,
+        lat: Number(standForm.lat) || 24.5535,
+        lng: Number(standForm.lng) || 90.5518,
         activeDrivers: 0
       };
       setStands(prev => [...prev, newStand]);
@@ -4191,7 +4081,7 @@ export default function App() {
 
     setIsStandModalOpen(false);
     setEditingStandId(null);
-    setStandForm({ bengaliName: '', name: '', lat: 24.4515, lng: 90.5535 });
+    setStandForm({ bengaliName: '', name: '', lat: 24.5535, lng: 90.5518 });
   };
 
   // Delete Stand
@@ -4535,8 +4425,8 @@ export default function App() {
       regAppId: 'SAFAR-ADM-' + Math.floor(1000 + Math.random() * 9000),
       registeredAt: new Date().toLocaleTimeString('bn-BD', { hour: '2-digit', minute: '2-digit' }),
       standName: targetStand ? targetStand.bengaliName : 'গফরগাঁও রেলওয়ে স্টেশন স্ট্যান্ড',
-      lat: targetStand ? targetStand.lat + (Math.random() - 0.5) * 0.005 : 24.4536,
-      lng: targetStand ? targetStand.lng + (Math.random() - 0.5) * 0.005 : 90.5479,
+      lat: targetStand ? targetStand.lat + (Math.random() - 0.5) * 0.005 : 24.5518,
+      lng: targetStand ? targetStand.lng + (Math.random() - 0.5) * 0.005 : 90.5512,
       rating: 5.0,
       totalTrips: 1,
       avatarBg: 'bg-emerald-700',
@@ -4968,26 +4858,18 @@ export default function App() {
                   <div className="w-7 h-7 rounded-lg bg-emerald-100 text-emerald-700 flex items-center justify-center font-bold">
                     <Navigation className="w-4 h-4 text-emerald-700" />
                   </div>
-                  <div className="min-w-0 flex-1 overflow-hidden">
-                    <div className="flex items-center gap-2 overflow-hidden">
-                      <div className="overflow-hidden flex-1">
-                        <AutoMarqueeText
-                          text="কোথায় যাবেন? যাত্রা পরিকল্পনা ও ভাড়ার হিসাব"
-                          className="text-xs sm:text-sm md:text-base font-extrabold text-slate-900 leading-tight block"
-                          speed={30}
-                        />
-                      </div>
-                      <span className="hidden sm:inline-block bg-emerald-50 text-emerald-700 border border-emerald-200 text-[10px] font-black px-1.5 py-0.2 rounded shrink-0">
+                  <div>
+                    <div className="flex items-center gap-2">
+                      <h2 className="text-xs sm:text-sm md:text-base font-extrabold text-slate-900 leading-tight">
+                        কোথায় যাবেন? যাত্রা পরিকল্পনা ও ভাড়ার হিসাব
+                      </h2>
+                      <span className="hidden sm:inline-block bg-emerald-50 text-emerald-700 border border-emerald-200 text-[10px] font-black px-1.5 py-0.2 rounded">
                         লাইভ রেট
                       </span>
                     </div>
-                    <div className="overflow-hidden mt-0.5">
-                      <AutoMarqueeText
-                        text="শুরুর অবস্থান ও গন্তব্য বেছে নিন—স্বয়ংক্রিয় দূরত্ব ও সরকার নির্ধারিত সুলভ ভাড়া দেখুন"
-                        className="text-[10px] sm:text-[11px] text-slate-500 block"
-                        speed={28}
-                      />
-                    </div>
+                    <p className="text-[10px] sm:text-[11px] text-slate-500">
+                      শুরুর অবস্থান ও গন্তব্য বেছে নিন—স্বয়ংক্রিয় দূরত্ব ও সরকার নির্ধারিত সুলভ ভাড়া দেখুন
+                    </p>
                   </div>
                 </div>
 
@@ -5021,13 +4903,9 @@ export default function App() {
                           const lat = liveGps.lat;
                           const lng = liveGps.lng;
                           setPassengerLocation({ lat, lng, isLiveGps: true });
-                          const nearest = findNearestLandmark(lat, lng);
-                          const landmarkLabel = nearest.distanceMeters <= 500
-                            ? `${nearest.name} (লাইভ GPS)`
-                            : `${nearest.name} এর নিকট (লাইভ GPS)`;
-                          setPassengerPickup(landmarkLabel);
+                          setPassengerPickup('আমার বর্তমান অবস্থান (লাইভ GPS)');
                           setPickupCoords({ lat, lng });
-                          showAdminToastMessage(`📍 লাইভ GPS অবস্থান চিহ্নিত: ${nearest.name} (সঠিকতা: ±${Math.round(liveGps.accuracy || 10)} মি.)`);
+                          showAdminToastMessage(`📍 লাইভ GPS অবস্থান চিহ্নিত (সঠিকতা: ±${Math.round(liveGps.accuracy || 10)} মি.)`);
                           return;
                         }
                         if ('geolocation' in navigator) {
@@ -5037,13 +4915,9 @@ export default function App() {
                               const lng = pos.coords.longitude;
                               const accuracy = pos.coords.accuracy || 10;
                               setPassengerLocation({ lat, lng, isLiveGps: true });
-                              const nearest = findNearestLandmark(lat, lng);
-                              const landmarkLabel = nearest.distanceMeters <= 500
-                                ? `${nearest.name} (লাইভ GPS)`
-                                : `${nearest.name} এর নিকট (লাইভ GPS)`;
-                              setPassengerPickup(landmarkLabel);
+                              setPassengerPickup('আমার বর্তমান অবস্থান (লাইভ GPS)');
                               setPickupCoords({ lat, lng });
-                              showAdminToastMessage(`📍 লাইভ GPS অবস্থান চিহ্নিত: ${nearest.name} (সঠিকতা: ±${Math.round(accuracy)} মি.)`);
+                              showAdminToastMessage(`📍 লাইভ GPS অবস্থান চিহ্নিত (সঠিকতা: ±${Math.round(accuracy)} মি.)`);
                             },
                             () => {
                               showAdminToastMessage('GPS লোকেশন পাওয়া যায়নি, ম্যানুয়ালি বাছুন');
@@ -5127,17 +5001,13 @@ export default function App() {
                           <span className="w-7 h-7 rounded-lg bg-amber-500 text-slate-950 flex items-center justify-center shrink-0 shadow-xs group-hover:bg-amber-600 transition">
                             <Car className="w-4 h-4 text-slate-950" />
                           </span>
-                          <div className="truncate min-w-0 flex-1">
+                          <div className="truncate">
                             <span className="font-extrabold text-xs sm:text-sm text-amber-950 block leading-tight">
                               যানবাহন ও ভাড়ার তালিকা
                             </span>
-                            <div className="overflow-hidden">
-                              <AutoMarqueeText
-                                text="বাহন অনুযায়ী নির্ধারিত ভাড়ার রেট"
-                                className="text-[10px] text-amber-800 font-semibold block leading-tight"
-                                speed={28}
-                              />
-                            </div>
+                            <span className="text-[10px] text-amber-800 font-semibold block leading-tight">
+                              বাহন অনুযায়ী নির্ধারিত ভাড়ার রেট
+                            </span>
                           </div>
                         </div>
 
@@ -5276,13 +5146,9 @@ export default function App() {
                   <h2 className="text-lg sm:text-xl font-black text-slate-900 mt-2">
                     আপনি এখনও চালক হিসেবে নিবন্ধিত নন
                   </h2>
-                  <div className="overflow-hidden max-w-md mx-auto mt-1.5">
-                    <AutoMarqueeText
-                      text="গফরগাঁও সফর ডিজিটাল নেটওয়ার্কে গাড়ি চালিয়ে আয় করতে এবং সরাসরি যাত্রীদের ট্রিপ কল পেতে বিআরটিএ ড্রাইভিং লাইসেন্স ও জাতীয় পরিচয়পত্র দিয়ে নিবন্ধন সম্পন্ন করুন।"
-                      className="text-xs sm:text-sm text-slate-600 block"
-                      speed={30}
-                    />
-                  </div>
+                  <p className="text-xs sm:text-sm text-slate-600 max-w-md mx-auto mt-1.5 leading-relaxed">
+                    গফরগাঁও সফর ডিজিটাল নেটওয়ার্কে গাড়ি চালিয়ে আয় করতে এবং সরাসরি যাত্রীদের ট্রিপ কল পেতে বিআরটিএ ড্রাইভিং লাইসেন্স ও জাতীয় পরিচয়পত্র দিয়ে নিবন্ধন সম্পন্ন করুন।
+                  </p>
                 </div>
 
                 <div className="flex flex-col sm:flex-row items-center justify-center gap-3 pt-2">
@@ -5309,13 +5175,9 @@ export default function App() {
 
                 {/* Inline Login for Already Registered Drivers (Phone + 4-Digit PIN or Instant OTP) */}
                 <div className="pt-4 border-t border-amber-200/80 text-left max-w-md mx-auto">
-                  <div className="overflow-hidden mb-1.5">
-                    <AutoMarqueeText
-                      text="ইতিমধ্যে নিবন্ধিত চালক? আপনার নম্বর ও পিন দিয়ে ড্যাশবোর্ড খুলুন:"
-                      className="text-xs font-bold text-slate-800 block"
-                      speed={30}
-                    />
-                  </div>
+                  <span className="text-xs font-bold text-slate-800 block mb-1.5">
+                    ইতিমধ্যে নিবন্ধিত চালক? আপনার নম্বর ও পিন দিয়ে ড্যাশবোর্ড খুলুন:
+                  </span>
                   <form
                     onSubmit={(e) => {
                       e.preventDefault();
@@ -5343,9 +5205,8 @@ export default function App() {
                           setDriverLoginPinInput(e.target.value);
                           setDriverLoginError(null);
                         }}
-                        placeholder="৪-ডিজিট পিন *"
-                        className="w-full sm:w-32 px-3 py-2 bg-white border border-slate-300 rounded-xl text-xs text-slate-900 focus:outline-none focus:ring-2 focus:ring-amber-500 font-mono font-bold"
-                        required
+                        placeholder="৪-ডিজিট পিন (ঐচ্ছিক)"
+                        className="w-full sm:w-32 px-3 py-2 bg-white border border-slate-300 rounded-xl text-xs text-slate-900 focus:outline-none focus:ring-2 focus:ring-amber-500 font-mono"
                       />
                       <button
                         type="submit"
@@ -5487,12 +5348,6 @@ export default function App() {
 
                   if (!driverActiveTrip) return null;
 
-                  const pCoords = (driverActiveTrip as any).pickupCoords || resolveLocationCoordinates(driverActiveTrip.pickupPoint, false);
-                  const dCoords = (driverActiveTrip as any).destCoords || resolveLocationCoordinates(driverActiveTrip.destination, true);
-                  const dOrigLat = liveGps.lat || (driverProfile as any).lat || 24.4536;
-                  const dOrigLng = liveGps.lng || (driverProfile as any).lng || 90.5479;
-                  const gDriverNavUrl = `https://www.google.com/maps/dir/?api=1&origin=${dOrigLat},${dOrigLng}&destination=${pCoords.lat},${pCoords.lng}&travelmode=driving`;
-
                   return (
                     <div className="bg-gradient-to-br from-emerald-950 via-slate-900 to-teal-950 text-white rounded-3xl p-4 sm:p-5 border-2 border-emerald-400 shadow-xl mb-3.5 animate-in fade-in">
                       <div className="flex items-center justify-between pb-3 mb-3 border-b border-emerald-800/60 flex-wrap gap-2">
@@ -5513,31 +5368,27 @@ export default function App() {
                       </div>
 
                       <div className="grid grid-cols-1 lg:grid-cols-12 gap-3.5 items-center">
-                        {/* Passenger Details with Marquee */}
-                        <div className="lg:col-span-6 flex items-center gap-3 min-w-0">
+                        {/* Passenger Details */}
+                        <div className="lg:col-span-6 flex items-center gap-3">
                           <div className="w-12 h-12 rounded-2xl bg-emerald-600/30 border border-emerald-400/40 text-emerald-300 flex items-center justify-center font-bold text-xl shrink-0">
                             👤
                           </div>
-                          <div className="min-w-0 flex-1 overflow-hidden">
-                            <h3 className="font-extrabold text-base sm:text-lg text-white flex items-center gap-1.5 overflow-hidden">
-                              <span className="truncate">{driverActiveTrip.passengerName}</span>
-                              <span className="text-[10px] bg-emerald-500/20 text-emerald-300 px-1.5 py-0.2 rounded border border-emerald-500/30 shrink-0">
+                          <div className="min-w-0">
+                            <h3 className="font-extrabold text-base sm:text-lg text-white truncate flex items-center gap-1.5">
+                              <span>{driverActiveTrip.passengerName}</span>
+                              <span className="text-[10px] bg-emerald-500/20 text-emerald-300 px-1.5 py-0.2 rounded border border-emerald-500/30">
                                 লাইভ যাত্রী
                               </span>
                             </h3>
-                            <div className="text-xs text-slate-300 mt-1 space-y-1">
-                              <div className="flex items-center gap-1.5 text-[11px] overflow-hidden">
-                                <span className="shrink-0 px-1.5 py-0.2 bg-emerald-500 text-slate-950 font-black rounded text-[9px] shadow-xs">পিকআপ</span>
-                                <div className="flex-1 overflow-hidden">
-                                  <AutoMarqueeText text={driverActiveTrip.pickupPoint} className="text-slate-100 font-bold text-[11px]" speed={30} />
-                                </div>
-                              </div>
-                              <div className="flex items-center gap-1.5 text-[11px] overflow-hidden">
-                                <span className="shrink-0 px-1.5 py-0.2 bg-blue-500 text-white font-black rounded text-[9px] shadow-xs">গন্তব্য</span>
-                                <div className="flex-1 overflow-hidden">
-                                  <AutoMarqueeText text={driverActiveTrip.destination} className="text-slate-100 font-bold text-[11px]" speed={30} />
-                                </div>
-                              </div>
+                            <div className="text-xs text-slate-300 mt-0.5 space-y-0.5">
+                              <p className="truncate flex items-center gap-1 text-[11px]">
+                                <MapPin className="w-3 h-3 text-emerald-400 shrink-0" />
+                                <span>পিকআপ: <b>{driverActiveTrip.pickupPoint}</b></span>
+                              </p>
+                              <p className="truncate flex items-center gap-1 text-[11px]">
+                                <Navigation className="w-3 h-3 text-blue-400 shrink-0" />
+                                <span>গন্তব্য: <b>{driverActiveTrip.destination}</b></span>
+                              </p>
                             </div>
                           </div>
                         </div>
@@ -5572,11 +5423,11 @@ export default function App() {
                           </button>
 
                           <a
-                            href={gDriverNavUrl}
+                            href={`https://www.google.com/maps/dir/?api=1&origin=${liveGps.lat || (driverProfile as any).lat || 24.5520},${liveGps.lng || (driverProfile as any).lng || 90.5515}&destination=${(driverActiveTrip as any).pickupCoords?.lat || (activeBooking as any)?.passengerLat || 24.5518},${(driverActiveTrip as any).pickupCoords?.lng || (activeBooking as any)?.passengerLng || 90.5512}`}
                             target="_blank"
                             rel="noopener noreferrer"
                             className="inline-flex items-center gap-1.5 bg-blue-600 hover:bg-blue-500 text-white px-3 py-2 rounded-xl text-xs sm:text-sm font-bold shadow-md cursor-pointer transition active:scale-95"
-                            title="গুগল ম্যাপে চালক থেকে যাত্রী পর্যন্ত সরাসরি নেভিগেশন খুলুন"
+                            title="গুগল ম্যাপে লাইভ টার্ন-বাই-টার্ন ভয়েস নেভিগেশন খুলুন"
                           >
                             <Navigation className="w-3.5 h-3.5 text-white" />
                             <span>গুগল ম্যাপে GPS</span>
@@ -5661,13 +5512,10 @@ export default function App() {
                                 driverName: driverProfile.name || 'আমি (চালক)',
                                 driverPhone: driverProfile.phone,
                                 driverCategory: driverProfile.category,
-                                currentDriverLat: dOrigLat,
-                                currentDriverLng: dOrigLng,
-                                passengerLat: pCoords.lat,
-                                passengerLng: pCoords.lng,
-                                destLat: dCoords.lat,
-                                destLng: dCoords.lng,
-                                tripStatus: driverActiveTrip.status || 'accepted',
+                                currentDriverLat: liveGps.lat || 24.5520,
+                                currentDriverLng: liveGps.lng || 90.5515,
+                                passengerLat: (driverActiveTrip as any).pickupCoords?.lat || (activeBooking as any)?.passengerLat || 24.5518,
+                                passengerLng: (driverActiveTrip as any).pickupCoords?.lng || (activeBooking as any)?.passengerLng || 90.5512,
                                 distanceKm: driverActiveTrip.distanceKm || 1.2,
                                 etaMinutes: Math.round((driverActiveTrip.distanceKm || 1.2) * 2.5)
                               }}
@@ -8411,8 +8259,8 @@ export default function App() {
                         setStandForm({
                           bengaliName: '',
                           name: '',
-                          lat: 24.4515,
-                          lng: 90.5535
+                          lat: 24.5535,
+                          lng: 90.5518
                         });
                         setIsStandModalOpen(true);
                       }}
@@ -9057,7 +8905,7 @@ export default function App() {
                     type="number"
                     step="0.0001"
                     value={standForm.lat}
-                    onChange={(e) => setStandForm({ ...standForm, lat: parseFloat(e.target.value) || 24.4515 })}
+                    onChange={(e) => setStandForm({ ...standForm, lat: parseFloat(e.target.value) || 24.5535 })}
                     className="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl text-slate-900 focus:outline-none focus:ring-2 focus:ring-emerald-500"
                     required
                   />
@@ -9070,7 +8918,7 @@ export default function App() {
                     type="number"
                     step="0.0001"
                     value={standForm.lng}
-                    onChange={(e) => setStandForm({ ...standForm, lng: parseFloat(e.target.value) || 90.5535 })}
+                    onChange={(e) => setStandForm({ ...standForm, lng: parseFloat(e.target.value) || 90.5518 })}
                     className="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl text-slate-900 focus:outline-none focus:ring-2 focus:ring-emerald-500"
                     required
                   />
@@ -9485,46 +9333,31 @@ export default function App() {
               </button>
             </div>
 
-            <div className="p-3.5 bg-gradient-to-br from-emerald-50 via-teal-50/50 to-amber-50/80 border-2 border-emerald-300 rounded-2xl text-center space-y-2.5">
-              <div className="flex items-center justify-between">
-                <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-emerald-100 text-emerald-900 text-[10.5px] font-extrabold border border-emerald-300">
-                  <span className="w-2 h-2 rounded-full bg-emerald-600 animate-pulse" />
-                  <span>লাইভ ফায়ারস্টোর ওটিপি প্রেরিত</span>
-                </span>
-                <span className="text-[10px] text-slate-500 font-mono">মেয়াদ: ৫ মিনিট</span>
+            <div className="p-3 bg-emerald-50 border border-emerald-300 rounded-2xl text-center space-y-1">
+              <span className="text-[10.5px] text-emerald-800 font-bold block">
+                সফর সিকিউরিটি সার্ভিস থেকে প্রাপ্ত ওটিপি:
+              </span>
+              <div className="text-2xl font-black font-mono tracking-widest text-emerald-950 py-1 bg-white rounded-xl border border-emerald-200">
+                {authOtpModal.generatedCode}
               </div>
+              <span className="text-[9.5px] text-slate-500 block">
+                যে কোনো ডিভাইস থেকে প্রোফাইল সুরক্ষিত রাখতে এই ওটিপি কোডটি ব্যবহৃত হয়।
+              </span>
+            </div>
 
-              <div className="text-xs text-slate-800 font-medium leading-relaxed">
-                মোবাইল নম্বর <span className="font-mono text-emerald-950 font-black">{authOtpModal.phone}</span>-এ ৪-ডিজিটের ওটিপি প্রেরণ করা হয়েছে।
-              </div>
-
-              {/* Instant Code Card with 1-Click Auto-Fill */}
-              <div className="bg-white p-3 rounded-xl border-2 border-amber-300 shadow-xs space-y-2 text-left">
-                <div className="flex items-center justify-between">
-                  <span className="text-xs font-bold text-slate-700 flex items-center gap-1">
-                    📱 আপনার ওটিপি কোড:
-                  </span>
-                  <span className="font-mono text-xl font-black text-emerald-900 bg-emerald-100 px-3 py-0.5 rounded-lg border border-emerald-300 tracking-widest shadow-2xs">
-                    {authOtpModal.devCodeHint || authOtpModal.generatedCode}
-                  </span>
-                </div>
-
-                <button
-                  type="button"
-                  onClick={() => {
-                    const code = authOtpModal.devCodeHint || authOtpModal.generatedCode;
-                    setAuthOtpModal(prev => ({ ...prev, enteredCode: code, error: null }));
-                  }}
-                  className="w-full py-2 bg-emerald-600 hover:bg-emerald-700 active:scale-95 text-white font-black text-xs rounded-xl shadow-xs cursor-pointer transition flex items-center justify-center gap-1.5"
-                >
-                  <Check className="w-4 h-4 text-white" />
-                  <span>১-ক্লিকে কোড বসান ({authOtpModal.devCodeHint || authOtpModal.generatedCode})</span>
-                </button>
-              </div>
-
-              <p className="text-[9.5px] text-slate-500 text-left leading-normal border-t border-emerald-200/60 pt-1.5">
-                💡 <b>টেলিকম নোট:</b> মোবাইল হ্যান্ডসেটের সিম কার্ডে শারীরিক এসএমএস আসার জন্য আলাদা পেইড এসএমএস গেটওয়ে API (যেমন: Greenweb / SSL Wireless) প্রয়োজন। তাৎক্ষণিক টেস্ট করার জন্য উপরের ১-ক্লিক বাটনে চাপ দিলেই কোড বসে যাবে এবং আপনি চালক ও যাত্রীর সকল ফিচার ব্যবহার করতে পারবেন।
-              </p>
+            <div className="space-y-1.5">
+              <label className="text-xs font-bold text-slate-700 block">
+                উপরের ৪-ডিজিটের কোডটি এখানে লিখুন: *
+              </label>
+              <input
+                type="text"
+                maxLength={4}
+                value={authOtpModal.enteredCode}
+                onChange={(e) => setAuthOtpModal(prev => ({ ...prev, enteredCode: e.target.value.replace(/[^0-9]/g, ''), error: null }))}
+                placeholder="৪-ডিজিট কোড লিখুন"
+                className="w-full text-center text-xl font-mono tracking-widest px-3 py-2.5 bg-slate-50 border border-slate-300 rounded-xl font-black text-slate-900 focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                autoFocus
+              />
             </div>
 
             {authOtpModal.error && (
@@ -9544,21 +9377,11 @@ export default function App() {
               </button>
               <button
                 type="button"
-                disabled={authOtpModal.isVerifying}
                 onClick={handleVerifyInstantOtp}
-                className="flex-1 py-2.5 bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 text-white font-extrabold rounded-xl text-xs shadow-md shadow-emerald-600/30 cursor-pointer transition active:scale-95 flex items-center justify-center gap-1.5"
+                className="flex-1 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white font-extrabold rounded-xl text-xs shadow-md shadow-emerald-600/30 cursor-pointer transition active:scale-95 flex items-center justify-center gap-1.5"
               >
-                {authOtpModal.isVerifying ? (
-                  <>
-                    <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
-                    <span>যাচাই হচ্ছে...</span>
-                  </>
-                ) : (
-                  <>
-                    <Check className="w-4 h-4" />
-                    <span>যাচাই ও লগইন</span>
-                  </>
-                )}
+                <Check className="w-4 h-4" />
+                <span>যাচাই ও লগইন</span>
               </button>
             </div>
           </div>

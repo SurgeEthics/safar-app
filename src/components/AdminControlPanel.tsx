@@ -149,8 +149,8 @@ export const AdminControlPanel: React.FC<AdminControlPanelProps> = ({
   const [standForm, setStandForm] = useState({
     bengaliName: '',
     name: '',
-    lat: 24.4515,
-    lng: 90.5535
+    lat: 24.5535,
+    lng: 90.5518
   });
 
   // Category Form Modal State
@@ -296,8 +296,8 @@ export const AdminControlPanel: React.FC<AdminControlPanelProps> = ({
       id: editingStand ? editingStand.id : `stand-${Date.now()}`,
       bengaliName: standForm.bengaliName.trim(),
       name: standForm.name.trim() || standForm.bengaliName.trim(),
-      lat: Number(standForm.lat) || 24.4515,
-      lng: Number(standForm.lng) || 90.5535,
+      lat: Number(standForm.lat) || 24.5535,
+      lng: Number(standForm.lng) || 90.5518,
       activeDrivers: editingStand ? editingStand.activeDrivers : 0
     };
     onSaveStand(targetStand, !!editingStand);
@@ -639,7 +639,7 @@ export const AdminControlPanel: React.FC<AdminControlPanelProps> = ({
         window.URL.revokeObjectURL(url);
         document.body.removeChild(link);
       }, 2000);
-      showToast('🎉 সফলভাবে ক্লাউডফ্লেয়ার ফিক্সড সোর্স কোড ও dist জিপ (২.৮২ MB) ডাউনলোড হয়েছে!');
+      showToast('🎉 সফলভাবে ক্লাউডফ্লেয়ার ফিক্সড সোর্স কোড ও dist জিপ (২.৪ MB) ডাউনলোড হয়েছে!');
     } catch (err: any) {
       console.error('ZIP download error:', err);
       showToast('সরাসরি ডাউনলোড লিঙ্ক ওপেন করা হচ্ছে...');
@@ -1194,7 +1194,7 @@ export const AdminControlPanel: React.FC<AdminControlPanelProps> = ({
                     type="button"
                     onClick={() => {
                       setEditingStand(null);
-                      setStandForm({ bengaliName: '', name: '', lat: 24.4515, lng: 90.5535 });
+                      setStandForm({ bengaliName: '', name: '', lat: 24.5535, lng: 90.5518 });
                       setIsStandModalOpen(true);
                     }}
                     className="inline-flex items-center gap-1.5 bg-emerald-600 hover:bg-emerald-700 text-white font-extrabold px-4 py-2 rounded-xl text-xs sm:text-sm shadow-xs cursor-pointer transition shrink-0"
@@ -2417,7 +2417,7 @@ export const AdminControlPanel: React.FC<AdminControlPanelProps> = ({
                     ) : (
                       <>
                         <Download className="w-4 h-4 text-slate-950" />
-                        <span>📥 সম্পূর্ণ প্রজেক্ট জিপ ডাউনলোড করুন (২.৮২ MB • অফিশিয়াল ক্লিন বিল্ড)</span>
+                        <span>📥 সম্পূর্ণ প্রজেক্ট জিপ ডাউনলোড করুন (৬.০০ MB • অফিশিয়াল ক্লিন বিল্ড)</span>
                       </>
                     )}
                   </button>
@@ -2428,7 +2428,7 @@ export const AdminControlPanel: React.FC<AdminControlPanelProps> = ({
                     className="inline-flex items-center gap-1.5 bg-white hover:bg-slate-50 text-slate-800 font-bold px-3.5 py-2.5 rounded-xl text-xs sm:text-sm shadow-xs border border-slate-300 cursor-pointer transition"
                   >
                     <Download className="w-3.5 h-3.5 text-slate-600" />
-                    <span>সরাসরি লিঙ্ক (২.৮২ MB)</span>
+                    <span>সরাসরি লিঙ্ক (৬.০০ MB)</span>
                   </a>
 
                   {onOpenSourceCodeModal && (
@@ -2572,7 +2572,7 @@ export const AdminControlPanel: React.FC<AdminControlPanelProps> = ({
                     type="number"
                     step="0.0001"
                     value={standForm.lat}
-                    onChange={(e) => setStandForm({ ...standForm, lat: parseFloat(e.target.value) || 24.4515 })}
+                    onChange={(e) => setStandForm({ ...standForm, lat: parseFloat(e.target.value) || 24.5535 })}
                     className="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl text-slate-900 focus:outline-none focus:ring-2 focus:ring-emerald-500"
                     required
                   />
@@ -2583,7 +2583,7 @@ export const AdminControlPanel: React.FC<AdminControlPanelProps> = ({
                     type="number"
                     step="0.0001"
                     value={standForm.lng}
-                    onChange={(e) => setStandForm({ ...standForm, lng: parseFloat(e.target.value) || 90.5535 })}
+                    onChange={(e) => setStandForm({ ...standForm, lng: parseFloat(e.target.value) || 90.5518 })}
                     className="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl text-slate-900 focus:outline-none focus:ring-2 focus:ring-emerald-500"
                     required
                   />

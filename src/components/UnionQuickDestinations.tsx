@@ -11,7 +11,6 @@ import {
 } from 'lucide-react';
 import { GAFARGAON_UNIONS, COMPREHENSIVE_UNION_PLACES, ComprehensivePlace, UnionInfo } from '../data/gafargaonUnionData';
 import { PauseMarqueeText } from './PauseMarqueeText';
-import { AutoMarqueeText } from './AutoMarqueeText';
 
 interface UnionQuickDestinationsProps {
   isOpen: boolean;
@@ -50,13 +49,9 @@ export const UnionQuickDestinations: React.FC<UnionQuickDestinationsProps> = ({
             <span className="font-extrabold text-xs sm:text-sm text-emerald-950 block leading-tight">
               দ্রুত গন্তব্য
             </span>
-            <div className="overflow-hidden">
-              <AutoMarqueeText
-                text="গফরগাঁও ও পাগলার ১৫টি ইউনিয়নের সকল স্থান ও স্ট্যান্ড"
-                className="text-[10px] text-emerald-700 font-semibold block leading-tight"
-                speed={28}
-              />
-            </div>
+            <span className="text-[10px] text-emerald-700 font-semibold block leading-tight">
+              গফরগাঁও ও পাগলার ১৫টি ইউনিয়নের সকল স্থান ও স্ট্যান্ড
+            </span>
           </div>
         </div>
 

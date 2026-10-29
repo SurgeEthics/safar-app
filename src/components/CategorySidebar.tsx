@@ -37,24 +37,23 @@ export const CategorySidebar: React.FC<CategorySidebarProps> = ({
   };
 
   return (
-    <div className="bg-white rounded-2xl border border-slate-200/90 shadow-xs p-3.5 space-y-2 h-[410px] sm:h-[450px] max-h-[410px] sm:max-h-[450px] flex flex-col justify-between">
-      <div className="flex-1 flex flex-col min-h-0">
-        <div className="flex items-center justify-between pb-2 border-b border-slate-100 shrink-0">
-          <h3 className="text-xs sm:text-sm font-bold text-slate-800 flex items-center gap-1.5">
-            <Navigation className="w-3.5 h-3.5 text-emerald-700 transform rotate-45" />
-            <span>ক্যাটাগরি</span>
-          </h3>
-          {selectedCategory !== 'all' && (
-            <button
-              onClick={() => onSelectCategory('all')}
-              className="text-[11px] text-emerald-700 hover:underline font-medium"
-            >
-              সব দেখুন
-            </button>
-          )}
-        </div>
+    <div className="bg-white rounded-2xl border border-slate-200/90 shadow-xs p-3.5 space-y-2">
+      <div className="flex items-center justify-between pb-2 border-b border-slate-100">
+        <h3 className="text-xs sm:text-sm font-bold text-slate-800 flex items-center gap-1.5">
+          <Navigation className="w-3.5 h-3.5 text-emerald-700 transform rotate-45" />
+          <span>ক্যাটাগরি</span>
+        </h3>
+        {selectedCategory !== 'all' && (
+          <button
+            onClick={() => onSelectCategory('all')}
+            className="text-[11px] text-emerald-700 hover:underline font-medium"
+          >
+            সব দেখুন
+          </button>
+        )}
+      </div>
 
-        <div className="space-y-1 flex-1 min-h-0 overflow-y-auto pr-1 custom-driver-scrollbar">
+      <div className="space-y-1">
         {VEHICLE_OPTIONS.map((opt) => {
           const isSelected = selectedCategory === opt.id;
           const count = drivers.filter((d) => d.category === opt.id).length;
@@ -95,10 +94,9 @@ export const CategorySidebar: React.FC<CategorySidebarProps> = ({
             </button>
           );
         })}
-        </div>
       </div>
 
-      <div className="pt-2 text-[10px] text-slate-400 border-t border-slate-100 leading-relaxed text-center shrink-0">
+      <div className="pt-2 text-[10px] text-slate-400 border-t border-slate-100 leading-relaxed text-center">
         ক্যাটাগরির উপর ক্লিক করে নির্দিষ্ট গাড়ির চালকদের তালিকা দেখুন
       </div>
     </div>

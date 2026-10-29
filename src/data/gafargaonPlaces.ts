@@ -68,7 +68,7 @@ export function resolveLocationCoordinates(
   if (clean.includes('থানা')) return { lat: 24.4520, lng: 90.5542 };
   if (clean.includes('জামতলী') || clean.includes('জামতলি')) return { lat: 24.4528, lng: 90.5492 };
   if (clean.includes('শিবগঞ্জ')) return { lat: 24.4625, lng: 90.5630 };
-  if (clean.includes('রওনা') || clean.includes('রাওনা')) return { lat: 24.4320, lng: 90.5480 };
+  if (clean.includes('রওনা')) return { lat: 24.4320, lng: 90.5480 };
   if (clean.includes('বালিপাড়া')) return { lat: 24.4590, lng: 90.5540 };
   if (clean.includes('দত্তপাড়া')) return { lat: 24.4480, lng: 90.5490 };
   if (clean.includes('কান্দার') || clean.includes('কান্দাপাড়া')) return { lat: 24.4580, lng: 90.5410 };

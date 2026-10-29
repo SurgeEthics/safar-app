@@ -21,14 +21,12 @@ export interface Driver {
   id: string;
   nameBn: string;
   nameEn: string;
-  name?: string;
   phone: string;
   altPhone?: string;
   category: VehicleCategory;
   vehicleName: string;
   vehicleModel?: string;
   licensePlate: string;
-  plateNumber?: string;
   standId: string;
   standName: string;
   lat: number;

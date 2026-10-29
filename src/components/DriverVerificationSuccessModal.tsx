@@ -57,9 +57,8 @@ export const DriverVerificationSuccessModal: React.FC<DriverVerificationSuccessM
   };
 
   return (
-    <div className="fixed inset-0 z-[10000] bg-slate-950/80 backdrop-blur-sm overflow-y-auto overscroll-contain p-2 sm:p-4 modal-scroll-overlay animate-in fade-in duration-200">
-      <div className="min-h-full flex items-start sm:items-center justify-center py-2 sm:py-6">
-        <div className="bg-white rounded-3xl max-w-lg w-full border border-emerald-200 shadow-2xl overflow-hidden my-auto animate-in zoom-in-95 duration-200 flex flex-col">
+    <div className="fixed inset-0 z-[10000] bg-slate-950/80 backdrop-blur-sm flex items-center justify-center p-3 sm:p-4 overflow-y-auto animate-in fade-in duration-200">
+      <div className="bg-white rounded-3xl max-w-lg w-full border border-emerald-200 shadow-2xl overflow-hidden my-auto animate-in zoom-in-95 duration-200 flex flex-col">
         {/* Celebratory Header */}
         <div className="bg-gradient-to-r from-emerald-800 via-teal-700 to-emerald-900 text-white p-5 sm:p-6 text-center relative overflow-hidden shrink-0">
           {/* Decorative glowing orb */}
@@ -249,6 +248,5 @@ export const DriverVerificationSuccessModal: React.FC<DriverVerificationSuccessM
         </div>
       </div>
     </div>
-  </div>
   );
 };

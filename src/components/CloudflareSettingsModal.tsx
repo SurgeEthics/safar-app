@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { X, Cloud, Check, Wifi, Globe, Server, RefreshCw, Copy, CheckCircle2, Terminal, Info, ExternalLink } from 'lucide-react';
+import { X, Cloud, Check, Wifi, Globe, Server, RefreshCw } from 'lucide-react';
 import { liveLocationService } from '../services/liveLocationService';
 
 interface CloudflareSettingsModalProps {
@@ -24,7 +24,6 @@ export const CloudflareSettingsModal: React.FC<CloudflareSettingsModalProps> = (
   const [workerUrl, setWorkerUrl] = useState(liveLocationService.getCustomServerUrl());
   const [testStatus, setTestStatus] = useState<string | null>(null);
   const [isTesting, setIsTesting] = useState(false);
-  const [copied, setCopied] = useState(false);
 
   if (!isOpen) return null;
 
@@ -70,15 +69,6 @@ export const CloudflareSettingsModal: React.FC<CloudflareSettingsModalProps> = (
     } finally {
       setIsTesting(false);
     }
-  };
-
-  const sampleWorkerCode = `// deploy with: npx wrangler deploy
-// or paste into Cloudflare Dashboard > Workers`;
-
-  const copyWorkerCode = () => {
-    navigator.clipboard.writeText(sampleWorkerCode);
-    setCopied(true);
-    setTimeout(() => setCopied(false), 2000);
   };
 
   return (
@@ -204,22 +194,6 @@ export const CloudflareSettingsModal: React.FC<CloudflareSettingsModalProps> = (
               <Check className="w-4 h-4" />
               <span>সংরক্ষণ করুন</span>
             </button>
-          </div>
-
-          {/* Quick Info / Guide */}
-          <div className="border-t border-slate-100 pt-3 space-y-2">
-            <div className="flex items-center justify-between text-slate-700 font-bold text-[11px]">
-              <span className="flex items-center gap-1">
-                <Terminal className="w-3.5 h-3.5 text-slate-500" />
-                ক্লাউডফ্লেয়ার কোড প্রস্তুত আছে:
-              </span>
-              <span className="text-[10px] text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded font-mono">
-                cloudflare-worker/worker.js
-              </span>
-            </div>
-            <p className="text-[11px] text-slate-600 leading-relaxed">
-              প্রজেক্টের <code>cloudflare-worker/</code> ফোল্ডারে সম্পূর্ণ ক্লাউডফ্লেয়ার স্ক্রিপ্ট ও রেডিমেড কনফিগ রয়েছে। আপনি চাইলে যেকোনো সময় ক্লাউডফ্লেয়ারে এক ক্লিকেই ফ্রি হোস্টিং করতে পারবেন।
-            </p>
           </div>
         </div>
       </div>

@@ -221,28 +221,6 @@ export const LocationAutocomplete: React.FC<LocationAutocompleteProps> = ({
 
           {/* List of Places & Stands */}
           <div className="divide-y divide-slate-50 space-y-1">
-            {isPickup && onLocateGps && (
-              <button
-                type="button"
-                onClick={() => {
-                  onLocateGps();
-                  setIsOpen(false);
-                }}
-                className="w-full text-left px-2.5 py-2 rounded-xl text-xs flex items-center justify-between gap-2 bg-emerald-50 hover:bg-emerald-100 text-emerald-950 font-bold transition-colors cursor-pointer border border-emerald-200 mb-1"
-              >
-                <div className="flex items-center gap-2">
-                  <Navigation className="w-3.5 h-3.5 text-emerald-700 animate-pulse shrink-0" />
-                  <div>
-                    <span className="block text-xs font-black text-emerald-950">লাইভ GPS অবস্থান ব্যবহার করুন</span>
-                    <span className="block text-[9.5px] text-emerald-700 font-medium">নিকটবর্তী গুগল ল্যান্ডমার্ক সহ স্বয়ংক্রিয় পিকআপ</span>
-                  </div>
-                </div>
-                <span className="text-[9px] px-2 py-0.5 rounded-full bg-emerald-200 text-emerald-900 font-extrabold shrink-0">
-                  লাইভ GPS
-                </span>
-              </button>
-            )}
-
             {filteredPlaces.length === 0 ? (
               <div className="p-3 text-center text-xs text-slate-500">
                 কোনো তালিকাভুক্ত স্থান পাওয়া যায়নি। আপনি নিজের মতো টাইপ করতে পারেন।

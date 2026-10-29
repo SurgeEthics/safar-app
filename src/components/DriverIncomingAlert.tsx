@@ -1,7 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Bell, MapPin, Navigation, Clock, Check, X, Shield, PhoneCall } from 'lucide-react';
 import { sounds } from '../utils/audio';
-import { AutoMarqueeText } from './AutoMarqueeText';
 
 export interface DriverIncomingAlertProps {
   request: {
@@ -13,7 +12,7 @@ export interface DriverIncomingAlertProps {
     category: string;
     distanceKm: number;
     estFare: number;
-    status: 'pending' | 'accepted' | 'declined' | 'cancelled' | 'completed' | string;
+    status: 'pending' | 'accepted' | 'declined' | 'completed' | 'cancelled';
   } | null;
   onAccept: (requestId: string) => void;
   onDecline: (requestId: string) => void;
@@ -87,27 +86,19 @@ export const DriverIncomingAlert: React.FC<DriverIncomingAlertProps> = ({
 
       {/* Route & Passenger Information */}
       <div className="bg-slate-900 p-3 rounded-2xl border border-slate-800 space-y-2 mb-3.5">
-        <div className="flex items-start gap-2 overflow-hidden">
+        <div className="flex items-start gap-2">
           <MapPin className="w-4 h-4 text-emerald-400 shrink-0 mt-0.5" />
-          <div className="min-w-0 flex-1 overflow-hidden">
+          <div className="min-w-0">
             <span className="text-[10px] text-slate-400 font-semibold block">পিকআপ পয়েন্ট:</span>
-            <AutoMarqueeText
-              text={request.pickupPoint}
-              className="text-xs font-bold text-white"
-              pauseAtEndMs={1500}
-            />
+            <span className="text-xs font-bold text-white truncate block">{request.pickupPoint}</span>
           </div>
         </div>
 
-        <div className="flex items-start gap-2 overflow-hidden">
+        <div className="flex items-start gap-2">
           <Navigation className="w-4 h-4 text-red-400 shrink-0 mt-0.5" />
-          <div className="min-w-0 flex-1 overflow-hidden">
+          <div className="min-w-0">
             <span className="text-[10px] text-slate-400 font-semibold block">গন্তব্য স্থল:</span>
-            <AutoMarqueeText
-              text={request.destination}
-              className="text-xs font-bold text-white"
-              pauseAtEndMs={1500}
-            />
+            <span className="text-xs font-bold text-white truncate block">{request.destination}</span>
           </div>
         </div>
 
