@@ -229,21 +229,6 @@ export const PassengerRideCockpit: React.FC<PassengerRideCockpitProps> = ({
           {/* Top Status Bar */}
           <div className="flex flex-col sm:flex-row sm:items-center justify-between pb-3.5 mb-3.5 border-b border-slate-800 gap-2.5">
             <div className="flex items-center gap-2 flex-wrap">
-              <span className={`text-xs font-black px-3 py-1 rounded-full inline-flex items-center gap-1.5 shadow-md ${
-                activeBooking.status === 'in_transit'
-                  ? 'bg-blue-500 text-white animate-pulse'
-                  : activeBooking.status === 'arrived'
-                  ? 'bg-amber-400 text-slate-950 font-black animate-bounce'
-                  : 'bg-emerald-500 text-white animate-pulse'
-              }`}>
-                <Radio className="w-3.5 h-3.5" />
-                {activeBooking.status === 'in_transit'
-                  ? 'যাত্রী নিয়ে গাড়ি চলমান (গন্তব্যের পথে)'
-                  : activeBooking.status === 'arrived'
-                  ? 'চালক পিকআপে পৌঁছেছেন! গাড়িতে উঠুন'
-                  : 'চালক আপনার পিকআপের দিকে আসছেন'}
-              </span>
-
               {/* Ride Start Security OTP Code */}
               <div
                 onClick={() => {
@@ -253,30 +238,19 @@ export const PassengerRideCockpit: React.FC<PassengerRideCockpitProps> = ({
                     setTimeout(() => setCopiedOtp(false), 2000);
                   }
                 }}
-                className="bg-slate-950 text-amber-300 border border-amber-400/60 px-3 py-1 rounded-full text-xs font-mono font-black flex items-center gap-1.5 cursor-pointer hover:bg-slate-800 transition"
+                className="bg-slate-950 text-amber-300 border border-amber-400/60 px-3 py-1 rounded-full text-xs font-mono font-black flex items-center gap-1.5 cursor-pointer hover:bg-slate-800 transition shadow-md"
                 title="কপি করতে ক্লিক করুন (চালকের সাথে পিন মিলিয়ে গাড়িতে উঠবেন)"
               >
                 <Lock className="w-3 h-3 text-amber-400" />
                 <span>যাত্রা পিন: <b className="text-amber-200 tracking-wider text-sm">{activeBooking.otp || '৫২০১'}</b></span>
                 {copiedOtp && <span className="text-[10px] text-emerald-400">✓ কপিড</span>}
               </div>
-
-              <div className="text-xs text-emerald-300 font-bold flex items-center gap-1 bg-slate-800 px-2.5 py-1 rounded-lg">
-                <Clock className="w-3.5 h-3.5 text-amber-300" />
-                <span>
-                  {activeBooking.status === 'in_transit'
-                    ? 'আনুমানিক পৌঁছাতে বাকি: ৪ মিনিট'
-                    : activeBooking.status === 'arrived'
-                    ? 'পিকআপ পয়েন্টে অপেক্ষমাণ'
-                    : `বাকি: ${activeBooking.etaMinutes} মিনিট (${activeBooking.distanceKm} কিমি)`}
-                </span>
-              </div>
             </div>
 
             <div className="flex items-center gap-2 text-xs">
               <span className="text-slate-400">মোট ভাড়া:</span>
               <span className="text-lg font-black text-amber-300 bg-slate-950 px-2.5 py-0.5 rounded-lg border border-amber-400/40">
-                ৳ {activeBooking.fare}
+                ৳ {activeBooking.fare && activeBooking.fare > 0 ? activeBooking.fare : 40}
               </span>
             </div>
           </div>

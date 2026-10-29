@@ -1,5 +1,6 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { MapPin, Navigation, X, Search, Check } from 'lucide-react';
+import { MapPin, Navigation, X, Search, Check, Truck, Building2 } from 'lucide-react';
+import { PauseMarqueeText } from './PauseMarqueeText';
 
 export interface LocationAutocompleteProps {
   label: string;
@@ -22,34 +23,27 @@ export interface LocationAutocompleteProps {
     category?: string;
     categoryLabel?: string;
     area?: string;
+    unionNameBengali?: string;
+    searchKeywords?: string[];
+    isStand?: boolean;
     lat: number;
     lng: number;
   }>;
 }
 
-export interface PlaceItem {
+export interface UnifiedPlaceItem {
+  id?: string;
   name: string;
-  category: 'stand' | 'hospital' | 'station' | 'market' | 'admin' | string;
+  englishName?: string;
+  category: string;
   categoryLabel: string;
+  unionName?: string;
+  area?: string;
+  isStand?: boolean;
+  searchKeywords?: string[];
   lat: number;
   lng: number;
 }
-
-const GAFARGAON_POPULAR_PLACES: PlaceItem[] = [
-  { name: 'গফরগাঁও নতুন বাজার স্ট্যান্ড', category: 'stand', categoryLabel: 'প্রধান স্ট্যান্ড', lat: 24.4340, lng: 90.5510 },
-  { name: 'পাগলা থানা মোড় স্ট্যান্ড', category: 'stand', categoryLabel: 'পাগলা থানা', lat: 24.3410, lng: 90.5312 },
-  { name: 'দত্তের বাজার জংশন মোড়', category: 'stand', categoryLabel: 'বাজার', lat: 24.4120, lng: 90.5840 },
-  { name: 'জামতলা মোড় ও বাস টার্মিনাল', category: 'stand', categoryLabel: 'বাস মোড়', lat: 24.4390, lng: 90.5480 },
-  { name: 'গফরগাঁও রেলওয়ে স্টেশন', category: 'station', categoryLabel: 'রেলওয়ে', lat: 24.4325, lng: 90.5535 },
-  { name: 'উপজেলা স্বাস্থ্য কমপ্লেক্স (হাসপাতাল)', category: 'hospital', categoryLabel: 'জরুরি সেবা', lat: 24.4362, lng: 90.5470 },
-  { name: 'শিবগঞ্জ বাজার খেয়াঘাট', category: 'market', categoryLabel: 'নদীঘাট', lat: 24.4480, lng: 90.5360 },
-  { name: 'কান্দিপাড়া বাজার মোড়', category: 'market', categoryLabel: 'কমিউনিটি মোড়', lat: 24.4010, lng: 90.5120 },
-  { name: 'পাঁচবাগ বাজার স্ট্যান্ড', category: 'stand', categoryLabel: 'ইউনিয়ন মোড়', lat: 24.3750, lng: 90.6120 },
-  { name: 'সালটিয়া ইউনিয়ন পরিষদ', category: 'admin', categoryLabel: 'প্রশাসনিক', lat: 24.4420, lng: 90.5590 },
-  { name: 'মশাখালী রেলওয়ে স্টেশন বাজার', category: 'station', categoryLabel: 'রেলওয়ে', lat: 24.3760, lng: 90.5280 },
-  { name: 'উথুরী হাই স্কুল সংলগ্ন মোড়', category: 'stand', categoryLabel: 'স্কুল মোড়', lat: 24.4210, lng: 90.5620 },
-  { name: 'রসুলপুর বাজার চৌরাস্তা', category: 'market', categoryLabel: 'চৌরাস্তা', lat: 24.4600, lng: 90.5400 }
-];
 
 export const LocationAutocomplete: React.FC<LocationAutocompleteProps> = ({
   label,
@@ -59,11 +53,12 @@ export const LocationAutocomplete: React.FC<LocationAutocompleteProps> = ({
   userGps,
   onLocateGps,
   onChangeLocation,
-  placeholder = 'স্থান খুঁজুন বা বাছুন...',
-  places
+  placeholder = 'স্থান বা স্ট্যান্ড খুঁজুন...',
+  places = []
 }) => {
   const [isOpen, setIsOpen] = useState(false);
   const [inputValue, setInputValue] = useState(value || '');
+  const [selectedUnionFilter, setSelectedUnionFilter] = useState<string>('all');
   const containerRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -83,23 +78,45 @@ export const LocationAutocomplete: React.FC<LocationAutocompleteProps> = ({
     };
   }, []);
 
-  const placesList: PlaceItem[] = places && places.length > 0
-    ? places.map(p => ({
-        name: p.bengaliName || p.name || 'স্থান',
-        category: p.category || 'stand',
-        categoryLabel: p.categoryLabel || p.category || (p.area ? p.area.slice(0, 15) : 'জনপ্রিয় স্থান'),
-        lat: p.lat,
-        lng: p.lng
-      }))
-    : GAFARGAON_POPULAR_PLACES;
+  // Map incoming items to unified structure
+  const unifiedPlaces: UnifiedPlaceItem[] = places.map((p, idx) => ({
+    id: p.id || `place-${idx}`,
+    name: p.bengaliName || p.name || 'স্থান',
+    englishName: p.name || '',
+    category: p.category || (p.isStand ? 'স্ট্যান্ড' : 'স্থান'),
+    categoryLabel: p.categoryLabel || p.category || (p.isStand ? 'স্ট্যান্ড' : 'জনপ্রিয় স্থান'),
+    unionName: p.unionNameBengali || (p.area && p.area.includes('ইউনিয়ন') ? p.area.split(',')[0] : 'গফরগাঁও'),
+    area: p.area || '',
+    isStand: Boolean(p.isStand || (p.category && p.category.includes('স্ট্যান্ড'))),
+    searchKeywords: p.searchKeywords || [],
+    lat: p.lat,
+    lng: p.lng
+  }));
 
-  const filteredPlaces = placesList.filter((p) => {
+  // Unique unions extracted for quick filtering
+  const availableUnions = Array.from(new Set(unifiedPlaces.map(p => p.unionName).filter(Boolean)));
+
+  // Filter based on search query and union filter
+  const filteredPlaces = unifiedPlaces.filter((p) => {
     const q = inputValue.toLowerCase().trim();
-    if (!q || q.includes('আমার বর্তমান অবস্থান') || q.includes('gps') || q.includes('লাইভ')) return true;
-    return p.name.toLowerCase().includes(q) || p.categoryLabel.toLowerCase().includes(q);
+    const matchesUnion = selectedUnionFilter === 'all' || p.unionName === selectedUnionFilter;
+    if (!matchesUnion) return false;
+
+    if (!q || q.includes('আমার বর্তমান অবস্থান') || q.includes('gps') || q.includes('লাইভ')) {
+      return true;
+    }
+
+    const nameMatch = p.name.toLowerCase().includes(q);
+    const engMatch = p.englishName ? p.englishName.toLowerCase().includes(q) : false;
+    const unionMatch = p.unionName ? p.unionName.toLowerCase().includes(q) : false;
+    const areaMatch = p.area ? p.area.toLowerCase().includes(q) : false;
+    const catMatch = p.categoryLabel.toLowerCase().includes(q);
+    const kwMatch = p.searchKeywords?.some(kw => kw.toLowerCase().includes(q) || q.includes(kw.toLowerCase()));
+
+    return nameMatch || engMatch || unionMatch || areaMatch || catMatch || kwMatch;
   });
 
-  const handleSelectPlace = (place: PlaceItem) => {
+  const handleSelectPlace = (place: UnifiedPlaceItem) => {
     setInputValue(place.name);
     onChangeLocation(place.name, { lat: place.lat, lng: place.lng });
     setIsOpen(false);
@@ -123,7 +140,7 @@ export const LocationAutocomplete: React.FC<LocationAutocompleteProps> = ({
           <button
             type="button"
             onClick={onLocateGps}
-            className={`inline-flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded-full transition-colors ${
+            className={`inline-flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded-full transition-colors cursor-pointer ${
               isGpsActive
                 ? 'bg-emerald-100 text-emerald-800 border border-emerald-300'
                 : 'bg-slate-100 text-slate-600 hover:bg-emerald-50 hover:text-emerald-700'
@@ -153,7 +170,7 @@ export const LocationAutocomplete: React.FC<LocationAutocompleteProps> = ({
               setInputValue('');
               onChangeLocation('');
             }}
-            className="text-slate-400 hover:text-slate-600 p-1 shrink-0 ml-1 rounded-full hover:bg-slate-100"
+            className="text-slate-400 hover:text-slate-600 p-1 shrink-0 ml-1 rounded-full hover:bg-slate-100 cursor-pointer"
             title="মুছুন"
           >
             <X className="w-3.5 h-3.5" />
@@ -162,41 +179,97 @@ export const LocationAutocomplete: React.FC<LocationAutocompleteProps> = ({
       </div>
 
       {isOpen && (
-        <div className="absolute left-0 right-0 top-full mt-1.5 bg-white border border-slate-200 rounded-2xl shadow-xl max-h-56 overflow-y-auto z-50 p-1.5 divide-y divide-slate-50 animate-in fade-in zoom-in-95">
-          <div className="px-2 py-1 text-[10px] font-bold text-slate-400 uppercase tracking-wider flex items-center justify-between">
-            <span>গফরগাঁও ও পাগলা এলাকার জনপ্রিয় স্থানসমূহ</span>
-            <span className="text-emerald-600 font-medium">{filteredPlaces.length} টি স্থান</span>
-          </div>
-          {filteredPlaces.length === 0 ? (
-            <div className="p-3 text-center text-xs text-slate-500">
-              কোনো তালিকাভুক্ত স্থান পাওয়া যায়নি। আপনি নিজের মতো টাইপ করতে পারেন।
+        <div className="absolute left-0 right-0 top-full mt-1.5 bg-white border border-slate-200 rounded-2xl shadow-xl max-h-72 overflow-y-auto z-50 p-2 animate-in fade-in zoom-in-95">
+          {/* Header & Quick Union Filter */}
+          <div className="pb-1.5 mb-1.5 border-b border-slate-100">
+            <div className="flex items-center justify-between px-1 mb-1 text-[10.5px]">
+              <span className="font-bold text-slate-700">১৫টি ইউনিয়ন ও পৌরসভার স্থানসমূহ</span>
+              <span className="font-extrabold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-full">
+                {filteredPlaces.length}টি স্থান
+              </span>
             </div>
-          ) : (
-            filteredPlaces.map((place) => {
-              const isSelected = inputValue.trim() === place.name;
-              return (
+
+            {/* Quick Union Filter Tags */}
+            <div className="flex items-center gap-1 overflow-x-auto scrollbar-thin py-0.5 px-0.5">
+              <button
+                type="button"
+                onClick={() => setSelectedUnionFilter('all')}
+                className={`text-[9.5px] font-bold px-2 py-0.5 rounded-md whitespace-nowrap transition cursor-pointer ${
+                  selectedUnionFilter === 'all'
+                    ? 'bg-emerald-700 text-white shadow-xs'
+                    : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+                }`}
+              >
+                সকল ইউনিয়ন
+              </button>
+              {availableUnions.slice(0, 8).map(u => (
                 <button
-                  key={place.name}
+                  key={u}
                   type="button"
-                  onClick={() => handleSelectPlace(place)}
-                  className={`w-full text-left px-2.5 py-2 rounded-xl text-xs flex items-center justify-between gap-2 transition-colors cursor-pointer ${
-                    isSelected ? 'bg-emerald-50 text-emerald-900 font-bold' : 'hover:bg-slate-50 text-slate-700'
+                  onClick={() => setSelectedUnionFilter(u || 'all')}
+                  className={`text-[9.5px] font-bold px-2 py-0.5 rounded-md whitespace-nowrap transition cursor-pointer ${
+                    selectedUnionFilter === u
+                      ? 'bg-emerald-700 text-white shadow-xs'
+                      : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
                   }`}
                 >
-                  <div className="flex items-center gap-2 min-w-0">
-                    <MapPin className={`w-3.5 h-3.5 shrink-0 ${isPickup ? 'text-emerald-600' : 'text-red-500'}`} />
-                    <span className="truncate">{place.name}</span>
-                  </div>
-                  <div className="flex items-center gap-1.5 shrink-0">
-                    <span className="text-[10px] px-1.5 py-0.5 rounded bg-slate-100 text-slate-600 font-medium">
-                      {place.categoryLabel}
-                    </span>
-                    {isSelected && <Check className="w-3.5 h-3.5 text-emerald-600 shrink-0" />}
-                  </div>
+                  {u?.replace(' ইউনিয়ন', '').replace(' (পাগলা)', '')}
                 </button>
-              );
-            })
-          )}
+              ))}
+            </div>
+          </div>
+
+          {/* List of Places & Stands */}
+          <div className="divide-y divide-slate-50 space-y-1">
+            {filteredPlaces.length === 0 ? (
+              <div className="p-3 text-center text-xs text-slate-500">
+                কোনো তালিকাভুক্ত স্থান পাওয়া যায়নি। আপনি নিজের মতো টাইপ করতে পারেন।
+              </div>
+            ) : (
+              filteredPlaces.map((place) => {
+                const isSelected = inputValue.trim() === place.name.trim();
+                return (
+                  <button
+                    key={`${place.name}-${place.lat}-${place.lng}`}
+                    type="button"
+                    onClick={() => handleSelectPlace(place)}
+                    className={`w-full text-left px-2.5 py-1.5 rounded-xl text-xs flex items-center justify-between gap-2 transition-colors cursor-pointer ${
+                      isSelected ? 'bg-emerald-100/80 text-emerald-950 font-bold' : 'hover:bg-slate-50 text-slate-800'
+                    }`}
+                  >
+                    <div className="flex items-center gap-2 min-w-0 flex-1">
+                      {place.isStand ? (
+                        <Truck className={`w-3.5 h-3.5 shrink-0 ${isSelected ? 'text-emerald-700' : 'text-emerald-600'}`} />
+                      ) : (
+                        <MapPin className={`w-3.5 h-3.5 shrink-0 ${isPickup ? 'text-emerald-600' : 'text-red-500'}`} />
+                      )}
+
+                      <div className="min-w-0 flex-1 overflow-hidden">
+                        <PauseMarqueeText
+                          text={place.name}
+                          className={`text-xs ${isSelected ? 'font-black text-emerald-950' : 'font-semibold text-slate-900'}`}
+                          pauseSec={1.5}
+                          speedSec={4.0}
+                        />
+                        <span className="text-[9.5px] text-slate-500 block truncate">
+                          {place.unionName} • {place.area || place.categoryLabel}
+                        </span>
+                      </div>
+                    </div>
+
+                    <div className="flex items-center gap-1 shrink-0">
+                      <span className={`text-[9px] px-1.5 py-0.5 rounded font-bold ${
+                        place.isStand ? 'bg-emerald-50 text-emerald-800 border border-emerald-200' : 'bg-slate-100 text-slate-600'
+                      }`}>
+                        {place.categoryLabel}
+                      </span>
+                      {isSelected && <Check className="w-3.5 h-3.5 text-emerald-700 shrink-0" />}
+                    </div>
+                  </button>
+                );
+              })
+            )}
+          </div>
         </div>
       )}
     </div>

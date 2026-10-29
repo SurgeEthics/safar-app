@@ -32,13 +32,22 @@ import {
   Siren,
   Heart,
   Phone,
-  Search
+  Search,
+  Building2,
+  Check,
+  ChevronDown,
+  ChevronRight,
+  ArrowLeft,
+  ArrowUp,
+  ArrowDown
 } from 'lucide-react';
 import { Stand, Driver, VehicleCategoryItem } from '../App';
 import { EmergencyContact } from '../types';
 import { INITIAL_EMERGENCY_CONTACTS } from '../data/initialData';
 import { GafargaonPlace } from '../data/gafargaonPlaces';
+import { GAFARGAON_UNIONS, COMPREHENSIVE_UNION_PLACES, ComprehensivePlace, UnionInfo } from '../data/gafargaonUnionData';
 import { AutoMarqueeText } from './AutoMarqueeText';
+import { PauseMarqueeText } from './PauseMarqueeText';
 
 export interface AppCustomSettings {
   primaryColor: string;
@@ -209,14 +218,31 @@ export const AdminControlPanel: React.FC<AdminControlPanelProps> = ({
     }
   }, [popularPlaces]);
 
-  // New Quick Chip input
+  // New Quick Chip input & Management States
   const [newQuickChipText, setNewQuickChipText] = useState('');
   const [showQuickChipSuggestions, setShowQuickChipSuggestions] = useState(false);
+  const [selectedUnionForChips, setSelectedUnionForChips] = useState<string>('all');
+  const [editingChipIndex, setEditingChipIndex] = useState<number | null>(null);
+  const [editingChipText, setEditingChipText] = useState<string>('');
+  const [chipPreviewMode, setChipPreviewMode] = useState<'mobile' | 'desktop'>('mobile');
 
-  // Auto suggestion list combining Stands and Popular Places
+  // Auto suggestion list combining Comprehensive 15 Unions, Stands and Popular Places
   const quickChipSuggestions = useMemo(() => {
-    const list: { name: string; type: 'স্ট্যান্ড' | 'জনপ্রিয় স্থান'; sub?: string }[] = [];
+    const list: { name: string; type: 'স্ট্যান্ড' | 'জনপ্রিয় স্থান'; sub?: string; unionName?: string }[] = [];
     const added = new Set<string>();
+
+    COMPREHENSIVE_UNION_PLACES.forEach(cp => {
+      const name = cp.bengaliName;
+      if (name && !added.has(name.toLowerCase())) {
+        added.add(name.toLowerCase());
+        list.push({
+          name,
+          type: cp.isStand ? 'স্ট্যান্ড' : 'জনপ্রিয় স্থান',
+          sub: `${cp.unionNameBengali} • ${cp.area}`,
+          unionName: cp.unionNameBengali
+        });
+      }
+    });
 
     (stands || []).forEach(s => {
       const name = s.bengaliName || s.name;
@@ -239,14 +265,18 @@ export const AdminControlPanel: React.FC<AdminControlPanelProps> = ({
 
   const filteredQuickChipSuggestions = useMemo(() => {
     const query = newQuickChipText.trim().toLowerCase();
-    if (!query) {
-      return quickChipSuggestions.filter(s => !settingsDraft.quickDestinations.includes(s.name)).slice(0, 8);
+    let base = quickChipSuggestions;
+    if (selectedUnionForChips !== 'all') {
+      base = base.filter(s => s.unionName?.includes(selectedUnionForChips) || s.sub?.includes(selectedUnionForChips));
     }
-    return quickChipSuggestions
+    if (!query) {
+      return base.filter(s => !settingsDraft.quickDestinations.includes(s.name)).slice(0, 10);
+    }
+    return base
       .filter(s => s.name.toLowerCase().includes(query) || (s.sub && s.sub.toLowerCase().includes(query)))
       .filter(s => !settingsDraft.quickDestinations.includes(s.name))
-      .slice(0, 10);
-  }, [quickChipSuggestions, newQuickChipText, settingsDraft.quickDestinations]);
+      .slice(0, 15);
+  }, [quickChipSuggestions, newQuickChipText, selectedUnionForChips, settingsDraft.quickDestinations]);
 
   // Backup JSON String
   const [backupJsonInput, setBackupJsonInput] = useState('');
@@ -391,10 +421,57 @@ export const AdminControlPanel: React.FC<AdminControlPanelProps> = ({
     showToast(`'${name}' স্থানটি তালিকা থেকে মুছে ফেলা হয়েছে`);
   };
 
-  // Add Quick Chip
-  const handleAddQuickChip = () => {
-    if (!newQuickChipText.trim()) return;
-    const trimmed = newQuickChipText.trim();
+  // 1-Click Load & Sync all 15 unions' stands from COMPREHENSIVE_UNION_PLACES
+  const handleLoadAllUnionStands = () => {
+    const allStandsFrom15Unions = COMPREHENSIVE_UNION_PLACES.filter(p => p.isStand).map(p => ({
+      id: p.id,
+      name: p.name || p.bengaliName,
+      bengaliName: p.bengaliName,
+      lat: p.lat,
+      lng: p.lng,
+      activeDrivers: 0,
+      location: `${p.unionNameBengali} • ${p.area}`
+    }));
+
+    const existingNames = new Set(stands.map(s => s.bengaliName.trim().toLowerCase()));
+    const toAdd = allStandsFrom15Unions.filter(s => !existingNames.has(s.bengaliName.trim().toLowerCase()));
+
+    toAdd.forEach(stand => {
+      onSaveStand(stand, false);
+    });
+
+    showToast(`🎉 ১৫ ইউনিয়নের ${toAdd.length}টি নতুন স্ট্যান্ড ক্লাউড ফায়ারবেসে যুক্ত ও সিঙ্ক হয়েছে!`);
+  };
+
+  // 1-Click Load & Sync all 15 unions' places from COMPREHENSIVE_UNION_PLACES
+  const handleLoadAllUnionPlaces = () => {
+    const allPlacesFrom15Unions: GafargaonPlace[] = COMPREHENSIVE_UNION_PLACES.map(p => ({
+      id: p.id,
+      name: p.name || p.bengaliName,
+      bengaliName: p.bengaliName,
+      category: p.category as any,
+      area: `${p.unionNameBengali}, ${p.area}`,
+      lat: p.lat,
+      lng: p.lng,
+      isPopular: true
+    }));
+
+    const existingNames = new Set(placesDraft.map(p => p.bengaliName.trim().toLowerCase()));
+    const toAdd = allPlacesFrom15Unions.filter(p => !existingNames.has(p.bengaliName.trim().toLowerCase()));
+
+    toAdd.forEach(place => {
+      if (onSavePopularPlace) onSavePopularPlace(place);
+    });
+
+    setPlacesDraft(prev => [...prev, ...toAdd]);
+    showToast(`🎉 ১৫ ইউনিয়নের ${toAdd.length}টি নতুন আকর্ষণীয় স্থান ক্লাউড ফায়ারবেসে যুক্ত ও সিঙ্ক হয়েছে!`);
+  };
+
+  // Add Quick Chip (Custom or Suggestion)
+  const handleAddQuickChip = (customText?: string) => {
+    const raw = customText || newQuickChipText;
+    if (!raw.trim()) return;
+    const trimmed = raw.trim();
     if (settingsDraft.quickDestinations.includes(trimmed)) {
       showToast('এই স্থানটি ইতোমধ্যে দ্রুত গন্তব্যে রয়েছে');
       return;
@@ -418,6 +495,105 @@ export const AdminControlPanel: React.FC<AdminControlPanelProps> = ({
     setSettingsDraft(updated);
     onSaveCustomSettings(updated);
     showToast(`'${chip}' মুছে ফেলা হয়েছে`);
+  };
+
+  // Move Quick Chip Left / Right (Reordering)
+  const handleMoveQuickChip = (index: number, direction: 'left' | 'right') => {
+    const arr = [...settingsDraft.quickDestinations];
+    const targetIdx = direction === 'left' ? index - 1 : index + 1;
+    if (targetIdx < 0 || targetIdx >= arr.length) return;
+    const temp = arr[index];
+    arr[index] = arr[targetIdx];
+    arr[targetIdx] = temp;
+    const updated = { ...settingsDraft, quickDestinations: arr };
+    setSettingsDraft(updated);
+    onSaveCustomSettings(updated);
+  };
+
+  // Inline Edit Quick Chip
+  const handleStartEditQuickChip = (index: number, currentText: string) => {
+    setEditingChipIndex(index);
+    setEditingChipText(currentText);
+  };
+
+  const handleSaveEditQuickChip = (index: number) => {
+    if (!editingChipText.trim()) return;
+    const trimmed = editingChipText.trim();
+    const arr = [...settingsDraft.quickDestinations];
+    arr[index] = trimmed;
+    const updated = { ...settingsDraft, quickDestinations: arr };
+    setSettingsDraft(updated);
+    onSaveCustomSettings(updated);
+    setEditingChipIndex(null);
+    setEditingChipText('');
+    showToast(`চিপস সফলভাবে রিনেম হয়েছে: '${trimmed}'`);
+  };
+
+  const handleCancelEditQuickChip = () => {
+    setEditingChipIndex(null);
+    setEditingChipText('');
+  };
+
+  // 1-Click Load Major Landmark Hubs from All 15 Unions + Pourashava
+  const handleLoad15UnionHubs = () => {
+    const unionHubs = [
+      'গফরগাঁও রেলওয়ে স্টেশন স্ট্যান্ড',
+      'পৌরসভা চত্বর ও শহিদ মিনার মোড়',
+      'উপজেলা স্বাস্থ্য কমপ্লেক্স (হাসপাতাল) স্ট্যান্ড',
+      'সালটিয়া বাজার মোড় সিএনজি স্ট্যান্ড',
+      'গফরগাঁও সদর ইউনিয়ন পরিষদ মোড়',
+      'যশরা বাজার চৌরাস্তা স্ট্যান্ড',
+      'রাওনা বাজার সিএনজি ও অটো স্ট্যান্ড',
+      'রসুলপুর বাজার চৌরাস্তা স্ট্যান্ড',
+      'বারবাড়িয়া বাজার সিএনজি ও অটো স্ট্যান্ড',
+      'চরকামারিয়া বাজার মোড় স্ট্যান্ড',
+      'পাঁচবাগ বাজার মোড় সিএনজি স্ট্যান্ড',
+      'উস্থি বাজার চৌরাস্তা স্ট্যান্ড',
+      'মশাখালী রেলওয়ে স্টেশন স্ট্যান্ড',
+      'পাইথল বাজার মোড় স্ট্যান্ড',
+      'লংগাইর বাজার ও পাগলা থানা রোড স্ট্যান্ড',
+      'গয়েশপুর বাজার মোড় স্ট্যান্ড',
+      'টাঙ্গাব বাজার মোড় স্ট্যান্ড',
+      'নিগুয়ারী বাজার স্ট্যান্ড'
+    ];
+    const updated = {
+      ...settingsDraft,
+      quickDestinations: unionHubs
+    };
+    setSettingsDraft(updated);
+    onSaveCustomSettings(updated);
+    showToast('🌟 ১৫ ইউনিয়ন ও পৌরসভার প্রধান প্রধান হাব ১-ক্লিকে সফলভাবে লোড হয়েছে!');
+  };
+
+  // Reset to Recommended 7 Default Chips
+  const handleResetDefaultChips = () => {
+    const defaults = [
+      'উপজেলা স্বাস্থ্য কমপ্লেক্স (হাসপাতাল) স্ট্যান্ড',
+      'গফরগাঁও রেলওয়ে স্টেশন স্ট্যান্ড',
+      'পৌরসভা চত্বর স্ট্যান্ড',
+      'পাগলা থানা স্ট্যান্ড',
+      'শিবগঞ্জ বাজার মোড় স্ট্যান্ড',
+      'জামতলী মোড় স্ট্যান্ড',
+      'কান্দিপাড়া বাজার চৌরাস্তা স্ট্যান্ড'
+    ];
+    const updated = {
+      ...settingsDraft,
+      quickDestinations: defaults
+    };
+    setSettingsDraft(updated);
+    onSaveCustomSettings(updated);
+    showToast('ডিফল্ট দ্রুত গন্তব্য চিপস রিস্টোর করা হয়েছে');
+  };
+
+  // Clear All Chips
+  const handleClearAllChips = () => {
+    const updated = {
+      ...settingsDraft,
+      quickDestinations: []
+    };
+    setSettingsDraft(updated);
+    onSaveCustomSettings(updated);
+    showToast('সকল দ্রুত গন্তব্য চিপস পরিষ্কার করা হয়েছে');
   };
 
   // Export JSON Backup
@@ -1003,18 +1179,30 @@ export const AdminControlPanel: React.FC<AdminControlPanelProps> = ({
                   </p>
                 </div>
 
-                <button
-                  type="button"
-                  onClick={() => {
-                    setEditingStand(null);
-                    setStandForm({ bengaliName: '', name: '', lat: 24.5535, lng: 90.5518 });
-                    setIsStandModalOpen(true);
-                  }}
-                  className="inline-flex items-center gap-1.5 bg-emerald-600 hover:bg-emerald-700 text-white font-extrabold px-4 py-2 rounded-xl text-xs sm:text-sm shadow-xs cursor-pointer transition shrink-0"
-                >
-                  <Plus className="w-4 h-4" />
-                  <span>+ নতুন স্ট্যান্ড যোগ করুন</span>
-                </button>
+                <div className="flex items-center gap-2 flex-wrap shrink-0">
+                  <button
+                    type="button"
+                    onClick={handleLoadAllUnionStands}
+                    className="inline-flex items-center gap-1.5 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700 text-white font-bold px-3.5 py-2 rounded-xl text-xs shadow-xs cursor-pointer transition active:scale-95"
+                    title="১৫টি ইউনিয়ন ও পৌরসভার সকল স্ট্যান্ড ১-ক্লিকে ক্লাউড ফায়ারবেসে সিঙ্ক করুন"
+                  >
+                    <Sparkles className="w-3.5 h-3.5" />
+                    <span>১৫ ইউনিয়নের স্ট্যান্ড সিঙ্ক</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setEditingStand(null);
+                      setStandForm({ bengaliName: '', name: '', lat: 24.5535, lng: 90.5518 });
+                      setIsStandModalOpen(true);
+                    }}
+                    className="inline-flex items-center gap-1.5 bg-emerald-600 hover:bg-emerald-700 text-white font-extrabold px-4 py-2 rounded-xl text-xs sm:text-sm shadow-xs cursor-pointer transition shrink-0"
+                  >
+                    <Plus className="w-4 h-4" />
+                    <span>+ নতুন স্ট্যান্ড যোগ করুন</span>
+                  </button>
+                </div>
               </div>
 
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
@@ -1091,6 +1279,16 @@ export const AdminControlPanel: React.FC<AdminControlPanelProps> = ({
                 </div>
 
                 <div className="flex items-center gap-2 flex-wrap shrink-0">
+                  <button
+                    type="button"
+                    onClick={handleLoadAllUnionPlaces}
+                    className="inline-flex items-center gap-1.5 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700 text-white font-bold px-3.5 py-2 rounded-xl text-xs shadow-xs cursor-pointer transition active:scale-95"
+                    title="১৫টি ইউনিয়ন ও পৌরসভার সকল দর্শনীয় ও আকর্ষণীয় স্থান ১-ক্লিকে ক্লাউডে সিঙ্ক করুন"
+                  >
+                    <Sparkles className="w-3.5 h-3.5" />
+                    <span>১৫ ইউনিয়নের স্থান সিঙ্ক</span>
+                  </button>
+
                   {onResetPopularPlaces && (
                     <button
                       type="button"
@@ -1359,23 +1557,131 @@ export const AdminControlPanel: React.FC<AdminControlPanelProps> = ({
           )}
 
           {/* ========================================================== */}
-          {/* TAB: QUICK DESTINATION CHIPS                              */}
+          {/* TAB: QUICK DESTINATION CHIPS & 15-UNION MANAGEMENT SUITE   */}
           {/* ========================================================== */}
           {activeTab === 'quick_chips' && (
-            <div className="space-y-4 max-w-3xl">
-              <div className="bg-white p-4 sm:p-5 rounded-2xl border border-slate-200 shadow-xs space-y-3">
-                <h3 className="font-extrabold text-sm sm:text-base text-slate-900 flex items-center gap-2">
-                  <Sparkles className="w-4 h-4 text-emerald-600" />
-                  দ্রুত গন্তব্য চিপস কাস্টমাইজেশন (Quick Destination Shortcuts)
-                </h3>
-                <p className="text-xs text-slate-500">
-                  যাত্রীরা যাত্রা পরিকল্পনা সেকশনে 'পিকআপ' ও 'গন্তব্য' বক্সের নিচেই এই শর্টকাট বাটনগুলো দেখতে পান। এখানে নতুন স্থান যুক্ত বা অদরকারি স্থান ডিলিট করতে পারবেন।
-                </p>
+            <div className="space-y-4 max-w-5xl">
+              
+              {/* Header Box with Status Badges */}
+              <div className="bg-white p-4 sm:p-5 rounded-2xl border border-slate-200 shadow-xs flex flex-col md:flex-row md:items-center justify-between gap-3">
+                <div>
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <h3 className="font-extrabold text-sm sm:text-base text-slate-900 flex items-center gap-2">
+                      <Sparkles className="w-4 h-4 text-emerald-600" />
+                      <span>দ্রুত গন্তব্য চিপস ও ১৫ ইউনিয়ন নিয়ন্ত্রণ প্যানেল</span>
+                    </h3>
+                    <span className="bg-emerald-100 text-emerald-800 text-[10px] font-black px-2.5 py-0.5 rounded-full border border-emerald-300">
+                      {settingsDraft.quickDestinations.length}টি সক্রিয় চিপস
+                    </span>
+                    <span className="bg-blue-50 text-blue-800 text-[10px] font-bold px-2 py-0.5 rounded-full border border-blue-200">
+                      ১৫ ইউনিয়ন + পৌরসভা
+                    </span>
+                  </div>
+                  <p className="text-xs text-slate-500 mt-1">
+                    যাত্রী ড্যাশবোর্ডের দ্রুত গন্তব্য শর্টকাটগুলো সম্পাদন (Edit), স্থানান্তর (Reorder), ফিল্টারিং ও নতুন স্থান যুক্ত করুন। পরিবর্তনগুলো সরাসরি ফায়ারবেস ক্লাউডে সংরক্ষিত হবে।
+                  </p>
+                </div>
 
-                {/* Add Quick Chip Input with Auto Suggestions */}
-                <div className="relative pt-2">
+                {/* Bulk Actions Toolbar */}
+                <div className="flex items-center gap-2 flex-wrap shrink-0">
+                  <button
+                    type="button"
+                    onClick={handleLoad15UnionHubs}
+                    className="inline-flex items-center gap-1.5 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700 text-white font-bold px-3 py-2 rounded-xl text-xs shadow-xs cursor-pointer transition active:scale-95"
+                    title="১৫টি ইউনিয়ন ও পৌরসভার প্রধান প্রধান কেন্দ্রীয় হাব ১-ক্লিকে লোড করুন"
+                  >
+                    <Sparkles className="w-3.5 h-3.5" />
+                    <span>১৫ ইউনিয়নের প্রধান স্থান লোড</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={handleResetDefaultChips}
+                    className="inline-flex items-center gap-1 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold px-2.5 py-2 rounded-xl text-xs cursor-pointer transition"
+                    title="ডিফল্ট ৭টি চিপসে রিস্টোর করুন"
+                  >
+                    <RotateCcw className="w-3.5 h-3.5" />
+                    <span>ডিফল্ট</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={handleClearAllChips}
+                    className="inline-flex items-center gap-1 bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 font-bold px-2.5 py-2 rounded-xl text-xs cursor-pointer transition"
+                    title="সব চিপস মুছে নতুন করে সাজান"
+                  >
+                    <Trash2 className="w-3.5 h-3.5" />
+                    <span>মুছুন</span>
+                  </button>
+                </div>
+              </div>
+
+              {/* 15 Union Directory Quick Filter Bar */}
+              <div className="bg-slate-50 p-3 sm:p-4 rounded-2xl border border-slate-200 space-y-2">
+                <div className="flex items-center justify-between">
+                  <span className="text-xs font-bold text-slate-700 flex items-center gap-1.5">
+                    <Building2 className="w-3.5 h-3.5 text-emerald-600" />
+                    <span>ইউনিয়ন অনুযায়ী স্থান নির্বাচন করুন (গফরগাঁও ও পাগলা):</span>
+                  </span>
+                  {selectedUnionForChips !== 'all' && (
+                    <button
+                      type="button"
+                      onClick={() => setSelectedUnionForChips('all')}
+                      className="text-[11px] text-emerald-700 font-bold hover:underline cursor-pointer"
+                    >
+                      সকল ইউনিয়ন দেখান
+                    </button>
+                  )}
+                </div>
+
+                <div className="flex items-center gap-1.5 overflow-x-auto pb-1 scrollbar-thin">
+                  <button
+                    type="button"
+                    onClick={() => setSelectedUnionForChips('all')}
+                    className={`px-2.5 py-1 rounded-lg text-xs font-bold cursor-pointer transition whitespace-nowrap ${
+                      selectedUnionForChips === 'all'
+                        ? 'bg-emerald-600 text-white shadow-2xs'
+                        : 'bg-white text-slate-700 hover:bg-slate-100 border border-slate-200'
+                    }`}
+                  >
+                    সকল ইউনিয়ন
+                  </button>
+
+                  {GAFARGAON_UNIONS.map((u) => {
+                    const isSelected = selectedUnionForChips === u.nameBengali;
+                    return (
+                      <button
+                        key={u.id}
+                        type="button"
+                        onClick={() => setSelectedUnionForChips(isSelected ? 'all' : u.nameBengali)}
+                        className={`px-2.5 py-1 rounded-lg text-xs font-bold cursor-pointer transition whitespace-nowrap flex items-center gap-1 ${
+                          isSelected
+                            ? 'bg-emerald-600 text-white shadow-2xs'
+                            : 'bg-white text-slate-700 hover:bg-slate-100 border border-slate-200'
+                        }`}
+                      >
+                        <span>{u.nameBengali}</span>
+                        {u.thana === 'পাগলা থানা' && (
+                          <span className={`text-[8.5px] px-1 py-0.1 rounded ${isSelected ? 'bg-emerald-800 text-emerald-100' : 'bg-amber-100 text-amber-800'}`}>
+                            পাগলা
+                          </span>
+                        )}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+
+              {/* Add Quick Chip Input & Auto-Suggestion Box */}
+              <div className="bg-white p-4 sm:p-5 rounded-2xl border border-slate-200 shadow-xs space-y-3">
+                <label className="text-xs font-bold text-slate-800 block">
+                  নতুন স্থান বা স্ট্যান্ড যুক্ত করুন:
+                </label>
+
+                <div className="relative">
                   <div className="flex items-center gap-2">
                     <div className="relative flex-1">
+                      <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
                       <input
                         type="text"
                         value={newQuickChipText}
@@ -1384,8 +1690,12 @@ export const AdminControlPanel: React.FC<AdminControlPanelProps> = ({
                           setShowQuickChipSuggestions(true);
                         }}
                         onFocus={() => setShowQuickChipSuggestions(true)}
-                        placeholder="যেমন: পাগলা বাজার মোড় বা লংগাইর হাই স্কুল..."
-                        className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-300 rounded-xl text-xs sm:text-sm text-slate-800 focus:outline-none focus:ring-2 focus:ring-emerald-500 font-medium"
+                        placeholder={
+                          selectedUnionForChips !== 'all'
+                            ? `${selectedUnionForChips}-এর স্থান খুঁজুন বা লিখুন...`
+                            : 'যেমন: পাগলা বাজার মোড়, উস্থি বাজার, লংগাইর স্কুল...'
+                        }
+                        className="w-full pl-9 pr-8 py-2.5 bg-slate-50 border border-slate-300 rounded-xl text-xs sm:text-sm text-slate-800 focus:outline-none focus:ring-2 focus:ring-emerald-500 font-medium"
                         onKeyDown={(e) => {
                           if (e.key === 'Enter') {
                             e.preventDefault();
@@ -1404,6 +1714,7 @@ export const AdminControlPanel: React.FC<AdminControlPanelProps> = ({
                         </button>
                       )}
                     </div>
+
                     <button
                       type="button"
                       onClick={() => {
@@ -1417,11 +1728,11 @@ export const AdminControlPanel: React.FC<AdminControlPanelProps> = ({
                     </button>
                   </div>
 
-                  {/* Auto Suggestion Dropdown (Stands & Popular Places) */}
+                  {/* Auto Suggestion Dropdown */}
                   {showQuickChipSuggestions && filteredQuickChipSuggestions.length > 0 && (
-                    <div className="absolute left-0 right-20 mt-1.5 bg-white rounded-2xl border-2 border-emerald-400 shadow-xl z-30 max-h-56 overflow-y-auto scrollbar-thin divide-y divide-slate-100 animate-in fade-in slide-in-from-top-1">
+                    <div className="absolute left-0 right-0 mt-1.5 bg-white rounded-2xl border-2 border-emerald-400 shadow-xl z-30 max-h-60 overflow-y-auto scrollbar-thin divide-y divide-slate-100 animate-in fade-in slide-in-from-top-1">
                       <div className="px-3 py-1.5 bg-emerald-50/90 text-[10px] font-black text-emerald-900 flex items-center justify-between sticky top-0 backdrop-blur-xs">
-                        <span>💡 সাজেশন থেকে সহজে নির্বাচন করুন (স্ট্যান্ড ও জনপ্রিয় স্থান):</span>
+                        <span>💡 সাজেশন তালিকা থেকে সরাসরি চিপস যুক্ত করুন:</span>
                         <button
                           type="button"
                           onClick={() => setShowQuickChipSuggestions(false)}
@@ -1430,40 +1741,49 @@ export const AdminControlPanel: React.FC<AdminControlPanelProps> = ({
                           ✕
                         </button>
                       </div>
+
                       {filteredQuickChipSuggestions.map((item, idx) => (
                         <button
                           key={`${item.name}-${idx}`}
                           type="button"
                           onClick={() => {
-                            if (!settingsDraft.quickDestinations.includes(item.name)) {
-                              setSettingsDraft(prev => ({
-                                ...prev,
-                                quickDestinations: [...prev.quickDestinations, item.name]
-                              }));
-                              showToast(`'${item.name}' দ্রুত গন্তব্য চিপসে যুক্ত হয়েছে!`);
-                            }
-                            setNewQuickChipText('');
+                            handleAddQuickChip(item.name);
                             setShowQuickChipSuggestions(false);
                           }}
                           className="w-full flex items-center justify-between p-2.5 hover:bg-emerald-50/70 text-left transition cursor-pointer group"
                         >
-                          <div className="flex items-center gap-2 truncate">
+                          <div className="flex items-center gap-2 min-w-0 pr-2 flex-1 overflow-hidden">
                             <MapPin className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
-                            <span className="text-xs font-bold text-slate-800 group-hover:text-emerald-950 truncate">{item.name}</span>
-                            {item.sub && (
-                              <span className="text-[10px] text-slate-400 truncate">({item.sub})</span>
-                            )}
+                            <div className="min-w-0 flex-1 overflow-hidden">
+                              <PauseMarqueeText
+                                text={item.name}
+                                className="text-xs font-bold text-slate-800 group-hover:text-emerald-950 block"
+                                pauseSec={1.5}
+                                speedSec={3.5}
+                              />
+                              {item.sub && (
+                                <PauseMarqueeText
+                                  text={item.sub}
+                                  className="text-[10px] text-slate-400 block"
+                                  pauseSec={1.5}
+                                  speedSec={3.5}
+                                />
+                              )}
+                            </div>
                           </div>
                           <div className="flex items-center gap-1.5 shrink-0">
-                            <span className={`text-[9.5px] font-bold px-1.5 py-0.2 rounded-full ${
+                            <span className={`text-[9.5px] font-bold px-1.5 py-0.5 rounded-full ${
                               item.type === 'স্ট্যান্ড'
                                 ? 'bg-blue-100 text-blue-800'
                                 : 'bg-emerald-100 text-emerald-800'
                             }`}>
                               {item.type}
                             </span>
-                            <span className="text-[10px] font-black text-emerald-700 bg-emerald-100/60 group-hover:bg-emerald-600 group-hover:text-white px-1.5 py-0.5 rounded-md transition">
-                              + নির্বাচন করুন
+                            <span
+                              className="w-6 h-6 rounded-md bg-emerald-100 text-emerald-800 group-hover:bg-emerald-600 group-hover:text-white font-black text-sm flex items-center justify-center transition shadow-2xs"
+                              title="যুক্ত করুন"
+                            >
+                              +
                             </span>
                           </div>
                         </button>
@@ -1472,31 +1792,162 @@ export const AdminControlPanel: React.FC<AdminControlPanelProps> = ({
                   )}
                 </div>
 
-                {/* Current Quick Chips List */}
-                <div className="pt-4 border-t border-slate-100">
-                  <label className="text-xs font-bold text-slate-700 block mb-2">
-                    বর্তমানে সক্রিয় দ্রুত গন্তব্য চিপস ({settingsDraft.quickDestinations.length}টি):
-                  </label>
-                  <div className="flex flex-wrap gap-2">
-                    {settingsDraft.quickDestinations.map((chip) => (
-                      <div
-                        key={chip}
-                        className="inline-flex items-center gap-2 bg-emerald-50 border border-emerald-300 text-emerald-950 px-3 py-1.5 rounded-xl text-xs font-bold shadow-2xs"
+                {/* Current Active Chips with In-Place Edit, Reorder, and Delete */}
+                <div className="pt-3 border-t border-slate-100 space-y-2">
+                  <div className="flex items-center justify-between">
+                    <label className="text-xs font-bold text-slate-700 flex items-center gap-1.5">
+                      <span>বর্তমানে সক্রিয় শর্টকাট চিপস ({settingsDraft.quickDestinations.length}টি):</span>
+                      <span className="text-[10px] text-slate-400 font-normal">(পজিশন বদলাতে তীরচিহ্ন চাপুন)</span>
+                    </label>
+                  </div>
+
+                  {settingsDraft.quickDestinations.length === 0 ? (
+                    <div className="text-center py-6 bg-slate-50 rounded-xl border border-dashed border-slate-300">
+                      <p className="text-xs text-slate-500">কোনো চিপস সক্রিয় নেই। উপরের বোতামে ক্লিক করে যুক্ত করুন।</p>
+                    </div>
+                  ) : (
+                    <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-2">
+                      {settingsDraft.quickDestinations.map((chip, idx) => {
+                        const isEditingThis = editingChipIndex === idx;
+
+                        return (
+                          <div
+                            key={`${chip}-${idx}`}
+                            className={`p-2 rounded-xl border transition-all flex items-center justify-between gap-2 ${
+                              isEditingThis
+                                ? 'bg-amber-50/80 border-amber-400 ring-2 ring-amber-300 shadow-sm'
+                                : 'bg-emerald-50/70 border-emerald-200 hover:border-emerald-300 hover:bg-emerald-50 shadow-2xs'
+                            }`}
+                          >
+                            {isEditingThis ? (
+                              <div className="flex items-center gap-1.5 w-full">
+                                <input
+                                  type="text"
+                                  value={editingChipText}
+                                  onChange={(e) => setEditingChipText(e.target.value)}
+                                  className="w-full px-2 py-1 bg-white border border-amber-400 rounded-lg text-xs font-bold text-slate-800 focus:outline-none"
+                                  autoFocus
+                                  onKeyDown={(e) => {
+                                    if (e.key === 'Enter') handleSaveEditQuickChip(idx);
+                                    if (e.key === 'Escape') handleCancelEditQuickChip();
+                                  }}
+                                />
+                                <button
+                                  type="button"
+                                  onClick={() => handleSaveEditQuickChip(idx)}
+                                  className="px-2 py-1 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-[10px] font-bold cursor-pointer shrink-0"
+                                >
+                                  সংরক্ষণ
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={handleCancelEditQuickChip}
+                                  className="px-1.5 py-1 bg-slate-200 hover:bg-slate-300 text-slate-700 rounded-lg text-[10px] cursor-pointer shrink-0"
+                                >
+                                  বাতিল
+                                </button>
+                              </div>
+                            ) : (
+                              <>
+                                <div className="flex items-center gap-1.5 min-w-0 flex-1">
+                                  <span className="w-5 h-5 rounded-md bg-emerald-200/80 text-emerald-900 text-[10px] font-black flex items-center justify-center shrink-0">
+                                    {idx + 1}
+                                  </span>
+                                  <span
+                                    className="text-xs font-bold text-slate-800 truncate block"
+                                    title={chip}
+                                  >
+                                    {chip}
+                                  </span>
+                                </div>
+
+                                <div className="flex items-center gap-1 shrink-0">
+                                  {/* Reorder Left */}
+                                  <button
+                                    type="button"
+                                    onClick={() => handleMoveQuickChip(idx, 'left')}
+                                    disabled={idx === 0}
+                                    className="w-6 h-6 rounded-md bg-white border border-slate-200 hover:bg-emerald-100 text-slate-600 hover:text-emerald-800 disabled:opacity-30 disabled:cursor-not-allowed flex items-center justify-center text-[10px] cursor-pointer transition"
+                                    title="বামে স্থানান্তর"
+                                  >
+                                    ◀
+                                  </button>
+
+                                  {/* Reorder Right */}
+                                  <button
+                                    type="button"
+                                    onClick={() => handleMoveQuickChip(idx, 'right')}
+                                    disabled={idx === settingsDraft.quickDestinations.length - 1}
+                                    className="w-6 h-6 rounded-md bg-white border border-slate-200 hover:bg-emerald-100 text-slate-600 hover:text-emerald-800 disabled:opacity-30 disabled:cursor-not-allowed flex items-center justify-center text-[10px] cursor-pointer transition"
+                                    title="ডানে স্থানান্তর"
+                                  >
+                                    ▶
+                                  </button>
+
+                                  {/* Inline Edit */}
+                                  <button
+                                    type="button"
+                                    onClick={() => handleStartEditQuickChip(idx, chip)}
+                                    className="w-6 h-6 rounded-md bg-white border border-slate-200 hover:bg-amber-100 text-slate-600 hover:text-amber-800 flex items-center justify-center text-[11px] cursor-pointer transition"
+                                    title="নাম সম্পাদনা করুন"
+                                  >
+                                    ✏️
+                                  </button>
+
+                                  {/* Delete */}
+                                  <button
+                                    type="button"
+                                    onClick={() => handleRemoveQuickChip(chip)}
+                                    className="w-6 h-6 rounded-md bg-white border border-slate-200 hover:bg-rose-100 text-slate-600 hover:text-rose-700 flex items-center justify-center text-[10px] cursor-pointer transition"
+                                    title="মুছে ফেলুন"
+                                  >
+                                    ✕
+                                  </button>
+                                </div>
+                              </>
+                            )}
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              {/* Live Passenger Interface Preview */}
+              <div className="bg-slate-900 text-white p-4 sm:p-5 rounded-2xl border border-slate-800 shadow-md space-y-3">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
+                    <h4 className="text-xs sm:text-sm font-bold text-emerald-300">
+                      লাইভ প্যাসেঞ্জার স্ক্রিন প্রিভিউ (Interactive Real-Time Preview)
+                    </h4>
+                  </div>
+                  <span className="text-[10px] text-slate-400 bg-slate-800 px-2.5 py-0.5 rounded-full">
+                    যাত্রীরা হুবহু এই তালিকা দেখতে পাবেন
+                  </span>
+                </div>
+
+                <div className="bg-slate-950 p-3 rounded-xl border border-slate-800 space-y-2">
+                  <div className="text-[11px] font-semibold text-slate-400 flex items-center justify-between">
+                    <span>শর্টকাট চিপস তালিকা:</span>
+                    <span className="text-emerald-400">{settingsDraft.quickDestinations.length}টি স্থান</span>
+                  </div>
+
+                  <div className="flex items-center gap-1.5 overflow-x-auto pb-1 scrollbar-thin">
+                    {settingsDraft.quickDestinations.map((dest, i) => (
+                      <span
+                        key={`prev-${dest}-${i}`}
+                        className="inline-flex items-center gap-1 bg-emerald-950 text-emerald-200 border border-emerald-600/50 px-2.5 py-1 rounded-lg text-xs font-bold whitespace-nowrap"
                       >
-                        <span>{chip}</span>
-                        <button
-                          type="button"
-                          onClick={() => handleRemoveQuickChip(chip)}
-                          className="w-4 h-4 rounded-full bg-emerald-200/80 hover:bg-red-500 hover:text-white flex items-center justify-center text-[10px] text-emerald-800 cursor-pointer transition"
-                          title="মুছে ফেলুন"
-                        >
-                          ✕
-                        </button>
-                      </div>
+                        <MapPin className="w-3 h-3 text-emerald-400" />
+                        <span>{dest}</span>
+                      </span>
                     ))}
                   </div>
                 </div>
               </div>
+
             </div>
           )}
 
@@ -1946,9 +2397,6 @@ export const AdminControlPanel: React.FC<AdminControlPanelProps> = ({
                     <Download className="w-5 h-5 text-amber-600" />
                     সম্পূর্ণ প্রজেক্ট সোর্স কোড ডাউনলোড (.ZIP)
                   </h3>
-                  <span className="text-[11px] font-bold bg-amber-400 text-slate-950 px-2.5 py-0.5 rounded-full shadow-xs border border-amber-500/50">
-                    ২.৫ MB • ক্লাউডফ্লেয়ার ১০০% ফিক্স
-                  </span>
                 </div>
                 <p className="text-xs text-slate-700 leading-relaxed">
                   আপনার সম্পূর্ণ অ্যাপের রিয়্যাক্ট ১৯, টাইপস্ক্রিপ্ট সোর্স কোড, চালক ভেরিফিকেশন পপআপ কোড, লাইভ ম্যাপ, আইকন, এবং প্রস্তুতকৃত <strong>dist/</strong> প্রোডাকশন বিল্ড ফাইল সহ সম্পূর্ণ অফিশিয়াল জিপ ফাইল। ক্লাউডফ্লেয়ারের <code>edgesOut</code> ও Node.js ডিপ্লয় এরর শতভাগ সমাধান করা হয়েছে (.npmrc ও .node-version অন্তর্ভুক্ত)।
@@ -1969,7 +2417,7 @@ export const AdminControlPanel: React.FC<AdminControlPanelProps> = ({
                     ) : (
                       <>
                         <Download className="w-4 h-4 text-slate-950" />
-                        <span>📥 সম্পূর্ণ প্রজেক্ট জিপ ডাউনলোড করুন (২.৫ MB • dist সহ ভেরিফাইড)</span>
+                        <span>📥 সম্পূর্ণ প্রজেক্ট জিপ ডাউনলোড করুন (২.৫৩ MB • অফিশিয়াল ক্লিন বিল্ড)</span>
                       </>
                     )}
                   </button>
@@ -1980,7 +2428,7 @@ export const AdminControlPanel: React.FC<AdminControlPanelProps> = ({
                     className="inline-flex items-center gap-1.5 bg-white hover:bg-slate-50 text-slate-800 font-bold px-3.5 py-2.5 rounded-xl text-xs sm:text-sm shadow-xs border border-slate-300 cursor-pointer transition"
                   >
                     <Download className="w-3.5 h-3.5 text-slate-600" />
-                    <span>সরাসরি লিঙ্ক</span>
+                    <span>সরাসরি লিঙ্ক (২.৫৩ MB)</span>
                   </a>
 
                   {onOpenSourceCodeModal && (

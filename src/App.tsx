@@ -76,6 +76,8 @@ import { db, handleFirestoreError, OperationType } from './lib/firebase';
 
 import { LocationAutocomplete } from './components/LocationAutocomplete';
 import { GAFARGAON_PLACES, resolveLocationCoordinates, GafargaonPlace } from './data/gafargaonPlaces';
+import { UnionQuickDestinations } from './components/UnionQuickDestinations';
+import { COMPREHENSIVE_UNION_PLACES, GAFARGAON_UNIONS } from './data/gafargaonUnionData';
 import { GafargaonMap } from './components/GafargaonMap';
 import { CloudflareSettingsModal } from './components/CloudflareSettingsModal';
 import { useLiveTracking } from './hooks/useLiveTracking';
@@ -302,36 +304,19 @@ export const VEHICLE_CATEGORIES: VehicleCategoryItem[] = [
 ];
 
 // Expanded Gafargaon Stands (Counts are calculated dynamically based on active drivers)
-// Expanded Gafargaon & Pagla Stands - Exact Google Maps GPS Coordinates
-export const GAFARGAON_STANDS: Stand[] = [
-  { id: '1', name: 'Railway Station', bengaliName: 'গফরগাঁও রেলওয়ে স্টেশন স্ট্যান্ড', lat: 24.4536, lng: 90.5479, activeDrivers: 0 },
-  { id: '2', name: 'Pouroshova Circle', bengaliName: 'পৌরসভা চত্বর ও শহিদ মিনার মোড়', lat: 24.4515, lng: 90.5535, activeDrivers: 0 },
-  { id: '3', name: 'Thana Mor', bengaliName: 'গফরগাঁও মডেল থানা মোড় স্ট্যান্ড', lat: 24.4520, lng: 90.5542, activeDrivers: 0 },
-  { id: '4', name: 'Hospital Mor', bengaliName: 'উপজেলা স্বাস্থ্য কমপ্লেক্স (হাসপাতাল) স্ট্যান্ড', lat: 24.4627, lng: 90.5429, activeDrivers: 0 },
-  { id: '5', name: 'Dakbanglo Mor', bengaliName: 'ডাকবাংলো ও সরকারি কলেজ মোড়', lat: 24.4510, lng: 90.5520, activeDrivers: 0 },
-  { id: '6', name: 'Jamtoli Mor', bengaliName: 'জামতলী মোড় স্ট্যান্ড', lat: 24.4528, lng: 90.5492, activeDrivers: 0 },
-  { id: '7', name: 'Shibganj Bazar', bengaliName: 'শিবগঞ্জ বাজার মোড় স্ট্যান্ড', lat: 24.4625, lng: 90.5630, activeDrivers: 0 },
-  { id: '8', name: 'Saltia Bazar', bengaliName: 'সালটিয়া বাজার মোড় স্ট্যান্ড', lat: 24.4560, lng: 90.5450, activeDrivers: 0 },
-  { id: '9', name: 'Duttapara', bengaliName: 'দত্তপাড়া মোড় স্ট্যান্ড', lat: 24.4480, lng: 90.5490, activeDrivers: 0 },
-  { id: '10', name: 'Balipara Road', bengaliName: 'বালিপাড়া রোড মোড় স্ট্যান্ড', lat: 24.4590, lng: 90.5540, activeDrivers: 0 },
-  { id: '11', name: 'Altaf Golandaz College', bengaliName: 'আলতাফ গোলন্দাজ ডিগ্রি কলেজ মোড়', lat: 24.4465, lng: 90.5510, activeDrivers: 0 },
-  { id: '12', name: 'Kander Bazar', bengaliName: 'কান্দাপাড়া / কান্দির বাজার মোড় স্ট্যান্ড', lat: 24.4580, lng: 90.5410, activeDrivers: 0 },
-  { id: '13', name: 'Rawna Mor', bengaliName: 'রওনা বাজার মোড় স্ট্যান্ড', lat: 24.4320, lng: 90.5480, activeDrivers: 0 },
-  { id: '14', name: 'Longgair Bazar', bengaliName: 'লংগাইর বাজার মোড় স্ট্যান্ড', lat: 24.4120, lng: 90.5620, activeDrivers: 0 },
-  { id: '15', name: 'Pirojpur Mor', bengaliName: 'পিরোজপুর / পিয়ারপুর বাজার মোড় স্ট্যান্ড', lat: 24.4190, lng: 90.5520, activeDrivers: 0 },
-  { id: '16', name: 'Moshakhali Station', bengaliName: 'মশাখালী রেলওয়ে স্টেশন ও বাজার স্ট্যান্ড', lat: 24.3854, lng: 90.5362, activeDrivers: 0 },
-  { id: '17', name: 'Pagla Thana', bengaliName: 'পাগলা থানা ও বাজার স্ট্যান্ড', lat: 24.3325, lng: 90.5825, activeDrivers: 0 },
-  { id: '18', name: 'Datterbazar', bengaliName: 'দত্তেরবাজার মোড় স্ট্যান্ড', lat: 24.3387, lng: 90.5883, activeDrivers: 0 },
-  { id: '19', name: 'Panchbag Bazar', bengaliName: 'পাঁচবাগ বাজার মোড় স্ট্যান্ড', lat: 24.3713, lng: 90.5859, activeDrivers: 0 },
-  { id: '20', name: 'Kandipara South', bengaliName: 'কান্দিপাড়া বাজার চৌরাস্তা স্ট্যান্ড', lat: 24.3738, lng: 90.5918, activeDrivers: 0 },
-  { id: '21', name: 'Barbaria Bazar', bengaliName: 'বারবাড়িয়া বাজার স্ট্যান্ড', lat: 24.4855, lng: 90.4844, activeDrivers: 0 },
-  { id: '22', name: 'Rasulpur Bazar', bengaliName: 'রসুলপুর বাজার মোড় স্ট্যান্ড', lat: 24.4850, lng: 90.5650, activeDrivers: 0 },
-  { id: '23', name: 'Usthi Bazar', bengaliName: 'উস্থি বাজার মোড় স্ট্যান্ড', lat: 24.3980, lng: 90.5750, activeDrivers: 0 },
-  { id: '24', name: 'Tangab Bazar', bengaliName: 'টাঙ্গাব বাজার মোড় স্ট্যান্ড', lat: 24.3220, lng: 90.5250, activeDrivers: 0 },
-  { id: '25', name: 'Niguari Bazar', bengaliName: 'নিগুয়ারী বাজার স্ট্যান্ড', lat: 24.3050, lng: 90.5750, activeDrivers: 0 },
-  { id: '26', name: 'Charalgi Mor', bengaliName: 'চরআলগী ইউনিয়ন মোড় স্ট্যান্ড', lat: 24.4750, lng: 90.5780, activeDrivers: 0 },
-  { id: '27', name: 'Dhuldi Bazar', bengaliName: 'ধুলদী বাজার মোড় স্ট্যান্ড', lat: 24.4680, lng: 90.5510, activeDrivers: 0 }
-];
+// Comprehensive Gafargaon & Pagla Stands across all 15 Unions + Pourashava
+// Auto-populated with exact Google Maps GPS Coordinates
+export const GAFARGAON_STANDS: Stand[] = COMPREHENSIVE_UNION_PLACES.filter(p => p.isStand).map(p => ({
+  id: p.id,
+  name: p.name,
+  bengaliName: p.bengaliName,
+  lat: p.lat,
+  lng: p.lng,
+  activeDrivers: 0,
+  location: `${p.unionNameBengali} • ${p.area}`,
+  isPopular: p.isPopular
+}));
+
 
 // Realistic Initial Drivers with Verified Licenses, NIDs, Ratings & Speeds
 export const INITIAL_DRIVERS: Driver[] = [
@@ -1055,10 +1040,10 @@ export default function App() {
   // 1. Dynamic Stands State (Manageable by Admin, persisted in localStorage with Google Maps auto-migration)
   const [stands, setStands] = useState<Stand[]>(() => {
     try {
-      const saved = localStorage.getItem('safar_stands_v5');
+      const saved = localStorage.getItem('safar_stands_v6');
       if (saved) {
         const parsed = JSON.parse(saved);
-        if (Array.isArray(parsed) && parsed.length > 0) {
+        if (Array.isArray(parsed) && parsed.length >= 40) {
           const hasOutdatedGps = parsed.some((s: any) => s.lat > 24.52 || s.lat < 24.2);
           if (!hasOutdatedGps) return parsed;
         }
@@ -1069,7 +1054,7 @@ export default function App() {
 
   useEffect(() => {
     try {
-      localStorage.setItem('safar_stands_v5', JSON.stringify(stands));
+      localStorage.setItem('safar_stands_v6', JSON.stringify(stands));
     } catch {}
   }, [stands]);
 
@@ -1808,13 +1793,23 @@ export default function App() {
       homeLocation: '',
       emergencyContact: ''
     });
+    setTripHistory([]);
+    try {
+      localStorage.removeItem('safar_trip_history_v7');
+      localStorage.removeItem('safar_trip_history_v6');
+      localStorage.removeItem('safar_trip_history_v5');
+      localStorage.removeItem('safar_passenger_profile_v5');
+    } catch {}
     showAdminToastMessage('যাত্রী প্রোফাইল থেকে লগআউট সম্পন্ন হয়েছে');
   };
 
   // Past Trip History with LocalStorage Auto-Sync (Real, Dynamic & Synced with Firestore)
+  // Default is clean [] - No dummy/fake past trips for unregistered users
   const [tripHistory, setTripHistory] = useState<PassengerTripRecord[]>(() => {
     try {
-      const saved = localStorage.getItem('safar_trip_history_v5');
+      localStorage.removeItem('safar_trip_history_v5');
+      localStorage.removeItem('safar_trip_history_v6');
+      const saved = localStorage.getItem('safar_trip_history_v7');
       if (saved) {
         const parsed = JSON.parse(saved);
         if (Array.isArray(parsed)) return parsed;
@@ -1826,9 +1821,45 @@ export default function App() {
   // Automatically persist trip history on change
   useEffect(() => {
     try {
-      localStorage.setItem('safar_trip_history_v5', JSON.stringify(tripHistory));
+      localStorage.setItem('safar_trip_history_v7', JSON.stringify(tripHistory));
     } catch (e) {}
   }, [tripHistory]);
+
+  // Real-time Firestore Sync for Passenger Trip History (dynamically loads trips for logged in passenger)
+  useEffect(() => {
+    if (!passengerProfile.isLoggedIn || !passengerProfile.phone) return;
+    const cleanPhone = passengerProfile.phone.replace(/[^0-9]/g, '');
+    if (!cleanPhone) return;
+
+    const unsubscribe = onSnapshot(collection(db, 'users', cleanPhone, 'trips'), (snapshot) => {
+      if (!snapshot.empty) {
+        const cloudTrips: PassengerTripRecord[] = [];
+        snapshot.forEach((docSnap) => {
+          const d = docSnap.data();
+          cloudTrips.push({
+            id: docSnap.id,
+            date: d.date || '',
+            pickupPoint: d.pickupPoint || '',
+            destination: d.destination || '',
+            driverName: d.driverName || '',
+            driverPhone: d.driverPhone || '',
+            vehicleCategory: d.vehicleCategory || 'auto',
+            vehicleModel: d.vehicleModel || '',
+            plateNumber: d.plateNumber || '',
+            fare: d.fare || 0,
+            status: d.status || 'সম্পন্ন',
+            ratingGiven: d.ratingGiven || 5.0
+          });
+        });
+        setTripHistory(cloudTrips);
+      }
+    }, (err) => {
+      console.warn('Firestore passenger trips sync fallback:', err);
+    });
+
+    return () => unsubscribe();
+  }, [passengerProfile.isLoggedIn, passengerProfile.phone]);
+
 
   // Driver Cockpit States (When in 'driver' mode)
   const [isDriverOnline, setIsDriverOnline] = useState(true);
@@ -2014,6 +2045,43 @@ export default function App() {
     return GAFARGAON_PLACES;
   });
 
+  // Real-time Firestore Sync for Popular Places (Cross-device, real-time live sync)
+  useEffect(() => {
+    const unsubscribe = onSnapshot(collection(db, 'places'), (snapshot) => {
+      if (!snapshot.empty) {
+        const firestorePlaces: GafargaonPlace[] = [];
+        snapshot.forEach((docSnap) => {
+          const data = docSnap.data();
+          firestorePlaces.push({
+            id: docSnap.id,
+            name: data.name || docSnap.id,
+            bengaliName: data.bengaliName || data.name || '',
+            category: data.category || 'অন্যান্য',
+            area: data.area || 'গফরগাঁও',
+            lat: typeof data.lat === 'number' ? data.lat : 24.5518,
+            lng: typeof data.lng === 'number' ? data.lng : 90.5512
+          });
+        });
+        setPopularPlaces(firestorePlaces);
+        try {
+          localStorage.setItem('safar_popular_places_v1', JSON.stringify(firestorePlaces));
+        } catch {}
+      } else {
+        // First-time seed initial 42 places to Firestore
+        GAFARGAON_PLACES.forEach(p => {
+          setDoc(doc(db, 'places', p.id), {
+            ...p,
+            updatedAt: new Date().toISOString()
+          }).catch(() => {});
+        });
+      }
+    }, (error) => {
+      console.warn('Firestore places sync fallback:', error);
+    });
+
+    return () => unsubscribe();
+  }, []);
+
   const handleSavePopularPlace = (place: GafargaonPlace) => {
     setPopularPlaces(prev => {
       const idx = prev.findIndex(p => p.id === place.id);
@@ -2027,12 +2095,13 @@ export default function App() {
       try {
         localStorage.setItem('safar_popular_places_v1', JSON.stringify(updated));
       } catch {}
-      setDoc(doc(db, 'places', place.id), {
-        ...place,
-        updatedAt: new Date().toISOString()
-      }, { merge: true }).catch(() => {});
       return updated;
     });
+    setDoc(doc(db, 'places', place.id), {
+      ...place,
+      updatedAt: new Date().toISOString()
+    }, { merge: true }).catch(() => {});
+    showAdminToastMessage(`'${place.bengaliName}' স্থানটি ক্লাউড ফায়ারবেসে সেভ ও লাইভ সিঙ্ক হয়েছে!`);
   };
 
   const handleDeletePopularPlace = (placeId: string, name: string) => {
@@ -2041,9 +2110,10 @@ export default function App() {
       try {
         localStorage.setItem('safar_popular_places_v1', JSON.stringify(updated));
       } catch {}
-      deleteDoc(doc(db, 'places', placeId)).catch(() => {});
       return updated;
     });
+    deleteDoc(doc(db, 'places', placeId)).catch(() => {});
+    showAdminToastMessage(`'${name}' স্থানটি সফলভাবে মুছে ফেলা হয়েছে`);
   };
 
   const handleResetPopularPlaces = () => {
@@ -2051,7 +2121,81 @@ export default function App() {
     try {
       localStorage.setItem('safar_popular_places_v1', JSON.stringify(GAFARGAON_PLACES));
     } catch {}
+    GAFARGAON_PLACES.forEach(p => {
+      setDoc(doc(db, 'places', p.id), {
+        ...p,
+        updatedAt: new Date().toISOString()
+      }).catch(() => {});
+    });
+    showAdminToastMessage('জনপ্রিয় স্থানসমূহ ডিফল্ট তালিকায় রিস্টোর ও ক্লাউডে সিঙ্ক হয়েছে');
   };
+
+  // Memoized unified places and stands list for 15-Union Autocomplete in Pickup & Destination
+  const allAutocompletePlaces = useMemo(() => {
+    const list: any[] = [];
+    const addedNames = new Set<string>();
+
+    // 1. Add all 15 unions' stands and popular places from COMPREHENSIVE_UNION_PLACES
+    COMPREHENSIVE_UNION_PLACES.forEach(p => {
+      const key = p.bengaliName.trim().toLowerCase();
+      if (!addedNames.has(key)) {
+        addedNames.add(key);
+        list.push({
+          id: p.id,
+          name: p.name || p.bengaliName,
+          bengaliName: p.bengaliName,
+          category: p.category,
+          categoryLabel: p.category,
+          area: p.area,
+          unionNameBengali: p.unionNameBengali,
+          searchKeywords: p.searchKeywords || [],
+          isStand: p.isStand,
+          lat: p.lat,
+          lng: p.lng
+        });
+      }
+    });
+
+    // 2. Add or override with admin-managed popular places from Firestore
+    popularPlaces.forEach(p => {
+      const key = p.bengaliName.trim().toLowerCase();
+      if (!addedNames.has(key)) {
+        addedNames.add(key);
+        list.push({
+          id: p.id,
+          name: p.name,
+          bengaliName: p.bengaliName,
+          category: p.category,
+          categoryLabel: p.category,
+          area: p.area,
+          isStand: p.category === 'স্ট্যান্ড',
+          lat: p.lat,
+          lng: p.lng
+        });
+      }
+    });
+
+    // 3. Add stands
+    stands.forEach(s => {
+      const key = s.bengaliName.trim().toLowerCase();
+      if (!addedNames.has(key)) {
+        addedNames.add(key);
+        list.push({
+          id: s.id,
+          name: s.name,
+          bengaliName: s.bengaliName,
+          category: 'স্ট্যান্ড',
+          categoryLabel: 'স্ট্যান্ড',
+          area: s.name,
+          isStand: true,
+          lat: s.lat,
+          lng: s.lng
+        });
+      }
+    });
+
+    return list;
+  }, [popularPlaces, stands]);
 
   // Active Pending Request submitted by this passenger
   const [passengerPendingRequest, setPassengerPendingRequest] = useState<PassengerRideRequest | null>(() => {
@@ -2291,13 +2435,54 @@ export default function App() {
       setPassengerPendingRequest(currentReq => {
         if (!currentReq || currentReq.id !== reqId) return null; // user cancelled
 
-        const matchedDriver = drivers.find(d => d.category === newRequest.category && d.isOnline) ||
-          drivers.find(d => d.isOnline) || drivers[0];
+        // Realistic driver matching:
+        // Priority 1: If passenger filtered by a specific stand (e.g. ঈমামবাড়ি মোড়), match online driver at that stand
+        let matchedDriver: Driver | undefined;
+        const cleanSelectedStand = selectedStand !== 'all' ? selectedStand.replace(' স্ট্যান্ড', '').trim() : '';
+
+        if (cleanSelectedStand) {
+          // Look for an online driver at this selected stand matching the category
+          matchedDriver = drivers.find(d => 
+            d.isOnline && 
+            d.standName.includes(cleanSelectedStand) && 
+            d.category === newRequest.category
+          );
+          // Or ANY online driver at this stand
+          if (!matchedDriver) {
+            matchedDriver = drivers.find(d => 
+              d.isOnline && 
+              d.standName.includes(cleanSelectedStand)
+            );
+          }
+        }
+
+        // Priority 2: Look for an online driver across Gafargaon matching requested vehicle category
+        if (!matchedDriver) {
+          matchedDriver = drivers.find(d => d.isOnline && d.category === newRequest.category);
+        }
+
+        // Priority 3: Fall back to any active online driver
+        if (!matchedDriver) {
+          matchedDriver = drivers.find(d => d.isOnline);
+        }
+
+        // Priority 4: Fallback
+        if (!matchedDriver) {
+          matchedDriver = drivers[0];
+        }
+
+        // Seamlessly sync passenger vehicle selection to the matched driver's vehicle
+        if (matchedDriver && matchedDriver.category !== passengerSelectedVehicle) {
+          setPassengerSelectedVehicle(matchedDriver.category);
+        }
 
         const pCoords = pickupCoords || { lat: 24.5518, lng: 90.5512 };
-        const dist = calculatedDistance;
+        const dist = calculatedDistance > 0 ? calculatedDistance : 1.2;
         const eta = Math.max(2, Math.round(dist * 2.5));
         const otpCode = String(Math.floor(1000 + Math.random() * 9000));
+        const validFare = (calculatedFare && calculatedFare > 0)
+          ? calculatedFare
+          : (calculateFareForCategory(matchedDriver.category, dist) || categories.find(c => c.id === matchedDriver.category)?.baseFare || 40);
 
         setActiveBooking({
           driver: matchedDriver,
@@ -2312,27 +2497,10 @@ export default function App() {
           otp: otpCode,
           pickupTitle: pickupTitle,
           destTitle: destTitle,
-          fare: calculatedFare
+          fare: validFare
         });
 
-        // Auto-add to trip history
-        const newTripRecord: PassengerTripRecord = {
-          id: `trip-${Date.now()}`,
-          date: 'আজ, ' + new Date().toLocaleTimeString('bn-BD', { hour: '2-digit', minute: '2-digit' }),
-          pickupPoint: pickupTitle,
-          destination: destTitle,
-          driverName: matchedDriver.name,
-          driverPhone: matchedDriver.phone,
-          vehicleCategory: matchedDriver.category,
-          vehicleModel: matchedDriver.vehicleModel,
-          plateNumber: matchedDriver.plateNumber,
-          fare: calculatedFare,
-          status: 'সম্পন্ন',
-          ratingGiven: 5.0
-        };
-        setTripHistory(prev => [newTripRecord, ...prev]);
-
-        showAdminToastMessage(`🎉 চালক '${matchedDriver.name}' আপনার রাইড গ্রহণ করেছেন!`);
+        showAdminToastMessage(`🎉 চালক '${matchedDriver.name}' (${matchedDriver.standName}) আপনার রাইড গ্রহণ করেছেন!`);
         return null;
       });
     }, 3200);
@@ -2907,33 +3075,24 @@ export default function App() {
     };
   }, []);
 
-  // Live driver simulation interval when booking is active
+  // Live driver smooth tracking simulation when booking is active (Realistic & User-Driven)
   useEffect(() => {
     if (!activeBooking) return;
 
+    // Run at a realistic 5-second interval with gentle progression
     const timer = setInterval(() => {
       setActiveBooking((prev) => {
         if (!prev) return null;
+        if (prev.status !== 'en_route') return prev;
 
-        // Step driver towards passenger (5% closer per tick)
-        const dLat = (prev.passengerLat - prev.currentDriverLat) * 0.08;
-        const dLng = (prev.passengerLng - prev.currentDriverLng) * 0.08;
+        // Move 2.5% of the distance per 5 seconds (smooth, steady & non-rushed)
+        const dLat = (prev.passengerLat - prev.currentDriverLat) * 0.025;
+        const dLng = (prev.passengerLng - prev.currentDriverLng) * 0.025;
         const newLat = prev.currentDriverLat + dLat;
         const newLng = prev.currentDriverLng + dLng;
 
-        const remainingDist = calculateDistanceKm(newLat, newLng, prev.passengerLat, prev.passengerLng);
-        const remainingEta = calculateEtaMinutes(remainingDist, prev.driver.approxSpeedKmh);
-
-        if (remainingDist < 0.05) {
-          return {
-            ...prev,
-            currentDriverLat: prev.passengerLat,
-            currentDriverLng: prev.passengerLng,
-            distanceKm: 0,
-            etaMinutes: 0,
-            status: 'arrived'
-          };
-        }
+        const remainingDist = Number(calculateDistanceKm(newLat, newLng, prev.passengerLat, prev.passengerLng).toFixed(2));
+        const remainingEta = Math.max(1, calculateEtaMinutes(remainingDist, prev.driver.approxSpeedKmh || 30));
 
         return {
           ...prev,
@@ -2943,10 +3102,10 @@ export default function App() {
           etaMinutes: remainingEta
         };
       });
-    }, 3500);
+    }, 5000);
 
     return () => clearInterval(timer);
-  }, [activeBooking]);
+  }, [activeBooking ? true : false]);
 
   // Filtered and stably sorted drivers (100% stable, zero jumping/lafalafi)
   const filteredDrivers = useMemo(() => {
@@ -3164,36 +3323,21 @@ export default function App() {
     const eta = calculateEtaMinutes(dist, driver.approxSpeedKmh);
     const estFare = Math.max(35, Math.round(dist * (driver.category === 'bike' ? 22 : driver.category === 'cng' ? 26 : driver.category === 'ambulance' ? 60 : 35)));
 
-    const nowFormatted = 'আজ, ' + new Date().toLocaleTimeString('bn-BD', { hour: '2-digit', minute: '2-digit' });
-
-    // Automatically record new trip into Passenger's Trip History (saved to localStorage)
-    const newTripRecord: PassengerTripRecord = {
-      id: `trip-${Date.now()}`,
-      date: nowFormatted,
-      pickupPoint: selectedStand !== 'all' ? selectedStand : 'গফরগাঁও লাইভ অবস্থান',
-      destination: driver.standName || 'গন্তব্য স্থল',
-      driverName: driver.name,
-      driverPhone: driver.phone,
-      vehicleCategory: driver.category,
-      vehicleModel: driver.vehicleModel,
-      plateNumber: driver.plateNumber,
-      fare: estFare,
-      status: 'সম্পন্ন',
-      ratingGiven: 5.0
-    };
-    setTripHistory(prev => [newTripRecord, ...prev]);
+    const pTitle = passengerPickup || (selectedStand !== 'all' ? selectedStand : 'গফরগাঁও লাইভ অবস্থান');
+    const dTitle = passengerDestination || driver.standName || 'উপজেলা স্বাস্থ্য কমপ্লেক্স';
+    const validFare = (estFare && estFare > 0) ? estFare : (categories.find(c => c.id === driver.category)?.baseFare || 40);
 
     // Automatically dispatch live passenger request to Driver Cockpit (saved to localStorage)
     const newRideRequest: PassengerRideRequest = {
       id: `req-${Date.now()}`,
       passengerName: passengerProfile.name || 'সম্মানিত যাত্রী',
       passengerPhone: passengerProfile.phone || '০১৭১১-২২৩৩৪৪',
-      pickupPoint: selectedStand !== 'all' ? selectedStand : 'গফরগাঁও লাইভ অবস্থান',
-      destination: driver.standName || 'গন্তব্য মোড়',
+      pickupPoint: pTitle,
+      destination: dTitle,
       category: driver.category,
       requestedAt: 'এইমাত্র',
       distanceKm: dist,
-      estFare: estFare,
+      estFare: validFare,
       status: 'accepted'
     };
     setPassengerRequests(prev => [newRideRequest, ...prev]);
@@ -3215,7 +3359,11 @@ export default function App() {
       confirmedAt: Date.now(),
       etaMinutes: eta,
       distanceKm: dist,
-      status: 'en_route'
+      status: 'en_route',
+      fare: validFare,
+      otp: String(Math.floor(1000 + Math.random() * 9000)),
+      pickupTitle: pTitle,
+      destTitle: dTitle
     });
 
     // Close detail modal
@@ -3805,7 +3953,7 @@ export default function App() {
               <button
                 type="button"
                 onClick={() => {
-                  setPassengerTab('history');
+                  setPassengerTab(passengerProfile.isLoggedIn ? 'history' : 'profile');
                   setShowPassengerModal(true);
                 }}
                 className="inline-flex items-center gap-1 bg-emerald-850 hover:bg-emerald-900 bg-emerald-900/80 text-white font-bold px-1.5 py-1 sm:px-2.5 sm:py-1.5 rounded-lg text-[10px] sm:text-xs border border-emerald-400/50 shadow-xs cursor-pointer transition-all active:scale-95"
@@ -4013,7 +4161,29 @@ export default function App() {
               }}
               onCompleteRide={(fare) => {
                 if (activeBooking) {
-                  showAdminToastMessage(`ট্রিপ সম্পন্ন হয়েছে! নির্ধারিত ভাড়া: ৳ ${fare}`);
+                  const finalFare = (fare && fare > 0) ? fare : (activeBooking.fare || 40);
+                  const newTripRecord: PassengerTripRecord = {
+                    id: `trip-${Date.now()}`,
+                    date: 'আজ, ' + new Date().toLocaleTimeString('bn-BD', { hour: '2-digit', minute: '2-digit' }),
+                    pickupPoint: activeBooking.pickupTitle || passengerPickup || 'শুরুর স্থান',
+                    destination: activeBooking.destTitle || passengerDestination || 'গন্তব্য স্থান',
+                    driverName: activeBooking.driver.name,
+                    driverPhone: activeBooking.driver.phone,
+                    vehicleCategory: activeBooking.driver.category,
+                    vehicleModel: activeBooking.driver.vehicleModel,
+                    plateNumber: activeBooking.driver.plateNumber,
+                    fare: finalFare,
+                    status: 'সম্পন্ন',
+                    ratingGiven: 5.0
+                  };
+                  setTripHistory(prev => [newTripRecord, ...prev]);
+                  if (passengerProfile.phone) {
+                    setDoc(doc(db, 'users', passengerProfile.phone, 'trips', newTripRecord.id), {
+                      ...newTripRecord,
+                      createdAt: new Date().toISOString()
+                    }).catch(() => {});
+                  }
+                  showAdminToastMessage(`ট্রিপ সম্পন্ন হয়েছে! নির্ধারিত ভাড়া: ৳ ${finalFare}`);
                 }
               }}
               onSubmitReview={(driverId, rating) => {
@@ -4103,7 +4273,7 @@ export default function App() {
                       label="শুরুর অবস্থান (পিকআপ):"
                       isPickup={true}
                       value={passengerPickup}
-                      places={popularPlaces}
+                      places={allAutocompletePlaces}
                       isGpsActive={liveGps.isTracking || isLiveLocationQuery(passengerPickup)}
                       userGps={liveGps}
                       onLocateGps={() => {
@@ -4164,7 +4334,7 @@ export default function App() {
                       label="কোথায় যাবেন (গন্তব্য স্থল):"
                       isPickup={false}
                       value={passengerDestination}
-                      places={popularPlaces}
+                      places={allAutocompletePlaces}
                       userGps={liveGps}
                       onChangeLocation={(name, coords) => {
                         setPassengerDestination(name);
@@ -4180,97 +4350,22 @@ export default function App() {
                   {/* Side-by-Side (50:50)% Layout: দ্রুত গন্তব্য (Left) & যানবাহন ও ভাড়ার তালিকা (Right) */}
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-3.5 my-3">
                     
-                    {/* LEFT COLUMN: দ্রুত গন্তব্য (50% desktop, 100% mobile) with Dropdown & Scroll */}
-                    <div className="w-full bg-slate-50/90 rounded-2xl border border-emerald-200/90 shadow-xs overflow-hidden flex flex-col">
-                      {/* Dropdown Header Bar (styled like সফরের দো'আ) */}
-                      <button
-                        type="button"
-                        onClick={() => setIsQuickDestOpen(!isQuickDestOpen)}
-                        aria-expanded={isQuickDestOpen}
-                        className="w-full flex items-center justify-between gap-2 px-3.5 py-2.5 bg-gradient-to-r from-emerald-50 via-teal-50 to-emerald-100/90 hover:from-emerald-100 hover:to-teal-100 border-b border-emerald-200/80 transition-all cursor-pointer text-left select-none group"
-                      >
-                        <div className="flex items-center gap-2 min-w-0">
-                          <span className="w-7 h-7 rounded-lg bg-emerald-600 text-white flex items-center justify-center shrink-0 shadow-xs group-hover:bg-emerald-700 transition">
-                            <Compass className="w-4 h-4" />
-                          </span>
-                          <div className="truncate">
-                            <span className="font-extrabold text-xs sm:text-sm text-emerald-950 block leading-tight">
-                              দ্রুত গন্তব্য
-                            </span>
-                            <span className="text-[10px] text-emerald-700 font-semibold block leading-tight">
-                              সহজে পছন্দের গন্তব্য নির্বাচন করুন
-                            </span>
-                          </div>
-                        </div>
-
-                        <div className="flex items-center gap-1.5 shrink-0">
-                          <span className="px-2 py-0.5 rounded-full bg-emerald-200/90 text-emerald-900 text-[10px] font-bold">
-                            {passengerDestination ? passengerDestination.split(' ')[0] : 'স্থানসমূহ'}
-                          </span>
-                          <span className={`w-5 h-5 rounded-full bg-white border border-emerald-300 flex items-center justify-center text-emerald-700 transition-transform duration-200 ${isQuickDestOpen ? 'rotate-180 bg-emerald-600 text-white border-emerald-600' : ''}`}>
-                            <ChevronDown className="w-3.5 h-3.5" />
-                          </span>
-                        </div>
-                      </button>
-
-                      {/* Dropdown Content with Scroll Option */}
-                      {isQuickDestOpen && (
-                        <div className="p-3 animate-in fade-in slide-in-from-top-1 duration-200">
-                          {/* Scrollable Destination Items (Parallel fixed height matching vehicle fare list) */}
-                          <div className="h-[250px] overflow-y-auto scrollbar-thin pr-1 space-y-1.5">
-                            {(appCustomSettings.quickDestinations && appCustomSettings.quickDestinations.length > 0
-                              ? appCustomSettings.quickDestinations
-                              : [
-                                  'উপজেলা স্বাস্থ্য কমপ্লেক্স (হাসপাতাল)',
-                                  'গফরগাঁও রেলওয়ে স্টেশন স্ট্যান্ড',
-                                  'পৌরসভা চত্বর স্ট্যান্ড',
-                                  'পাগলা থানা স্ট্যান্ড',
-                                  'শিবগঞ্জ বাজার মোড় স্ট্যান্ড',
-                                  'দত্তপাড়া মোড় স্ট্যান্ড',
-                                  'ইসলামিয়া সরকারি হাইস্কুল মোড়',
-                                  'খায়রুল্লাহ সরকারি কলেজ গেট',
-                                  'পাঁচবাগ বাজার মোড়',
-                                  'রাওনা ইউনিয়ন পরিষদ মোড়'
-                                ]
-                            ).map((dest, idx) => {
-                              const isMatch = passengerDestination.trim() === dest.trim();
-                              return (
-                                <button
-                                  key={`${dest}-${idx}`}
-                                  type="button"
-                                  onClick={() => {
-                                    setPassengerDestination(dest);
-                                    const coords = resolveLocationCoordinates(dest, true);
-                                    setDestCoords(coords);
-                                    setIsQuickDestOpen(false); // Fold on selection
-                                  }}
-                                  className={`w-full flex items-center justify-between p-2 rounded-xl border text-left transition-all cursor-pointer ${
-                                    isMatch
-                                      ? 'bg-emerald-100/80 border-emerald-500 text-emerald-950 font-bold shadow-xs'
-                                      : 'bg-white hover:bg-emerald-50/60 border-slate-200 text-slate-800'
-                                  }`}
-                                >
-                                  <div className="flex items-center gap-2 truncate">
-                                    <MapPin className={`w-3.5 h-3.5 shrink-0 ${isMatch ? 'text-emerald-700' : 'text-slate-400'}`} />
-                                    <span className="text-xs truncate">{dest}</span>
-                                  </div>
-                                  {isMatch ? (
-                                    <span className="px-1.5 py-0.5 rounded-full bg-emerald-600 text-white text-[9px] font-black shrink-0 flex items-center gap-0.5">
-                                      <Check className="w-2.5 h-2.5" />
-                                      নির্বাচিত
-                                    </span>
-                                  ) : (
-                                    <span className="text-[10px] text-emerald-700 hover:underline shrink-0">
-                                      নির্বাচন করুন
-                                    </span>
-                                  )}
-                                </button>
-                              );
-                            })}
-                          </div>
-                        </div>
-                      )}
-                    </div>
+                    {/* LEFT COLUMN: দ্রুত গন্তব্য (১৫ ইউনিয়ন ড্রপডাউন, সাব-মেনু ও পজ-মার্কি টেক্সট) */}
+                    <UnionQuickDestinations
+                      isOpen={isQuickDestOpen}
+                      onToggle={() => setIsQuickDestOpen(!isQuickDestOpen)}
+                      selectedDestination={passengerDestination}
+                      onSelectDestination={(dest, coords) => {
+                        setPassengerDestination(dest);
+                        if (coords) {
+                          setDestCoords(coords);
+                        } else {
+                          const resolved = resolveLocationCoordinates(dest, true);
+                          setDestCoords(resolved);
+                        }
+                      }}
+                      customQuickDestinations={appCustomSettings.quickDestinations}
+                    />
 
                     {/* RIGHT COLUMN: যানবাহন ও ভাড়ার তালিকা (50% desktop, 100% mobile) with Dropdown & Scroll */}
                     <div className="w-full bg-slate-50/90 rounded-2xl border border-amber-200/90 shadow-xs overflow-hidden flex flex-col">
