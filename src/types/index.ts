@@ -39,6 +39,7 @@ export interface Driver {
   experienceYears: number;
   features: string[];
   photoUrl?: string;
+  driverPhoto?: string;
   baseFare: number;
 }
 

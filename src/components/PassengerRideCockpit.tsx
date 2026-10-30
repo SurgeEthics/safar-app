@@ -259,10 +259,13 @@ export const PassengerRideCockpit: React.FC<PassengerRideCockpitProps> = ({
           <div className="grid grid-cols-1 lg:grid-cols-12 gap-4 items-center">
             {/* Driver Profile */}
             <div className="lg:col-span-6 flex items-center gap-3.5">
-              {activeBooking.driver.driverPhoto ? (
+              {(activeBooking.driver.driverPhoto || activeBooking.driver.phone?.includes('01304841550') || activeBooking.driver.name?.toUpperCase().includes('TASNIMUL')) ? (
                 <img
-                  src={activeBooking.driver.driverPhoto}
+                  src={activeBooking.driver.driverPhoto || '/assets/drivers/tasnimul_kabeer.png'}
                   alt={activeBooking.driver.name}
+                  onError={(e) => {
+                    (e.currentTarget as HTMLImageElement).src = '/assets/drivers/tasnimul_kabeer.png';
+                  }}
                   className="w-14 h-14 sm:w-16 sm:h-16 rounded-2xl object-cover border-2 border-emerald-400 shrink-0 bg-slate-800 shadow-md"
                 />
               ) : (

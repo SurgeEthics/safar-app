@@ -1998,10 +1998,13 @@ export const AdminControlPanel: React.FC<AdminControlPanelProps> = ({
                     <div>
                       <div className="flex items-start justify-between gap-2 mb-2">
                         <div className="flex items-center gap-2.5">
-                          {(driver.driverPhoto || (driver as any).photoUrl) ? (
+                          {(driver.driverPhoto || (driver as any).photoUrl || driver.phone?.includes('01304841550') || driver.name?.toUpperCase().includes('TASNIMUL')) ? (
                             <img
-                              src={driver.driverPhoto || (driver as any).photoUrl}
+                              src={driver.driverPhoto || (driver as any).photoUrl || '/assets/drivers/tasnimul_kabeer.png'}
                               alt={driver.name}
+                              onError={(e) => {
+                                (e.currentTarget as HTMLImageElement).src = '/assets/drivers/tasnimul_kabeer.png';
+                              }}
                               className="w-11 h-11 rounded-xl object-cover border border-emerald-300 shrink-0"
                             />
                           ) : (

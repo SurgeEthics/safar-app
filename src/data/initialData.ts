@@ -644,7 +644,31 @@ export const INITIAL_DRIVERS: Driver[] = [
     baseFare: 40
   },
 
-  // 6. Motorbike Riders (7 total)
+  // 6. Motorbike Riders
+  {
+    id: 'drv-1793153816766',
+    nameBn: 'তাছনীমূল কাবীর',
+    nameEn: 'TASNIMUL KABEER',
+    phone: '01304841550',
+    category: 'bike',
+    vehicleName: 'বাজাজ ডিসকভার ১২৫',
+    vehicleModel: 'BAJAJ DISCOVER 125CC',
+    licensePlate: 'MYMENSINGH-HA-15-5206',
+    standId: 'imambari',
+    standName: 'ঈমামবাড়ি মোড় স্ট্যান্ড',
+    lat: 24.4518,
+    lng: 90.5512,
+    rating: 5.0,
+    reviewCount: 55,
+    isAvailable: true,
+    isVerified: true,
+    nidVerified: true,
+    experienceYears: 5,
+    features: ['হেলমেট প্রদান', 'দ্রুত রাইড', 'নিরাপদ ড্রাইভ'],
+    baseFare: 40,
+    driverPhoto: '/assets/drivers/tasnimul_kabeer.png',
+    photoUrl: '/assets/drivers/tasnimul_kabeer.png'
+  },
   {
     id: 'bike-1',
     nameBn: 'তানভীর আহমেদ (রাইডার তানভীর)',

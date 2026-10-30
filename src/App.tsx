@@ -159,6 +159,7 @@ export interface Driver {
   engineNumber?: string; // ইঞ্জিন নম্বর / মোটর নম্বর
   taxTokenReceiptPhoto?: string; // সর্বশেষ ট্যাক্স টোকেন রিসিট ছবি (লাইটওয়েট অপ্টিমাইজড)
   driverPhoto?: string; // চালকের সাম্প্রতিক রঙিন ছবি
+  photoUrl?: string; // অল্টারনেট ফটো ইউআরএল
   nidFrontPhoto?: string; // NID সম্মুখভাগ (এ পিঠ) ছবি
   nidBackPhoto?: string; // NID পেছনের ভাগ (ও পিঠ) ছবি
   nidNumber: string;
@@ -767,7 +768,32 @@ export const INITIAL_DRIVERS: Driver[] = [
     approxSpeedKmh: 32
   },
 
-  // 6. Motorcycle (6 Drivers)
+  // 6. Motorcycle Drivers
+  {
+    id: 'drv-1793153816766',
+    name: 'TASNIMUL KABEER',
+    phone: '01304841550',
+    category: 'bike',
+    categoryBengali: 'মোটরসাইকেল',
+    vehicleModel: 'BAJAJ DISCOVER 125CC',
+    plateNumber: 'MYMENSINGH-HA-15-5206',
+    licenseNumber: 'MMS26010NP178',
+    licenseType: 'অপেশাদার (Non-Professional)',
+    nidNumber: '৮২৮৩৯৪১০৭৫',
+    nidVerified: true,
+    licenseVerified: true,
+    phoneVerified: true,
+    standName: 'ঈমামবাড়ি মোড় স্ট্যান্ড',
+    lat: 24.4518,
+    lng: 90.5512,
+    rating: 5.0,
+    totalTrips: 55,
+    avatarBg: 'bg-emerald-600',
+    driverPhoto: '/assets/drivers/tasnimul_kabeer.png',
+    photoUrl: '/assets/drivers/tasnimul_kabeer.png',
+    isOnline: true,
+    approxSpeedKmh: 35
+  },
   {
     id: 'bike-1',
     name: 'মো. তারেক হাসান',
@@ -1147,19 +1173,22 @@ export default function App() {
         if (Array.isArray(parsed) && parsed.length > 0) {
           const hasOutdatedGps = parsed.some((d: any) => d.lat > 24.52 || d.lat < 24.2);
           if (!hasOutdatedGps) {
-            return parsed.map((d: any) => ({
-              ...d,
-              driverPhoto: d.driverPhoto || d.photoUrl || '',
-              nidFrontPhoto: d.nidFrontPhoto || '',
-              nidBackPhoto: d.nidBackPhoto || '',
-              firstIssueDate: d.firstIssueDate || '',
-              regLastFour: d.regLastFour || (d.plateNumber ? d.plateNumber.replace(/[^0-9]/g, '').slice(-4) : '') || '',
-              manufacturingYear: d.manufacturingYear || '',
-              chassisNumber: d.chassisNumber || '',
-              engineNumber: d.engineNumber || '',
-              phoneVerified: d.phoneVerified !== undefined ? d.phoneVerified : (d.licenseVerified && d.nidVerified),
-              verificationStatus: (d.licenseVerified && (d.phoneVerified ?? true) && d.nidVerified) ? 'verified' : 'pending'
-            }));
+            return parsed.map((d: any) => {
+              const isTasnimul = (d.phone && d.phone.includes('01304841550')) || (d.name && d.name.toUpperCase().includes('TASNIMUL'));
+              return {
+                ...d,
+                driverPhoto: d.driverPhoto || d.photoUrl || (isTasnimul ? '/assets/drivers/tasnimul_kabeer.png' : ''),
+                nidFrontPhoto: d.nidFrontPhoto || '',
+                nidBackPhoto: d.nidBackPhoto || '',
+                firstIssueDate: d.firstIssueDate || '',
+                regLastFour: d.regLastFour || (d.plateNumber ? d.plateNumber.replace(/[^0-9]/g, '').slice(-4) : '') || '',
+                manufacturingYear: d.manufacturingYear || '',
+                chassisNumber: d.chassisNumber || '',
+                engineNumber: d.engineNumber || '',
+                phoneVerified: d.phoneVerified !== undefined ? d.phoneVerified : (d.licenseVerified && d.nidVerified),
+                verificationStatus: (d.licenseVerified && (d.phoneVerified ?? true) && d.nidVerified) ? 'verified' : 'pending'
+              };
+            });
           }
         }
       }
@@ -1215,7 +1244,7 @@ export default function App() {
             chassisNumber: data.chassisNumber || '',
             engineNumber: data.engineNumber || '',
             taxTokenReceiptPhoto: data.taxTokenReceiptPhoto || '',
-            driverPhoto: data.driverPhoto || data.photoUrl || '',
+            driverPhoto: data.driverPhoto || data.photoUrl || (((data.phone && data.phone.includes('01304841550')) || (data.name && data.name.toUpperCase().includes('TASNIMUL'))) ? '/assets/drivers/tasnimul_kabeer.png' : ''),
             nidFrontPhoto: data.nidFrontPhoto || '',
             nidBackPhoto: data.nidBackPhoto || '',
             nidNumber: data.nidNumber || '',
@@ -2009,7 +2038,8 @@ export default function App() {
       const driverVehicle = finalDriverData?.vehicleModel || finalDriverData?.vehicleName || 'BAJAJ DISCOVER 125CC';
       const driverPlate = finalDriverData?.plateNumber || finalDriverData?.licensePlate || 'MYMENSINGH-HA-15-5206';
       const driverStand = finalDriverData?.standName || 'ঈমামবাড়ি মোড় স্ট্যান্ড';
-      const driverPhoto = finalDriverData?.driverPhoto || finalDriverData?.photoUrl || '';
+      const isTasnimul = clean.endsWith('01304841550') || clean.endsWith('304841550') || driverName.toUpperCase().includes('TASNIMUL');
+      const driverPhoto = finalDriverData?.driverPhoto || finalDriverData?.photoUrl || (isTasnimul ? '/assets/drivers/tasnimul_kabeer.png' : '');
       const driverRating = typeof finalDriverData?.rating === 'number' ? finalDriverData.rating : 5.0;
       const driverTotalTrips = typeof finalDriverData?.totalTrips === 'number' ? finalDriverData.totalTrips : (finalDriverData?.todayTrips || 0);
 
@@ -2356,7 +2386,13 @@ export default function App() {
       const saved = localStorage.getItem('safar_active_driver_profile_v6');
       if (saved) {
         const parsed = JSON.parse(saved);
-        if (parsed && parsed.isRegistered && parsed.phone) return parsed;
+        if (parsed && parsed.isRegistered && parsed.phone) {
+          const isTasnimul = (parsed.phone && parsed.phone.includes('01304841550')) || (parsed.name && parsed.name.toUpperCase().includes('TASNIMUL'));
+          if (!parsed.driverPhoto && isTasnimul) {
+            parsed.driverPhoto = '/assets/drivers/tasnimul_kabeer.png';
+          }
+          return parsed;
+        }
       }
     } catch {}
     return {
@@ -2465,6 +2501,9 @@ export default function App() {
     const driverRating = typeof driverData.rating === 'number' ? driverData.rating : 5.0;
     const driverTotalTrips = typeof driverData.totalTrips === 'number' ? driverData.totalTrips : (driverData.todayTrips || 0);
 
+    const isTasnimul = clean.endsWith('01304841550') || clean.endsWith('304841550') || driverName.toUpperCase().includes('TASNIMUL');
+    const resolvedPhoto = driverData.driverPhoto || driverData.photoUrl || (isTasnimul ? '/assets/drivers/tasnimul_kabeer.png' : '');
+
     const active: typeof driverProfile = {
       id: driverDocId || `driver-${clean}`,
       name: driverName,
@@ -2477,9 +2516,17 @@ export default function App() {
       rating: driverRating,
       todayTrips: driverTotalTrips,
       todayEarnings: driverTotalTrips * 80,
-      driverPhoto: driverData.driverPhoto || driverData.photoUrl || '',
+      driverPhoto: resolvedPhoto,
       isRegistered: true
     };
+    if (!driverData.driverPhoto && resolvedPhoto) {
+      try {
+        setDoc(doc(db, 'drivers', clean), { driverPhoto: resolvedPhoto, photoUrl: resolvedPhoto }, { merge: true }).catch(() => {});
+        if (driverDocId) {
+          setDoc(doc(db, 'drivers', driverDocId), { driverPhoto: resolvedPhoto, photoUrl: resolvedPhoto }, { merge: true }).catch(() => {});
+        }
+      } catch {}
+    }
     setDriverProfile(active);
     try {
       localStorage.setItem('safar_active_driver_profile_v6', JSON.stringify(active));
@@ -2510,6 +2557,34 @@ export default function App() {
       localStorage.removeItem('safar_active_driver_profile_v6');
     } catch {}
     showAdminToastMessage('চালক একাউন্ট থেকে সফলভাবে লগআউট করা হয়েছে।');
+  };
+
+  const handleDriverCockpitPhotoUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    compressClientImage(file, 320, 320, 0.70, (dataUrl, sizeKb) => {
+      setDriverProfile(prev => {
+        const updated = { ...prev, driverPhoto: dataUrl };
+        try {
+          localStorage.setItem('safar_active_driver_profile_v6', JSON.stringify(updated));
+        } catch {}
+        return updated;
+      });
+      setDrivers(prev => prev.map(d => {
+        if (d.phone === driverProfile.phone || d.id === driverProfile.id) {
+          return { ...d, driverPhoto: dataUrl, photoUrl: dataUrl };
+        }
+        return d;
+      }));
+      if (driverProfile.id) {
+        setDoc(doc(db, 'drivers', driverProfile.id), { driverPhoto: dataUrl, photoUrl: dataUrl }, { merge: true }).catch(() => {});
+      }
+      if (driverProfile.phone) {
+        const cleanP = driverProfile.phone.replace(/[^0-9]/g, '');
+        setDoc(doc(db, 'drivers', cleanP), { driverPhoto: dataUrl, photoUrl: dataUrl }, { merge: true }).catch(() => {});
+      }
+      showAdminToastMessage(`চালকের নতুন ছবি সফলভাবে আপডেট হয়েছে (${sizeKb} KB)`);
+    }, () => {});
   };
 
   // Real-Time Incoming Passenger Requests in Driver Cockpit (Synced Live with Firestore)
@@ -5470,22 +5545,46 @@ export default function App() {
                 <div className="bg-gradient-to-r from-amber-500/15 via-emerald-500/10 to-blue-500/10 border border-amber-300 rounded-2xl p-3 sm:p-4 mb-3 shadow-xs">
                   <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
                     <div className="flex items-center gap-3">
-                      {driverProfile.driverPhoto ? (
-                        <img
-                          src={driverProfile.driverPhoto}
-                          alt={driverProfile.name}
-                          className="w-12 h-12 sm:w-14 sm:h-14 rounded-2xl object-cover shadow-md border-2 border-white shrink-0 bg-slate-800"
+                      <div className="relative group shrink-0">
+                        <input
+                          type="file"
+                          id="driver-cockpit-photo-input"
+                          accept="image/*"
+                          className="hidden"
+                          onChange={handleDriverCockpitPhotoUpload}
                         />
-                      ) : (
-                        <div className="w-12 h-12 sm:w-14 sm:h-14 rounded-2xl bg-amber-500 text-slate-950 flex items-center justify-center font-bold text-xl shadow-md border-2 border-white shrink-0">
-                          {driverProfile.category === 'ambulance' ? '✚' :
-                           driverProfile.category === 'cng' ? '🛺' :
-                           driverProfile.category === 'auto' ? '🔋' :
-                           driverProfile.category === 'car' ? '🚗' :
-                           driverProfile.category === 'microbus' ? '🚐' :
-                           driverProfile.category === 'bike' ? '🏍️' : '🚒'}
-                        </div>
-                      )}
+                        <label
+                          htmlFor="driver-cockpit-photo-input"
+                          className="cursor-pointer block relative group"
+                          title="চালকের ছবি পরিবর্তন বা আপলোড করতে ক্লিক করুন"
+                        >
+                          {driverProfile.driverPhoto ? (
+                            <img
+                              src={driverProfile.driverPhoto}
+                              alt={driverProfile.name}
+                              onError={(e) => {
+                                (e.currentTarget as HTMLImageElement).src = '/assets/drivers/tasnimul_kabeer.png';
+                              }}
+                              className="w-13 h-13 sm:w-16 sm:h-16 rounded-2xl object-cover shadow-md border-2 border-emerald-500 shrink-0 bg-slate-800"
+                            />
+                          ) : (
+                            <div className="w-13 h-13 sm:w-16 sm:h-16 rounded-2xl bg-amber-500 text-slate-950 flex items-center justify-center font-bold text-xl shadow-md border-2 border-white shrink-0">
+                              {driverProfile.category === 'ambulance' ? '✚' :
+                               driverProfile.category === 'cng' ? '🛺' :
+                               driverProfile.category === 'auto' ? '🔋' :
+                               driverProfile.category === 'car' ? '🚗' :
+                               driverProfile.category === 'microbus' ? '🚐' :
+                               driverProfile.category === 'bike' ? '🏍️' : '🚒'}
+                            </div>
+                          )}
+                          <span
+                            className="absolute -bottom-1 -right-1 bg-emerald-600 hover:bg-emerald-700 text-white p-1 rounded-full shadow-md border border-white flex items-center justify-center transition active:scale-90"
+                            title="ছবি পরিবর্তন করুন"
+                          >
+                            <Camera className="w-3.5 h-3.5" />
+                          </span>
+                        </label>
+                      </div>
                       <div>
                         <div className="flex items-center gap-1.5 flex-wrap">
                           <span className="bg-amber-400 text-slate-950 font-black text-[10px] px-2 py-0.5 rounded shadow-xs">
@@ -6047,10 +6146,17 @@ export default function App() {
                               {/* Card Top: Category Logo & Driver Photo & Rating Points */}
                               <div className="flex items-start justify-between gap-1 mb-1">
                                 <div className="flex items-center gap-1.5 min-w-0">
-                                  {driver.driverPhoto ? (
+                                  {(driver.driverPhoto || driver.phone?.includes('01304841550') || driver.name?.toUpperCase().includes('TASNIMUL')) ? (
                                     <img
-                                      src={driver.driverPhoto}
+                                      src={driver.driverPhoto || '/assets/drivers/tasnimul_kabeer.png'}
                                       alt={driver.name}
+                                      onError={(e) => {
+                                        if (driver.phone?.includes('01304841550') || driver.name?.toUpperCase().includes('TASNIMUL')) {
+                                          (e.currentTarget as HTMLImageElement).src = '/assets/drivers/tasnimul_kabeer.png';
+                                        } else {
+                                          e.currentTarget.style.display = 'none';
+                                        }
+                                      }}
                                       className="w-7 h-7 rounded-lg object-cover border border-emerald-400 shrink-0 shadow-2xs"
                                     />
                                   ) : null}
@@ -6274,10 +6380,13 @@ export default function App() {
             <div className="bg-slate-900 text-white p-3 sm:p-4 shrink-0 flex items-center justify-between gap-2.5 sm:gap-3">
               {/* LEFT: Driver Recent Photo (parallel height with 3 middle text lines) */}
               <div className="shrink-0 relative">
-                {selectedDriver.driverPhoto ? (
+                {(selectedDriver.driverPhoto || selectedDriver.phone?.includes('01304841550') || selectedDriver.name?.toUpperCase().includes('TASNIMUL')) ? (
                   <img
-                    src={selectedDriver.driverPhoto}
+                    src={selectedDriver.driverPhoto || '/assets/drivers/tasnimul_kabeer.png'}
                     alt={selectedDriver.name}
+                    onError={(e) => {
+                      (e.currentTarget as HTMLImageElement).src = '/assets/drivers/tasnimul_kabeer.png';
+                    }}
                     className="w-[60px] h-[60px] sm:w-[66px] sm:h-[66px] rounded-2xl object-cover border-2 border-emerald-400 shadow-md bg-slate-800"
                   />
                 ) : (
