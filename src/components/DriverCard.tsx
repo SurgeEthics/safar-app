@@ -61,7 +61,7 @@ export const DriverCard: React.FC<DriverCardProps> = ({
     }
   };
 
-  const badgeInfo = getCategoryBadge(driver.category);
+  const badgeInfo = getCategoryBadge(driver.category as VehicleCategory);
 
   return (
     <div className="bg-white rounded-2xl border border-slate-200 hover:border-emerald-400 p-3.5 sm:p-4 shadow-2xs hover:shadow-md transition-all flex flex-col justify-between group">

@@ -80,46 +80,53 @@ export const LocationAutocomplete: React.FC<LocationAutocompleteProps> = ({
   }, []);
 
   // Map incoming items to unified structure
-  const unifiedPlaces: UnifiedPlaceItem[] = places.map((p, idx) => ({
-    id: p.id || `place-${idx}`,
-    name: p.bengaliName || p.name || 'স্থান',
-    englishName: p.name || '',
-    category: p.category || (p.isStand ? 'স্ট্যান্ড' : 'স্থান'),
-    categoryLabel: p.categoryLabel || p.category || (p.isStand ? 'স্ট্যান্ড' : 'জনপ্রিয় স্থান'),
-    unionName: p.unionNameBengali || (p.area && p.area.includes('ইউনিয়ন') ? p.area.split(',')[0] : 'গফরগাঁও'),
-    area: p.area || '',
-    isStand: Boolean(p.isStand || (p.category && p.category.includes('স্ট্যান্ড'))),
-    searchKeywords: p.searchKeywords || [],
-    lat: p.lat,
-    lng: p.lng
-  }));
+  const unifiedPlaces: UnifiedPlaceItem[] = places
+    .filter(p => {
+      const name = (p.bengaliName || p.name || '').trim();
+      // Permanently remove any fictitious Goyeshpur UP bhaban
+      if (name.includes('গয়েশপুর ইউনিয়ন পরিষদ') || name.includes('গয়েশপুর ইউপি') || name.includes('Gayeshpur Union Parishad')) {
+        return false;
+      }
+      return true;
+    })
+    .map((p, idx) => {
+      let rawUnion = p.unionNameBengali || (p.area && p.area.includes('ইউনিয়ন') ? p.area.split(',')[0].trim() : '');
+      // If place mistakenly claims Goyeshpur is a union, assign to Paithol Union (Pagla)
+      if (rawUnion.includes('গয়েশপুর')) {
+        rawUnion = 'পাইথল ইউনিয়ন (পাগলা)';
+      }
+      if (!rawUnion || rawUnion === 'গফরগাঁও') {
+        rawUnion = 'গফরগাঁও পৌরসভা';
+      }
+
+      let cleanArea = p.area || '';
+      if (cleanArea.includes('গয়েশপুর ইউনিয়ন (পাগলা)')) {
+        cleanArea = cleanArea.replace(/গয়েশপুর ইউনিয়ন \(পাগলা\)/g, 'পাইথল ইউনিয়ন, পাগলা');
+      } else if (cleanArea.includes('গয়েশপুর ইউনিয়ন')) {
+        cleanArea = cleanArea.replace(/গয়েশপুর ইউনিয়ন/g, 'পাইথল ইউনিয়ন, পাগলা');
+      }
+
+      return {
+        id: p.id || `place-${idx}`,
+        name: p.bengaliName || p.name || 'স্থান',
+        englishName: p.name || '',
+        category: p.category || (p.isStand ? 'স্ট্যান্ড' : 'স্থান'),
+        categoryLabel: p.categoryLabel || p.category || (p.isStand ? 'স্ট্যান্ড' : 'জনপ্রিয় স্থান'),
+        unionName: rawUnion,
+        area: cleanArea,
+        isStand: Boolean(p.isStand || (p.category && p.category.includes('স্ট্যান্ড'))),
+        searchKeywords: p.searchKeywords || [],
+        lat: p.lat,
+        lng: p.lng
+      };
+    });
 
   // Canonical list of all 15 unions + Pourashava (including all Pagla thana unions)
+  // Exactly 16 legitimate administrative entities (Gafargaon Pourashava + 15 Unions)
+  // NEVER add arbitrary/redundant chips like bare 'গফরগাঁও' or non-existent 'গয়েশপুর (পাগলা)'
   const availableUnions = useMemo(() => {
-    const list: string[] = [];
-    const added = new Set<string>();
-
-    // 1. Add canonical unions from GAFARGAON_UNIONS (Pourashava + Sadar + Pagla)
-    GAFARGAON_UNIONS.forEach(u => {
-      // Exclude standalone 'gayeshpur' (as user noted in Req 5 it is under Paithol)
-      if (u.id === 'gayeshpur') return;
-      const cleanName = u.nameBengali;
-      if (!added.has(cleanName)) {
-        added.add(cleanName);
-        list.push(cleanName);
-      }
-    });
-
-    // 2. Add any other union present in places
-    unifiedPlaces.forEach(p => {
-      if (p.unionName && !added.has(p.unionName)) {
-        added.add(p.unionName);
-        list.push(p.unionName);
-      }
-    });
-
-    return list;
-  }, [unifiedPlaces]);
+    return GAFARGAON_UNIONS.map(u => u.nameBengali);
+  }, []);
 
   // Filter based on search query and union filter
   const filteredPlaces = unifiedPlaces.filter((p) => {

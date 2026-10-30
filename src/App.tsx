@@ -192,6 +192,7 @@ export interface Stand {
   driverCount?: number;
   isPopular?: boolean;
   description?: string;
+  area?: string;
 }
 
 // Initial Vehicle Categories with distinctive branding & ambulance red medical cross
@@ -2618,7 +2619,9 @@ export default function App() {
       const saved = localStorage.getItem('safar_popular_places_v1');
       if (saved) {
         const parsed = JSON.parse(saved);
-        if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          return parsed.filter(p => !p.bengaliName?.includes('গয়েশপুর ইউনিয়ন পরিষদ') && !p.id?.includes('gayeshpur-up'));
+        }
       }
     } catch {}
     return GAFARGAON_PLACES;
@@ -2631,12 +2634,24 @@ export default function App() {
         const firestorePlaces: GafargaonPlace[] = [];
         snapshot.forEach((docSnap) => {
           const data = docSnap.data();
+          const bName = data.bengaliName || data.name || '';
+          // Permanently purge any erroneous Goyeshpur UP bhaban
+          if (bName.includes('গয়েশপুর ইউনিয়ন পরিষদ') || bName.includes('গয়েশপুর ইউপি') || docSnap.id.includes('gayeshpur-up')) {
+            deleteDoc(doc(db, 'places', docSnap.id)).catch(() => {});
+            return;
+          }
+
+          let area = data.area || 'গফরগাঁও পৌরসভা';
+          if (area.includes('গয়েশপুর ইউনিয়ন')) {
+            area = area.replace(/গয়েশপুর ইউনিয়ন( \(পাগলা\))?/g, 'পাইথল ইউনিয়ন (পাগলা)');
+          }
+
           firestorePlaces.push({
             id: docSnap.id,
             name: data.name || docSnap.id,
-            bengaliName: data.bengaliName || data.name || '',
+            bengaliName: bName,
             category: data.category || 'অন্যান্য',
-            area: data.area || 'গফরগাঁও',
+            area: area,
             lat: typeof data.lat === 'number' ? data.lat : 24.5518,
             lng: typeof data.lng === 'number' ? data.lng : 90.5512
           });
@@ -2738,15 +2753,24 @@ export default function App() {
     // 2. Add or override with admin-managed popular places from Firestore
     popularPlaces.forEach(p => {
       const key = p.bengaliName.trim().toLowerCase();
+      if (key.includes('গয়েশপুর ইউনিয়ন পরিষদ') || key.includes('গয়েশপুর ইউপি') || p.id.includes('gayeshpur-up')) return;
+
       if (!addedNames.has(key)) {
         addedNames.add(key);
+        const unionMatch = GAFARGAON_UNIONS.find(u => 
+          (p.area && p.area.includes(u.nameBengali)) ||
+          (p.area && p.area.includes(u.nameBengali.replace(' ইউনিয়ন', '').replace(' (পাগলা)', '')))
+        );
+        const unionName = unionMatch ? unionMatch.nameBengali : (p.area || 'গফরগাঁও পৌরসভা');
         list.push({
           id: p.id,
           name: p.name,
           bengaliName: p.bengaliName,
           category: p.category,
           categoryLabel: p.category,
-          area: p.area,
+          area: p.area || unionName,
+          unionNameBengali: unionName,
+          unionId: unionMatch ? unionMatch.id : 'pourashava',
           isStand: p.category === 'স্ট্যান্ড',
           lat: p.lat,
           lng: p.lng
@@ -2759,13 +2783,22 @@ export default function App() {
       const key = s.bengaliName.trim().toLowerCase();
       if (!addedNames.has(key)) {
         addedNames.add(key);
+        const unionMatch = GAFARGAON_UNIONS.find(u => 
+          (s.location && s.location.includes(u.nameBengali)) ||
+          (s.area && s.area.includes(u.nameBengali)) ||
+          (s.location && s.location.includes(u.nameBengali.replace(' ইউনিয়ন', '').replace(' (পাগলা)', ''))) ||
+          (s.area && s.area.includes(u.nameBengali.replace(' ইউনিয়ন', '').replace(' (পাগলা)', '')))
+        );
+        const unionName = unionMatch ? unionMatch.nameBengali : (s.area || s.location || 'গফরগাঁও পৌরসভা');
         list.push({
           id: s.id,
           name: s.name,
           bengaliName: s.bengaliName,
           category: 'স্ট্যান্ড',
           categoryLabel: 'স্ট্যান্ড',
-          area: s.name,
+          area: s.location || s.area || unionName,
+          unionNameBengali: unionName,
+          unionId: unionMatch ? unionMatch.id : 'pourashava',
           isStand: true,
           lat: s.lat,
           lng: s.lng
@@ -5270,6 +5303,7 @@ export default function App() {
                         }
                       }}
                       customQuickDestinations={appCustomSettings.quickDestinations}
+                      allPlaces={allAutocompletePlaces}
                     />
 
                     {/* RIGHT COLUMN: যানবাহন ও ভাড়ার তালিকা (50% desktop, 100% mobile) with Dropdown & Scroll */}

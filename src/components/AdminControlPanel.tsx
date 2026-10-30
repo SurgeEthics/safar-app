@@ -149,6 +149,7 @@ export const AdminControlPanel: React.FC<AdminControlPanelProps> = ({
   const [standForm, setStandForm] = useState({
     bengaliName: '',
     name: '',
+    area: GAFARGAON_UNIONS[0].nameBengali,
     lat: 24.5535,
     lng: 90.5518
   });
@@ -205,7 +206,7 @@ export const AdminControlPanel: React.FC<AdminControlPanelProps> = ({
     name: '',
     bengaliName: '',
     category: 'স্ট্যান্ড',
-    area: '',
+    area: GAFARGAON_UNIONS[0].nameBengali,
     lat: 24.4536,
     lng: 90.5479,
     isPopular: true
@@ -292,10 +293,13 @@ export const AdminControlPanel: React.FC<AdminControlPanelProps> = ({
       showToast('স্ট্যান্ডের বাংলা নাম আবশ্যক');
       return;
     }
+    const selectedArea = standForm.area || GAFARGAON_UNIONS[0].nameBengali;
     const targetStand: Stand = {
       id: editingStand ? editingStand.id : `stand-${Date.now()}`,
       bengaliName: standForm.bengaliName.trim(),
       name: standForm.name.trim() || standForm.bengaliName.trim(),
+      area: selectedArea,
+      location: `${selectedArea} • ${standForm.bengaliName.trim()}`,
       lat: Number(standForm.lat) || 24.5535,
       lng: Number(standForm.lng) || 90.5518,
       activeDrivers: editingStand ? editingStand.activeDrivers : 0
@@ -552,7 +556,7 @@ export const AdminControlPanel: React.FC<AdminControlPanelProps> = ({
       'মশাখালী রেলওয়ে স্টেশন স্ট্যান্ড',
       'পাইথল বাজার মোড় স্ট্যান্ড',
       'লংগাইর বাজার ও পাগলা থানা রোড স্ট্যান্ড',
-      'গয়েশপুর বাজার মোড় স্ট্যান্ড',
+      'দত্তেরবাজার চৌরাস্তা স্ট্যান্ড',
       'টাঙ্গাব বাজার মোড় স্ট্যান্ড',
       'নিগুয়ারী বাজার স্ট্যান্ড'
     ];
@@ -1194,7 +1198,13 @@ export const AdminControlPanel: React.FC<AdminControlPanelProps> = ({
                     type="button"
                     onClick={() => {
                       setEditingStand(null);
-                      setStandForm({ bengaliName: '', name: '', lat: 24.5535, lng: 90.5518 });
+                      setStandForm({
+                        bengaliName: '',
+                        name: '',
+                        area: GAFARGAON_UNIONS[0].nameBengali,
+                        lat: 24.5535,
+                        lng: 90.5518
+                      });
                       setIsStandModalOpen(true);
                     }}
                     className="inline-flex items-center gap-1.5 bg-emerald-600 hover:bg-emerald-700 text-white font-extrabold px-4 py-2 rounded-xl text-xs sm:text-sm shadow-xs cursor-pointer transition shrink-0"
@@ -1232,9 +1242,15 @@ export const AdminControlPanel: React.FC<AdminControlPanelProps> = ({
                             type="button"
                             onClick={() => {
                               setEditingStand(stand);
+                              const matchedUnion = GAFARGAON_UNIONS.find(u => 
+                                (stand.location && stand.location.includes(u.nameBengali)) ||
+                                (stand.area && stand.area.includes(u.nameBengali)) ||
+                                (stand.location && stand.location.includes(u.nameBengali.replace(' ইউনিয়ন', '').replace(' (পাগলা)', '')))
+                              );
                               setStandForm({
                                 bengaliName: stand.bengaliName,
                                 name: stand.name,
+                                area: matchedUnion ? matchedUnion.nameBengali : (stand.area || stand.location || GAFARGAON_UNIONS[0].nameBengali),
                                 lat: stand.lat,
                                 lng: stand.lng
                               });
@@ -2420,7 +2436,7 @@ export const AdminControlPanel: React.FC<AdminControlPanelProps> = ({
                     ) : (
                       <>
                         <Download className="w-4 h-4 text-slate-950" />
-                        <span>📥 সম্পূর্ণ প্রজেক্ট জিপ ডাউনলোড করুন (৩.৪৬ MB • অফিশিয়াল ক্লিন সোর্স)</span>
+                        <span>📥 সম্পূর্ণ প্রজেক্ট জিপ ডাউনলোড করুন (২.৭৯ MB • ফাইনাল ফ্রেশ সোর্স)</span>
                       </>
                     )}
                   </button>
@@ -2431,7 +2447,7 @@ export const AdminControlPanel: React.FC<AdminControlPanelProps> = ({
                     className="inline-flex items-center gap-1.5 bg-white hover:bg-slate-50 text-slate-800 font-bold px-3.5 py-2.5 rounded-xl text-xs sm:text-sm shadow-xs border border-slate-300 cursor-pointer transition"
                   >
                     <Download className="w-3.5 h-3.5 text-slate-600" />
-                    <span>সরাসরি ডাউনলোড লিঙ্ক (৩.৪৬ MB)</span>
+                    <span>সরাসরি লিঙ্ক (২.৭৯ MB)</span>
                   </a>
 
                   {onOpenSourceCodeModal && (
@@ -2566,6 +2582,24 @@ export const AdminControlPanel: React.FC<AdminControlPanelProps> = ({
                   placeholder="যেমন: Pagla College Stand"
                   className="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl text-slate-900 focus:outline-none focus:ring-2 focus:ring-emerald-500"
                 />
+              </div>
+
+              <div>
+                <label className="font-bold text-slate-700 block mb-1">
+                  এলাকা / ইউনিয়ন: <span className="text-red-500">*</span>
+                </label>
+                <select
+                  value={standForm.area || GAFARGAON_UNIONS[0].nameBengali}
+                  onChange={(e) => setStandForm({ ...standForm, area: e.target.value })}
+                  className="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl font-bold text-slate-800 focus:outline-none focus:ring-2 focus:ring-emerald-500 cursor-pointer"
+                  required
+                >
+                  {GAFARGAON_UNIONS.map((u) => (
+                    <option key={u.id} value={u.nameBengali}>
+                      {u.nameBengali} ({u.thana === 'পাগলা থানা' ? 'পাগলা' : 'সদর'})
+                    </option>
+                  ))}
+                </select>
               </div>
 
               <div className="grid grid-cols-2 gap-2">
@@ -2958,14 +2992,21 @@ export const AdminControlPanel: React.FC<AdminControlPanelProps> = ({
                 </div>
 
                 <div>
-                  <label className="font-bold text-slate-700 block mb-1">এলাকা / ইউনিয়ন:</label>
-                  <input
-                    type="text"
-                    value={placeForm.area}
+                  <label className="font-bold text-slate-700 block mb-1">
+                    এলাকা / ইউনিয়ন: <span className="text-red-500">*</span>
+                  </label>
+                  <select
+                    value={placeForm.area || GAFARGAON_UNIONS[0].nameBengali}
                     onChange={(e) => setPlaceForm({ ...placeForm, area: e.target.value })}
-                    placeholder="যেমন: গফরগাঁও পৌরসভা ১ নং ওয়ার্ড"
-                    className="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl text-slate-900 focus:outline-none focus:ring-2 focus:ring-emerald-500"
-                  />
+                    className="w-full px-2.5 py-2 bg-slate-50 border border-slate-300 rounded-xl font-bold text-slate-800 focus:outline-none focus:ring-2 focus:ring-emerald-500 cursor-pointer"
+                    required
+                  >
+                    {GAFARGAON_UNIONS.map((u) => (
+                      <option key={u.id} value={u.nameBengali}>
+                        {u.nameBengali} ({u.thana === 'পাগলা থানা' ? 'পাগলা' : 'সদর'})
+                      </option>
+                    ))}
+                  </select>
                 </div>
               </div>
 

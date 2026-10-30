@@ -90,10 +90,10 @@ define(['./workbox-afac4cd2'], (function (workbox) { 'use strict';
     "revision": "b939c8f0cf4bf04e5f824257d38bc4ce"
   }, {
     "url": "pwa-192x192.png",
-    "revision": "968e2740b061116784f61b61304a0e07"
+    "revision": "e93d1b2ef00e870bcc528a64cf254c1f"
   }, {
     "url": "index.html",
-    "revision": "a27d73bcbe9563d2b4d84edb216516c8"
+    "revision": "3eca35e517c65d0f6e46d9b268fd0abc"
   }, {
     "url": "icon.svg",
     "revision": "2656b652288f2dc2146deee1452b7349"
@@ -102,15 +102,15 @@ define(['./workbox-afac4cd2'], (function (workbox) { 'use strict';
     "revision": "c48568c4b5a6df7bf2c0bc060531dba0"
   }, {
     "url": "favicon.ico",
-    "revision": "c91f4713b49633cff485a7bee25c82b4"
+    "revision": "b0a0ce0b545bba4ac7cfe0b6ecf350c1"
   }, {
     "url": "apple-touch-icon.png",
     "revision": "9c56b5edc561a53f807b294c64b4234f"
   }, {
-    "url": "assets/index-Wn5vW0LK.css",
+    "url": "assets/index-BxLae7Fx.js",
     "revision": null
   }, {
-    "url": "assets/index-DYwNGXYh.js",
+    "url": "assets/index-BEY0sx9-.css",
     "revision": null
   }, {
     "url": "assets/drivers/tasnimul_kabeer.png",
@@ -120,10 +120,10 @@ define(['./workbox-afac4cd2'], (function (workbox) { 'use strict';
     "revision": "9c56b5edc561a53f807b294c64b4234f"
   }, {
     "url": "favicon.ico",
-    "revision": "c91f4713b49633cff485a7bee25c82b4"
+    "revision": "b0a0ce0b545bba4ac7cfe0b6ecf350c1"
   }, {
     "url": "pwa-192x192.png",
-    "revision": "968e2740b061116784f61b61304a0e07"
+    "revision": "e93d1b2ef00e870bcc528a64cf254c1f"
   }, {
     "url": "pwa-512x512.png",
     "revision": "b939c8f0cf4bf04e5f824257d38bc4ce"
