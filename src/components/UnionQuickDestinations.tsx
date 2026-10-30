@@ -168,16 +168,17 @@ export const UnionQuickDestinations: React.FC<UnionQuickDestinationsProps> = ({
                                   )}
                                   
                                   {/* Mobile Responsive Marquee on Text Truncation with 1.5s Pause at the end */}
-                                  <div className="min-w-0 flex-1 overflow-hidden">
+                                  <div className="min-w-0 flex-1 overflow-hidden space-y-0.5">
                                     <PauseMarqueeText
                                       text={place.bengaliName}
                                       className={`text-[11px] font-bold ${isMatch ? 'text-white' : 'text-slate-800'}`}
                                       pauseSec={1.5}
-                                      speedSec={4.0}
                                     />
-                                    <span className={`text-[9px] block truncate ${isMatch ? 'text-emerald-100' : 'text-slate-500'}`}>
-                                      {place.area.slice(0, 24)}
-                                    </span>
+                                    <PauseMarqueeText
+                                      text={place.area}
+                                      className={`text-[9px] block ${isMatch ? 'text-emerald-100' : 'text-slate-500'}`}
+                                      pauseSec={1.5}
+                                    />
                                   </div>
                                 </div>
 

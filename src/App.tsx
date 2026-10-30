@@ -62,6 +62,8 @@ import { SourceCodeDownloadModal } from './components/SourceCodeDownloadModal';
 import { EmergencyDirectoryModal } from './components/EmergencyDirectoryModal';
 import { TravelDuaDropdown } from './components/TravelDuaDropdown';
 import { EmergencyHotlineDropdown } from './components/EmergencyHotlineDropdown';
+import { StandDropdown } from './components/StandDropdown';
+import { DriverSearchAutocomplete } from './components/DriverSearchAutocomplete';
 import { EmergencyContact } from './types';
 import { INITIAL_EMERGENCY_CONTACTS } from './data/initialData';
 import confetti from 'canvas-confetti';
@@ -1708,7 +1710,7 @@ export default function App() {
     const file = e.target.files?.[0];
     if (!file) return;
     setTaxTokenUploadLoading(true);
-    compressClientImage(file, 700, 700, 0.55, (dataUrl, sizeKb) => {
+    compressClientImage(file, 550, 550, 0.50, (dataUrl, sizeKb) => {
       setTaxTokenSizeKb(sizeKb);
       setRegisterForm(prev => ({ ...prev, taxTokenReceiptPhoto: dataUrl }));
     }, () => setTaxTokenUploadLoading(false));
@@ -1718,7 +1720,7 @@ export default function App() {
     const file = e.target.files?.[0];
     if (!file) return;
     setDriverPhotoUploadLoading(true);
-    compressClientImage(file, 320, 320, 0.65, (dataUrl, sizeKb) => {
+    compressClientImage(file, 250, 250, 0.60, (dataUrl, sizeKb) => {
       setDriverPhotoSizeKb(sizeKb);
       setRegisterForm(prev => ({ ...prev, driverPhoto: dataUrl }));
     }, () => setDriverPhotoUploadLoading(false));
@@ -1728,7 +1730,7 @@ export default function App() {
     const file = e.target.files?.[0];
     if (!file) return;
     setNidFrontUploadLoading(true);
-    compressClientImage(file, 700, 500, 0.55, (dataUrl, sizeKb) => {
+    compressClientImage(file, 550, 380, 0.50, (dataUrl, sizeKb) => {
       setNidFrontSizeKb(sizeKb);
       setRegisterForm(prev => ({ ...prev, nidFrontPhoto: dataUrl }));
     }, () => setNidFrontUploadLoading(false));
@@ -1738,7 +1740,7 @@ export default function App() {
     const file = e.target.files?.[0];
     if (!file) return;
     setNidBackUploadLoading(true);
-    compressClientImage(file, 700, 500, 0.55, (dataUrl, sizeKb) => {
+    compressClientImage(file, 550, 380, 0.50, (dataUrl, sizeKb) => {
       setNidBackSizeKb(sizeKb);
       setRegisterForm(prev => ({ ...prev, nidBackPhoto: dataUrl }));
     }, () => setNidBackUploadLoading(false));
@@ -2562,7 +2564,8 @@ export default function App() {
   const handleDriverCockpitPhotoUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
-    compressClientImage(file, 320, 320, 0.70, (dataUrl, sizeKb) => {
+    // Ultra-lightweight compression (250x250, 0.60 quality -> only ~12 to 18 KB in Firestore)
+    compressClientImage(file, 250, 250, 0.60, (dataUrl, sizeKb) => {
       setDriverProfile(prev => {
         const updated = { ...prev, driverPhoto: dataUrl };
         try {
@@ -2786,10 +2789,10 @@ export default function App() {
         }
       }
     }
-    if (closestPlace && minDist < 0.05) {
-      return `${closestPlace.bengaliName} (লাইভ GPS)`;
+    if (closestPlace && minDist < 0.06) {
+      return closestPlace.bengaliName;
     }
-    return 'গফরগাঁও লাইভ অবস্থান (GPS)';
+    return 'গফরগাঁও পৌরসভা চত্বর';
   }, [allAutocompletePlaces]);
 
   // Active Pending Request submitted by this passenger
@@ -3171,12 +3174,11 @@ export default function App() {
       return;
     }
 
-    let pickupTitle = passengerPickup.trim() || 'যাত্রীর লাইভ অবস্থান';
+    let pickupTitle = passengerPickup.trim() || 'গফরগাঁও পৌরসভা চত্বর';
     if (isLiveLocationQuery(pickupTitle) && pickupCoords) {
       const nearest = findNearestLandmark(pickupCoords.lat, pickupCoords.lng);
-      if (nearest.distanceMeters < 3500) {
-        pickupTitle = `আমার বর্তমান অবস্থান (${nearest.name} এর নিকট • ${toBengaliNumber(nearest.distanceMeters)} মি.)`;
-      }
+      pickupTitle = nearest.name;
+      setPassengerPickup(nearest.name);
     }
     const destTitle = passengerDestination.trim() || 'উপজেলা স্বাস্থ্য কমপ্লেক্স';
 
@@ -4964,49 +4966,28 @@ export default function App() {
         <section className="bg-white border-b border-slate-200 py-2 shadow-xs">
           <div className="max-w-7xl mx-auto px-3 sm:px-4 lg:px-6 flex flex-col sm:flex-row items-stretch sm:items-center gap-2 sm:gap-3">
             
-            {/* STAND SELECTION (SIDE-BY-SIDE LEFT) */}
-            <div className="w-full sm:w-[45%] md:w-[40%] shrink-0 relative">
-              <div className="relative">
-                <div className="absolute inset-y-0 left-0 pl-2.5 flex items-center pointer-events-none">
-                  <MapPin className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
-                </div>
-                <select
-                  value={selectedStand}
-                  onChange={(e) => setSelectedStand(e.target.value)}
-                  className="w-full pl-8 pr-7 py-1.5 sm:py-2 bg-slate-50 hover:bg-slate-100 border border-slate-300 rounded-lg sm:rounded-xl text-[11px] sm:text-xs font-bold text-slate-800 focus:outline-none focus:ring-2 focus:ring-emerald-500 cursor-pointer shadow-xs appearance-none truncate"
-                  title="স্ট্যান্ড নির্বাচন করুন"
-                >
-                  <option value="all">📍 সকল স্ট্যান্ড ({drivers.length} জন চালক)</option>
-                  {stands.map((stand) => (
-                    <option key={stand.id} value={stand.bengaliName}>
-                      {stand.bengaliName} ({getStandDriverCount(stand.bengaliName)} জন চালক)
-                    </option>
-                  ))}
-                </select>
-                <ChevronDown className="absolute right-2 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-400 pointer-events-none" />
-              </div>
+            {/* STAND SELECTION (SIDE-BY-SIDE LEFT) - Stylish look matching Safar Dua & Hotline UI */}
+            <div className="w-full sm:w-[45%] md:w-[40%] shrink-0">
+              <StandDropdown
+                stands={stands}
+                selectedStand={selectedStand}
+                onSelectStand={(val) => setSelectedStand(val)}
+                totalDriversCount={drivers.length}
+                getStandDriverCount={getStandDriverCount}
+              />
             </div>
 
-            {/* SEARCH BAR (SIDE-BY-SIDE RIGHT) */}
-            <div className="w-full flex-1 relative">
-              <div className="relative flex items-center bg-slate-50 hover:bg-slate-100 focus-within:bg-white border border-slate-300 focus-within:border-emerald-500 rounded-lg sm:rounded-xl px-2.5 py-1.5 sm:py-2 transition-all shadow-xs">
-                <Search className="w-3.5 h-3.5 text-slate-400 shrink-0 mr-1.5" />
-                <input
-                  type="text"
-                  value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
-                  placeholder="চালকের নাম, গাড়ি, লাইসেন্স বা স্ট্যান্ড দিয়ে খুঁজুন..."
-                  className="w-full text-[11px] sm:text-xs bg-transparent border-none focus:outline-none text-slate-800 placeholder-slate-400 font-medium"
-                />
-                {searchQuery && (
-                  <button 
-                    onClick={() => setSearchQuery('')}
-                    className="text-slate-400 hover:text-slate-600 p-0.5 cursor-pointer ml-1"
-                  >
-                    <X className="w-3.5 h-3.5" />
-                  </button>
-                )}
-              </div>
+            {/* SEARCH BAR (SIDE-BY-SIDE RIGHT) - Instant 1-2 Letter Auto-Suggestion for Drivers, Vehicles, License, Stands, Places */}
+            <div className="w-full flex-1">
+              <DriverSearchAutocomplete
+                searchQuery={searchQuery}
+                onSearchChange={setSearchQuery}
+                drivers={drivers}
+                stands={stands}
+                places={allAutocompletePlaces}
+                onSelectStand={(standName) => setSelectedStand(standName)}
+                onSelectCategory={(catId) => setSelectedCategory(catId)}
+              />
             </div>
 
           </div>
@@ -5207,7 +5188,7 @@ export default function App() {
                           setPassengerLocation({ lat, lng, isLiveGps: true });
                           setPassengerPickup(resolvedName);
                           setPickupCoords({ lat, lng });
-                          showAdminToastMessage(`📍 লাইভ GPS অবস্থান: ${resolvedName} (সঠিকতা: ±${Math.round(liveGps.accuracy || 10)} মি.)`);
+                          showAdminToastMessage(`📍 নিকটতম স্থান: ${resolvedName} (সঠিকতা: ±${Math.round(liveGps.accuracy || 10)} মি.)`);
                           return;
                         }
                         if ('geolocation' in navigator) {
@@ -5220,7 +5201,7 @@ export default function App() {
                               setPassengerLocation({ lat, lng, isLiveGps: true });
                               setPassengerPickup(resolvedName);
                               setPickupCoords({ lat, lng });
-                              showAdminToastMessage(`📍 লাইভ GPS অবস্থান: ${resolvedName} (সঠিকতা: ±${Math.round(accuracy)} মি.)`);
+                              showAdminToastMessage(`📍 নিকটতম স্থান: ${resolvedName} (সঠিকতা: ±${Math.round(accuracy)} মি.)`);
                             },
                             () => {
                               showAdminToastMessage('GPS লোকেশন পাওয়া যায়নি, ম্যানুয়ালি বাছুন');
@@ -7071,7 +7052,7 @@ export default function App() {
                       <div className="bg-white p-2.5 rounded-xl border border-teal-200 shadow-2xs space-y-1.5">
                         <div className="flex items-center justify-between">
                           <label className="text-[11px] font-bold text-slate-800 flex items-center gap-1">
-                            <span>NID পেছনের ভাগ (ও পিঠ)</span>
+                            <span>NID পেছনের ভাগ (অপর পিঠ)</span>
                             <span className="text-red-500">*</span>
                           </label>
                           {nidBackSizeKb !== null && (

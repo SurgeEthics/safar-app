@@ -1,6 +1,7 @@
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef, useEffect, useMemo } from 'react';
 import { MapPin, Navigation, X, Search, Check, Truck, Building2 } from 'lucide-react';
 import { PauseMarqueeText } from './PauseMarqueeText';
+import { GAFARGAON_UNIONS } from '../data/gafargaonUnionData';
 
 export interface LocationAutocompleteProps {
   label: string;
@@ -93,13 +94,42 @@ export const LocationAutocomplete: React.FC<LocationAutocompleteProps> = ({
     lng: p.lng
   }));
 
-  // Unique unions extracted for quick filtering
-  const availableUnions = Array.from(new Set(unifiedPlaces.map(p => p.unionName).filter(Boolean)));
+  // Canonical list of all 15 unions + Pourashava (including all Pagla thana unions)
+  const availableUnions = useMemo(() => {
+    const list: string[] = [];
+    const added = new Set<string>();
+
+    // 1. Add canonical unions from GAFARGAON_UNIONS (Pourashava + Sadar + Pagla)
+    GAFARGAON_UNIONS.forEach(u => {
+      // Exclude standalone 'gayeshpur' (as user noted in Req 5 it is under Paithol)
+      if (u.id === 'gayeshpur') return;
+      const cleanName = u.nameBengali;
+      if (!added.has(cleanName)) {
+        added.add(cleanName);
+        list.push(cleanName);
+      }
+    });
+
+    // 2. Add any other union present in places
+    unifiedPlaces.forEach(p => {
+      if (p.unionName && !added.has(p.unionName)) {
+        added.add(p.unionName);
+        list.push(p.unionName);
+      }
+    });
+
+    return list;
+  }, [unifiedPlaces]);
 
   // Filter based on search query and union filter
   const filteredPlaces = unifiedPlaces.filter((p) => {
     const q = inputValue.toLowerCase().trim();
-    const matchesUnion = selectedUnionFilter === 'all' || p.unionName === selectedUnionFilter;
+    const matchesUnion = selectedUnionFilter === 'all' || (() => {
+      const target = selectedUnionFilter.replace(' ইউনিয়ন', '').replace(' (পাগলা)', '').trim().toLowerCase();
+      const placeUni = (p.unionName || '').replace(' ইউনিয়ন', '').replace(' (পাগলা)', '').trim().toLowerCase();
+      const placeArea = (p.area || '').toLowerCase();
+      return placeUni.includes(target) || target.includes(placeUni) || placeArea.includes(target);
+    })();
     if (!matchesUnion) return false;
 
     if (!q || q.includes('আমার বর্তমান অবস্থান') || q.includes('gps') || q.includes('লাইভ')) {
@@ -189,33 +219,50 @@ export const LocationAutocomplete: React.FC<LocationAutocompleteProps> = ({
               </span>
             </div>
 
-            {/* Quick Union Filter Tags */}
-            <div className="flex items-center gap-1 overflow-x-auto scrollbar-thin py-0.5 px-0.5">
+            {/* Quick Union Filter Tags - Horizontal Scroll with all 15 unions + Pourashava */}
+            <div className="flex items-center gap-1.5 overflow-x-auto scrollbar-thin py-1 px-0.5 scroll-smooth touch-pan-x">
               <button
                 type="button"
                 onClick={() => setSelectedUnionFilter('all')}
-                className={`text-[9.5px] font-bold px-2 py-0.5 rounded-md whitespace-nowrap transition cursor-pointer ${
+                className={`text-[10px] font-bold px-2.5 py-1 rounded-lg whitespace-nowrap transition cursor-pointer flex items-center gap-1 shrink-0 ${
                   selectedUnionFilter === 'all'
-                    ? 'bg-emerald-700 text-white shadow-xs'
-                    : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+                    ? 'bg-emerald-700 text-white shadow-xs font-black'
+                    : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
                 }`}
               >
-                সকল ইউনিয়ন
+                <span>সকল ইউনিয়ন</span>
               </button>
-              {availableUnions.slice(0, 8).map(u => (
-                <button
-                  key={u}
-                  type="button"
-                  onClick={() => setSelectedUnionFilter(u || 'all')}
-                  className={`text-[9.5px] font-bold px-2 py-0.5 rounded-md whitespace-nowrap transition cursor-pointer ${
-                    selectedUnionFilter === u
-                      ? 'bg-emerald-700 text-white shadow-xs'
-                      : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
-                  }`}
-                >
-                  {u?.replace(' ইউনিয়ন', '').replace(' (পাগলা)', '')}
-                </button>
-              ))}
+              {availableUnions.map((u) => {
+                const isSelected = selectedUnionFilter === u;
+                const isPagla = u.includes('পাগলা');
+                const displayName = u.replace(' ইউনিয়ন', '').replace(' (পাগলা)', '');
+
+                return (
+                  <button
+                    key={u}
+                    type="button"
+                    onClick={() => setSelectedUnionFilter(u)}
+                    className={`text-[10px] font-bold px-2 py-1 rounded-lg whitespace-nowrap transition cursor-pointer flex items-center gap-1 shrink-0 ${
+                      isSelected
+                        ? isPagla
+                          ? 'bg-amber-600 text-white shadow-xs font-black'
+                          : 'bg-emerald-700 text-white shadow-xs font-black'
+                        : isPagla
+                          ? 'bg-amber-50 text-amber-900 border border-amber-200 hover:bg-amber-100'
+                          : 'bg-slate-100 text-slate-700 hover:bg-slate-200 border border-slate-200'
+                    }`}
+                  >
+                    <span>{displayName}</span>
+                    {isPagla && (
+                      <span className={`text-[8.5px] px-1 rounded font-bold ${
+                        isSelected ? 'bg-amber-800 text-amber-100' : 'bg-amber-200/80 text-amber-900'
+                      }`}>
+                        পাগলা
+                      </span>
+                    )}
+                  </button>
+                );
+              })}
             </div>
           </div>
 
@@ -244,16 +291,17 @@ export const LocationAutocomplete: React.FC<LocationAutocompleteProps> = ({
                         <MapPin className={`w-3.5 h-3.5 shrink-0 ${isPickup ? 'text-emerald-600' : 'text-red-500'}`} />
                       )}
 
-                      <div className="min-w-0 flex-1 overflow-hidden">
+                      <div className="min-w-0 flex-1 overflow-hidden space-y-0.5">
                         <PauseMarqueeText
                           text={place.name}
                           className={`text-xs ${isSelected ? 'font-black text-emerald-950' : 'font-semibold text-slate-900'}`}
                           pauseSec={1.5}
-                          speedSec={4.0}
                         />
-                        <span className="text-[9.5px] text-slate-500 block truncate">
-                          {place.unionName} • {place.area || place.categoryLabel}
-                        </span>
+                        <PauseMarqueeText
+                          text={`${place.unionName ? place.unionName + ' • ' : ''}${place.area || place.categoryLabel || ''}`}
+                          className={`text-[9.5px] block ${isSelected ? 'text-emerald-900 font-semibold' : 'text-slate-500'}`}
+                          pauseSec={1.5}
+                        />
                       </div>
                     </div>
 

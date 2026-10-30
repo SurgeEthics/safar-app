@@ -201,7 +201,7 @@ export const PassengerRideCockpit: React.FC<PassengerRideCockpitProps> = ({
                 <p className="text-xs text-emerald-200/80 mt-1 flex items-center gap-2">
                   <span>দূরত্ব: {request.distanceKm} কিমি</span>
                   <span>•</span>
-                  <span>গফরগাঁও পৌরসভা ও সংলগ্ন এলাকায় সক্রিয় {categoryBengaliName} চালকদের রিং হচ্ছে...</span>
+                  <span>গফরগাঁও পৌরসভা ও সংলগ্ন এলাকায় সক্রিয় {categoryBengaliName} চালক অনুসন্ধান চলছে...</span>
                 </p>
               </div>
             </div>

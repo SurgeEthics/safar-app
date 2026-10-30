@@ -996,7 +996,7 @@ export const VerificationGatewayModal: React.FC<VerificationGatewayModalProps> =
                   </div>
                   <div className="flex items-center gap-1.5 font-medium">
                     <Check className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
-                    <span>আপলোডকৃত NID কার্ডের ছবি (এ পিঠ ও ও পিঠ) ও চালকের ছবির চাক্ষুষ সত্যতা নিশ্চিত।</span>
+                    <span>আপলোডকৃত NID কার্ডের ছবি (এ পিঠ ও অপর পিঠ) ও চালকের ছবির চাক্ষুষ সত্যতা নিশ্চিত।</span>
                   </div>
                   <div className="flex items-center gap-1.5 font-medium">
                     <Check className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
