@@ -93,7 +93,7 @@ define(['./workbox-afac4cd2'], (function (workbox) { 'use strict';
     "revision": "e93d1b2ef00e870bcc528a64cf254c1f"
   }, {
     "url": "index.html",
-    "revision": "3eca35e517c65d0f6e46d9b268fd0abc"
+    "revision": "84c68c21a207224fd13c125e2e7b9f63"
   }, {
     "url": "icon.svg",
     "revision": "2656b652288f2dc2146deee1452b7349"
@@ -107,10 +107,10 @@ define(['./workbox-afac4cd2'], (function (workbox) { 'use strict';
     "url": "apple-touch-icon.png",
     "revision": "9c56b5edc561a53f807b294c64b4234f"
   }, {
-    "url": "assets/index-BxLae7Fx.js",
+    "url": "assets/index-hVqVHB-Q.css",
     "revision": null
   }, {
-    "url": "assets/index-BEY0sx9-.css",
+    "url": "assets/index-H6CD7Y-Q.js",
     "revision": null
   }, {
     "url": "assets/drivers/tasnimul_kabeer.png",

@@ -73,6 +73,7 @@ import { PassengerRideCockpit } from './components/PassengerRideCockpit';
 import { DriverIncomingAlert } from './components/DriverIncomingAlert';
 import { AdminControlPanel, AppCustomSettings } from './components/AdminControlPanel';
 import { AutoMarqueeText } from './components/AutoMarqueeText';
+import { PauseMarqueeText } from './components/PauseMarqueeText';
 import { collection, doc, setDoc, getDoc, getDocs, onSnapshot, updateDoc, deleteDoc, query, where, orderBy, limit, runTransaction } from 'firebase/firestore';
 import { db, handleFirestoreError, OperationType } from './lib/firebase';
 
@@ -5716,22 +5717,30 @@ export default function App() {
                           <div className="w-12 h-12 rounded-2xl bg-emerald-600/30 border border-emerald-400/40 text-emerald-300 flex items-center justify-center font-bold text-xl shrink-0">
                             👤
                           </div>
-                          <div className="min-w-0">
-                            <h3 className="font-extrabold text-base sm:text-lg text-white truncate flex items-center gap-1.5">
-                              <span>{driverActiveTrip.passengerName}</span>
-                              <span className="text-[10px] bg-emerald-500/20 text-emerald-300 px-1.5 py-0.2 rounded border border-emerald-500/30">
+                          <div className="min-w-0 flex-1">
+                            <h3 className="font-extrabold text-base sm:text-lg text-white flex items-center gap-1.5 min-w-0">
+                              <div className="min-w-0 flex-1">
+                                <PauseMarqueeText text={driverActiveTrip.passengerName} className="font-extrabold text-base sm:text-lg text-white" pauseSec={1.5} />
+                              </div>
+                              <span className="text-[10px] bg-emerald-500/20 text-emerald-300 px-1.5 py-0.2 rounded border border-emerald-500/30 shrink-0">
                                 লাইভ যাত্রী
                               </span>
                             </h3>
-                            <div className="text-xs text-slate-300 mt-0.5 space-y-0.5">
-                              <p className="truncate flex items-center gap-1 text-[11px]">
-                                <MapPin className="w-3 h-3 text-emerald-400 shrink-0" />
-                                <span>পিকআপ: <b>{driverActiveTrip.pickupPoint}</b></span>
-                              </p>
-                              <p className="truncate flex items-center gap-1 text-[11px]">
-                                <Navigation className="w-3 h-3 text-blue-400 shrink-0" />
-                                <span>গন্তব্য: <b>{driverActiveTrip.destination}</b></span>
-                              </p>
+                            <div className="text-xs text-slate-300 mt-1 space-y-1 min-w-0">
+                              <div className="flex items-center gap-1.5 text-[11px] min-w-0">
+                                <MapPin className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
+                                <span className="shrink-0 text-emerald-300 font-bold">পিকআপ:</span>
+                                <div className="min-w-0 flex-1">
+                                  <PauseMarqueeText text={driverActiveTrip.pickupPoint} className="text-[11px] font-bold text-white" pauseSec={1.5} />
+                                </div>
+                              </div>
+                              <div className="flex items-center gap-1.5 text-[11px] min-w-0">
+                                <Navigation className="w-3.5 h-3.5 text-blue-400 shrink-0" />
+                                <span className="shrink-0 text-blue-300 font-bold">গন্তব্য:</span>
+                                <div className="min-w-0 flex-1">
+                                  <PauseMarqueeText text={driverActiveTrip.destination} className="text-[11px] font-bold text-white" pauseSec={1.5} />
+                                </div>
+                              </div>
                             </div>
                           </div>
                         </div>
@@ -5813,8 +5822,10 @@ export default function App() {
                               লাইভ GPS ট্র্যাকিং
                             </span>
                           </div>
-                          <div className="h-[340px] rounded-2xl overflow-hidden border border-emerald-400/50 shadow-md">
+                          <div className="-mx-4 sm:mx-0 rounded-none sm:rounded-2xl overflow-hidden border-y sm:border border-emerald-400/50 shadow-md">
                             <GafargaonMap
+                              isTripActive={true}
+                              activeDriverId={driverProfile.id}
                               drivers={drivers.map(d => ({
                                 id: d.id,
                                 nameBn: d.name,
@@ -6114,20 +6125,22 @@ export default function App() {
                     
                     {/* Header: Selected Category & Active Count */}
                     <div className="flex items-center justify-between pb-1.5 sm:pb-2 mb-1.5 sm:mb-2 border-b border-slate-100 shrink-0 flex-wrap gap-1">
-                      <div className="flex items-center gap-1.5 min-w-0">
+                      <div className="flex items-center gap-1.5 min-w-0 flex-1">
                         <CategoryBadgeLogo category={selectedCategory} size="compact" />
-                        <div className="min-w-0">
-                          <h3 className="font-extrabold text-slate-900 text-xs sm:text-sm md:text-base flex items-center gap-1.5 truncate">
-                            <span className="truncate">
-                              {selectedCategory === 'all'
+                        <div className="min-w-0 flex-1">
+                          <PauseMarqueeText
+                            text={
+                              selectedCategory === 'all'
                                 ? 'সকল সক্রিয় চালকদের তালিকা'
-                                : `${categories.find(c => c.id === selectedCategory)?.nameBengali || 'সক্রিয়'} - চালক`}
-                            </span>
-                            <span className="text-[9px] sm:text-xs bg-emerald-100 text-emerald-800 font-black px-1.5 sm:px-2 py-0.2 rounded-full shrink-0">
-                              {filteredDrivers.length} জন
-                            </span>
-                          </h3>
+                                : `${categories.find(c => c.id === selectedCategory)?.nameBengali || 'সক্রিয়'} - চালকদের তালিকা`
+                            }
+                            className="font-extrabold text-slate-900 text-xs sm:text-sm md:text-base"
+                            pauseSec={1.5}
+                          />
                         </div>
+                        <span className="text-[9px] sm:text-xs bg-emerald-100 text-emerald-800 font-black px-1.5 sm:px-2 py-0.2 rounded-full shrink-0">
+                          {toBengaliNumber(filteredDrivers.length)} জন
+                        </span>
                       </div>
 
                       {selectedStand !== 'all' && (
@@ -6186,25 +6199,26 @@ export default function App() {
                               {/* Card Middle: Driver Name, Vehicle, Stand, License */}
                               <div className="min-w-0 mb-1 overflow-hidden space-y-0.5">
                                 <h4
-                                  className="font-bold text-slate-900 text-[11px] sm:text-xs leading-tight group-hover:text-emerald-700 transition-colors truncate block"
+                                  className="font-bold text-slate-900 text-[11px] sm:text-xs leading-tight group-hover:text-emerald-700 transition-colors min-w-0"
                                   title={driver.name}
                                 >
-                                  {driver.name}
+                                  <PauseMarqueeText text={driver.name} className="font-bold text-slate-900 text-[11px] sm:text-xs leading-tight" pauseSec={1.5} />
                                 </h4>
-                                <p
-                                  className="text-[9.5px] sm:text-[10px] text-emerald-700 font-semibold truncate block"
+                                <div
+                                  className="text-[9.5px] sm:text-[10px] text-emerald-700 font-semibold min-w-0"
                                   title={driver.vehicleModel}
                                 >
-                                  {driver.vehicleModel}
-                                </p>
-                                <div className="flex items-center gap-0.5 overflow-hidden">
+                                  <PauseMarqueeText text={driver.vehicleModel} className="text-[9.5px] sm:text-[10px] text-emerald-700 font-semibold" pauseSec={1.5} />
+                                </div>
+                                <div className="flex items-center gap-0.5 min-w-0">
                                   <MapPin className="w-2.5 h-2.5 text-slate-400 shrink-0" />
-                                  <span
-                                    className="text-[8.5px] sm:text-[9.5px] text-slate-500 truncate"
-                                    title={driver.standName}
-                                  >
-                                    {driver.standName.replace(' স্ট্যান্ড', '')}
-                                  </span>
+                                  <div className="min-w-0 flex-1">
+                                    <PauseMarqueeText
+                                      text={driver.standName.replace(' স্ট্যান্ড', '')}
+                                      className="text-[8.5px] sm:text-[9.5px] text-slate-500"
+                                      pauseSec={1.5}
+                                    />
+                                  </div>
                                 </div>
                                 <div className="mt-1 flex items-center justify-between gap-1 overflow-hidden">
                                   <div
@@ -6287,9 +6301,11 @@ export default function App() {
             {/* Exactly matching margins & paddings (max-w-7xl mx-auto)       */}
             {/* ============================================================== */}
             {appCustomSettings.showLiveMapWidget && (
-              <section id="safar-live-map-section" className="max-w-7xl mx-auto w-full px-3 sm:px-4 lg:px-6 py-2.5 scroll-mt-20">
+              <section id="safar-live-map-section" className="max-w-7xl mx-auto w-full px-0 sm:px-4 lg:px-6 py-2.5 scroll-mt-20">
                 <div className="w-full">
                   <GafargaonMap
+                    isTripActive={Boolean(activeBooking || passengerPendingRequest)}
+                    activeDriverId={activeBooking?.driver?.id}
                     drivers={drivers.map(d => ({
                       id: d.id,
                       nameBn: d.name,

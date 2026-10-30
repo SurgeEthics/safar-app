@@ -21,6 +21,7 @@ import {
 } from 'lucide-react';
 import confetti from 'canvas-confetti';
 import { sounds } from '../utils/audio';
+import { PauseMarqueeText } from './PauseMarqueeText';
 
 export interface PassengerRideCockpitProps {
   request: {
@@ -186,16 +187,22 @@ export const PassengerRideCockpit: React.FC<PassengerRideCockpitProps> = ({
                   </span>
                 </div>
 
-                <div className="mt-1.5 flex items-center gap-2 flex-wrap text-sm font-bold text-white">
-                  <span className="text-emerald-300 flex items-center gap-1">
-                    <MapPin className="w-3.5 h-3.5 text-emerald-400" />
-                    {request.pickupPoint}
-                  </span>
-                  <span className="text-slate-400">➔</span>
-                  <span className="text-white flex items-center gap-1">
-                    <Navigation className="w-3.5 h-3.5 text-red-400" />
-                    {request.destination}
-                  </span>
+                <div className="mt-1.5 flex items-center gap-2 flex-wrap text-sm font-bold text-white min-w-0">
+                  <div className="flex items-center gap-1 text-emerald-300 min-w-0 flex-1">
+                    <MapPin className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
+                    <span className="shrink-0 text-emerald-200">পিকআপ:</span>
+                    <div className="min-w-0 flex-1">
+                      <PauseMarqueeText text={request.pickupPoint} className="text-emerald-300 font-bold" pauseSec={1.5} />
+                    </div>
+                  </div>
+                  <span className="text-slate-400 shrink-0">➔</span>
+                  <div className="flex items-center gap-1 text-white min-w-0 flex-1">
+                    <Navigation className="w-3.5 h-3.5 text-red-400 shrink-0" />
+                    <span className="shrink-0 text-red-200">গন্তব্য:</span>
+                    <div className="min-w-0 flex-1">
+                      <PauseMarqueeText text={request.destination} className="text-white font-bold" pauseSec={1.5} />
+                    </div>
+                  </div>
                 </div>
 
                 <p className="text-xs text-emerald-200/80 mt-1 flex items-center gap-2">
@@ -258,7 +265,7 @@ export const PassengerRideCockpit: React.FC<PassengerRideCockpitProps> = ({
           {/* Center Details: Driver profile + Vehicle details + Controls */}
           <div className="grid grid-cols-1 lg:grid-cols-12 gap-4 items-center">
             {/* Driver Profile */}
-            <div className="lg:col-span-6 flex items-center gap-3.5">
+            <div className="lg:col-span-6 flex items-center gap-3.5 min-w-0">
               {(activeBooking.driver.driverPhoto || activeBooking.driver.phone?.includes('01304841550') || activeBooking.driver.name?.toUpperCase().includes('TASNIMUL')) ? (
                 <img
                   src={activeBooking.driver.driverPhoto || '/assets/drivers/tasnimul_kabeer.png'}
@@ -275,34 +282,39 @@ export const PassengerRideCockpit: React.FC<PassengerRideCockpitProps> = ({
               )}
 
               <div className="min-w-0 flex-1">
-                <div className="flex items-center gap-1.5 flex-wrap">
-                  <h3 className="font-extrabold text-base sm:text-lg text-white truncate">
-                    {activeBooking.driver.name}
-                  </h3>
-                  <span className="bg-amber-400/20 text-amber-300 text-xs font-bold px-1.5 py-0.2 rounded flex items-center gap-0.5">
+                <div className="flex items-center gap-1.5 flex-wrap min-w-0">
+                  <div className="min-w-0 flex-1">
+                    <PauseMarqueeText
+                      text={activeBooking.driver.name}
+                      className="font-extrabold text-base sm:text-lg text-white"
+                      pauseSec={1.5}
+                    />
+                  </div>
+                  <span className="bg-amber-400/20 text-amber-300 text-xs font-bold px-1.5 py-0.2 rounded flex items-center gap-0.5 shrink-0">
                     <Star className="w-3 h-3 fill-amber-400 text-amber-400" />
                     {activeBooking.driver.rating.toFixed(1)}
                   </span>
-                  <span className="bg-emerald-500/20 text-emerald-300 text-[10px] font-bold px-1.5 py-0.2 rounded border border-emerald-500/30 flex items-center gap-1">
+                  <span className="bg-emerald-500/20 text-emerald-300 text-[10px] font-bold px-1.5 py-0.2 rounded border border-emerald-500/30 flex items-center gap-1 shrink-0">
                     <ShieldCheck className="w-3 h-3 text-emerald-400" />
                     ভেরিফাইড চালক
                   </span>
                 </div>
 
-                <p className="text-xs sm:text-sm text-slate-300 mt-0.5 truncate">
-                  {activeBooking.driver.vehicleModel} •{' '}
-                  <strong className="text-emerald-300 font-mono">{activeBooking.driver.plateNumber}</strong>
-                </p>
+                <div className="text-xs sm:text-sm text-slate-300 mt-0.5 min-w-0">
+                  <PauseMarqueeText
+                    text={`${activeBooking.driver.vehicleModel} • ${activeBooking.driver.plateNumber}`}
+                    className="text-xs sm:text-sm text-slate-300"
+                    pauseSec={1.5}
+                  />
+                </div>
 
-                <p className="text-[11px] text-slate-400 mt-0.5 flex items-center gap-2">
-                  <span>লাইসেন্স: {activeBooking.driver.licenseNumber}</span>
-                  {activeBooking.driver.standName && (
-                    <>
-                      <span>•</span>
-                      <span>{activeBooking.driver.standName}</span>
-                    </>
-                  )}
-                </p>
+                <div className="text-[11px] text-slate-400 mt-0.5 min-w-0">
+                  <PauseMarqueeText
+                    text={`লাইসেন্স: ${activeBooking.driver.licenseNumber} ${activeBooking.driver.standName ? `• ${activeBooking.driver.standName}` : ''}`}
+                    className="text-[11px] text-slate-400"
+                    pauseSec={1.5}
+                  />
+                </div>
               </div>
             </div>
 
