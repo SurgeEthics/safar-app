@@ -2436,7 +2436,7 @@ export const AdminControlPanel: React.FC<AdminControlPanelProps> = ({
                     ) : (
                       <>
                         <Download className="w-4 h-4 text-slate-950" />
-                        <span>📥 সম্পূর্ণ প্রজেক্ট জিপ ডাউনলোড করুন (১.৭৪ MB • সম্পূর্ণ ফ্রেশ ও ফাইনাল সোর্স)</span>
+                        <span>📥 সম্পূর্ণ প্রজেক্ট জিপ ডাউনলোড করুন (২.৮৮ MB • ফাইনাল ফ্রেশ সোর্স)</span>
                       </>
                     )}
                   </button>
@@ -2447,7 +2447,7 @@ export const AdminControlPanel: React.FC<AdminControlPanelProps> = ({
                     className="inline-flex items-center gap-1.5 bg-white hover:bg-slate-50 text-slate-800 font-bold px-3.5 py-2.5 rounded-xl text-xs sm:text-sm shadow-xs border border-slate-300 cursor-pointer transition"
                   >
                     <Download className="w-3.5 h-3.5 text-slate-600" />
-                    <span>সরাসরি লিঙ্ক (১.৭৪ MB)</span>
+                    <span>সরাসরি লিঙ্ক (২.৮৮ MB)</span>
                   </a>
 
                   {onOpenSourceCodeModal && (
@@ -3048,12 +3048,24 @@ export const AdminControlPanel: React.FC<AdminControlPanelProps> = ({
                   onChange={(e) => {
                     const val = e.target.value.trim();
                     if (!val) return;
-                    const parts = val.split(/[,\s]+/).map(Number).filter(n => !isNaN(n));
-                    if (parts.length >= 2) {
+                    let lat = 0;
+                    let lng = 0;
+                    const urlMatch = val.match(/@(-?\d+\.\d+),(-?\d+\.\d+)/);
+                    if (urlMatch) {
+                      lat = parseFloat(urlMatch[1]);
+                      lng = parseFloat(urlMatch[2]);
+                    } else {
+                      const parts = val.split(/[,\s]+/).map(Number).filter(n => !isNaN(n));
+                      if (parts.length >= 2) {
+                        lat = parts[0];
+                        lng = parts[1];
+                      }
+                    }
+                    if (lat && lng) {
                       setPlaceForm(prev => ({
                         ...prev,
-                        lat: parts[0],
-                        lng: parts[1]
+                        lat,
+                        lng
                       }));
                     }
                   }}

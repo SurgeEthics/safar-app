@@ -2941,7 +2941,8 @@ export default function App() {
             isOnline: true,
             vehicleModel: myActiveDoc.driverVehicleModel || 'যানবাহন',
             licenseNumber: myActiveDoc.driverLicensePlate || 'BRTA-GAF-2026',
-            plateNumber: 'ময়মনসিংহ-থ-১২-৩৪৫৬',
+            plateNumber: (myActiveDoc as any).driverPlateNumber || (myActiveDoc as any).plateNumber || myActiveDoc.driverLicensePlate || 'নিবন্ধিত নম্বর',
+            driverPhoto: (myActiveDoc as any).driverPhoto || '',
             licenseType: 'পেশাদার (Professional)',
             nidNumber: '19886112345678901',
             nidVerified: true,
@@ -2952,21 +2953,18 @@ export default function App() {
           };
 
           const pCoords = pickupCoords || { lat: 24.4536, lng: 90.5479 };
-          const dCoords = (myActiveDoc as any).destCoords || destCoords || resolveLocationCoordinates(myActiveDoc.destination, true, stands);
           setActiveBooking({
             id: myActiveDoc.id,
             requestId: myActiveDoc.id,
             driver: matchedDriver,
             passengerLat: pCoords.lat,
             passengerLng: pCoords.lng,
-            destLat: dCoords?.lat || 24.4515,
-            destLng: dCoords?.lng || 90.5535,
             currentDriverLat: myActiveDoc.driverLat || matchedDriver.lat,
             currentDriverLng: myActiveDoc.driverLng || matchedDriver.lng,
             confirmedAt: Date.now(),
             etaMinutes: Math.max(2, Math.round(myActiveDoc.distanceKm * 2.5)),
             distanceKm: myActiveDoc.distanceKm,
-            status: ((myActiveDoc as any).status === 'in_transit') ? 'in_transit' : 'en_route',
+            status: (myActiveDoc.status === 'in_transit' ? 'in_transit' : 'en_route'),
             otp: myActiveDoc.otp || '5201',
             pickupTitle: myActiveDoc.pickupPoint,
             destTitle: myActiveDoc.destination,
@@ -2982,37 +2980,21 @@ export default function App() {
         // Sync real-time driver coordinates and status from Firestore
         const activeDoc = liveList.find(r => r.id === (activeBooking as any).requestId);
         if (activeDoc) {
-          const docStatus = (activeDoc as any).status;
-          const currentStatus = activeBooking.status;
-          const isDocInTransit = docStatus === 'in_transit';
-          const isInTransitNow = isDocInTransit || currentStatus === 'in_transit';
-
-          const driverLat = activeDoc.driverLat || activeBooking.currentDriverLat;
-          const driverLng = activeDoc.driverLng || activeBooking.currentDriverLng;
-
-          const targetLat = isInTransitNow 
-            ? (activeBooking.destLat || destCoords?.lat || 24.4515) 
-            : activeBooking.passengerLat;
-          const targetLng = isInTransitNow 
-            ? (activeBooking.destLng || destCoords?.lng || 90.5535) 
-            : activeBooking.passengerLng;
-
-          const dist = Number(calculateDistanceKm(driverLat, driverLng, targetLat, targetLng).toFixed(2));
-          const eta = Math.max(1, calculateEtaMinutes(dist, activeBooking.driver.approxSpeedKmh || 30));
-
-          if (
-            (activeDoc.driverLat && activeDoc.driverLat !== activeBooking.currentDriverLat) || 
-            (activeDoc.driverLng && activeDoc.driverLng !== activeBooking.currentDriverLng) ||
-            (docStatus && docStatus !== currentStatus) ||
-            dist !== activeBooking.distanceKm
-          ) {
+          const newStatus = (activeDoc.status as any) || activeBooking.status;
+          const newLat = activeDoc.driverLat || activeBooking.currentDriverLat;
+          const newLng = activeDoc.driverLng || activeBooking.currentDriverLng;
+          if (newLat !== activeBooking.currentDriverLat || newLng !== activeBooking.currentDriverLng || newStatus !== activeBooking.status) {
+            const dist = newStatus === 'in_transit' && activeBooking.destLat && activeBooking.destLng
+              ? Number(calculateDistanceKm(newLat, newLng, activeBooking.destLat, activeBooking.destLng).toFixed(2))
+              : Number(calculateDistanceKm(newLat, newLng, activeBooking.passengerLat, activeBooking.passengerLng).toFixed(2));
+            const eta = Math.max(1, calculateEtaMinutes(dist, activeBooking.driver.approxSpeedKmh || 30));
             setActiveBooking(prev => prev ? {
               ...prev,
-              currentDriverLat: driverLat,
-              currentDriverLng: driverLng,
+              currentDriverLat: newLat,
+              currentDriverLng: newLng,
               distanceKm: dist,
               etaMinutes: eta,
-              status: (docStatus as any) || prev.status
+              status: newStatus
             } : null);
           }
         }
@@ -3362,7 +3344,8 @@ export default function App() {
           isOnline: true,
           vehicleModel: driverProfile.vehicleModel || 'যানবাহন',
           licenseNumber: driverProfile.licenseNumber || driverProfile.plateNumber || 'BRTA-GAF-2026',
-          plateNumber: driverProfile.plateNumber || 'ময়মনসিংহ-থ-১২-৩৪৫৬',
+          plateNumber: driverProfile.plateNumber || (driverProfile.name?.toUpperCase().includes('TASNIMUL') ? 'MYMENSINGH-HA-15-5206' : (drivers[0]?.plateNumber || 'নিবন্ধিত নম্বর')),
+          driverPhoto: driverProfile.driverPhoto || ((driverProfile.phone?.includes('01304841550') || driverProfile.name?.toUpperCase().includes('TASNIMUL')) ? '/assets/drivers/tasnimul_kabeer.png' : ''),
           licenseType: 'পেশাদার (Professional)',
           nidNumber: '19886112345678901',
           nidVerified: true,
@@ -3384,7 +3367,8 @@ export default function App() {
           isOnline: true,
           vehicleModel: 'সিএনজি',
           licenseNumber: 'BRTA-GAF',
-          plateNumber: 'ময়মনসিংহ-থ-১২-৩৪৫৬',
+          plateNumber: drivers[0]?.plateNumber || 'ময়মনসিংহ-থ-১৭-৯০০১',
+          driverPhoto: '',
           licenseType: 'পেশাদার (Professional)',
           nidNumber: '19886112345678901',
           nidVerified: true,
@@ -3416,7 +3400,9 @@ export default function App() {
           driverLat: activeDriver.lat,
           driverLng: activeDriver.lng,
           driverVehicleModel: activeDriver.vehicleModel,
-          driverLicensePlate: activeDriver.licenseNumber || activeDriver.plateNumber,
+          driverLicensePlate: activeDriver.plateNumber || activeDriver.licenseNumber,
+          driverPlateNumber: activeDriver.plateNumber,
+          driverPhoto: activeDriver.driverPhoto || activeDriver.photoUrl || (activeDriver.name?.toUpperCase().includes('TASNIMUL') ? '/assets/drivers/tasnimul_kabeer.png' : ''),
           driverRating: activeDriver.rating,
           otp: otpCode,
           acceptedAt: new Date().toISOString()
@@ -5117,31 +5103,31 @@ export default function App() {
               onCancelBooking={handleCancelBooking}
               onStartRide={() => {
                 if (activeBooking) {
-                  const reqId = (activeBooking as any).requestId || activeBooking.id;
                   setActiveBooking({ ...activeBooking, status: 'in_transit' });
-                  if (reqId) {
-                    updateDoc(doc(db, 'ride_requests', reqId), { 
+                  const bId = (activeBooking as any).requestId || (activeBooking as any).id;
+                  if (bId) {
+                    updateDoc(doc(db, 'ride_requests', bId), {
                       status: 'in_transit',
-                      boardedAt: Date.now()
-                    }).catch((err) => console.warn('Could not update ride_requests status:', err));
+                      boardedAt: new Date().toISOString()
+                    }).catch(() => {});
                   }
-                  setPassengerRequests(prev => prev.map(r => (r.id === reqId || r.driverPhone === activeBooking.driver.phone) ? { ...r, status: 'in_transit' as any } : r));
-                  showAdminToastMessage('গাড়িতে ওঠা সম্পন্ন হয়েছে — যাত্রা শুরু হয়েছে!');
+                  showAdminToastMessage('গাড়িতে ওঠা সম্পন্ন হয়েছে — গন্তব্যের দিকে যাত্রা শুরু!');
                 }
               }}
               onCompleteRide={(fare) => {
                 if (activeBooking) {
+                  const matchedDriver = drivers.find(d => d.id === activeBooking.driver.id) || activeBooking.driver;
                   const finalFare = (fare && fare > 0) ? fare : (activeBooking.fare || 40);
                   const newTripRecord: PassengerTripRecord = {
                     id: `trip-${Date.now()}`,
                     date: 'আজ, ' + new Date().toLocaleTimeString('bn-BD', { hour: '2-digit', minute: '2-digit' }),
                     pickupPoint: activeBooking.pickupTitle || passengerPickup || 'শুরুর স্থান',
                     destination: activeBooking.destTitle || passengerDestination || 'গন্তব্য স্থান',
-                    driverName: activeBooking.driver.name,
-                    driverPhone: activeBooking.driver.phone,
-                    vehicleCategory: activeBooking.driver.category,
-                    vehicleModel: activeBooking.driver.vehicleModel,
-                    plateNumber: activeBooking.driver.plateNumber,
+                    driverName: matchedDriver.name || activeBooking.driver.name,
+                    driverPhone: matchedDriver.phone || activeBooking.driver.phone,
+                    vehicleCategory: matchedDriver.category || activeBooking.driver.category,
+                    vehicleModel: matchedDriver.vehicleModel || activeBooking.driver.vehicleModel,
+                    plateNumber: matchedDriver.plateNumber || activeBooking.driver.plateNumber,
                     fare: finalFare,
                     status: 'সম্পন্ন',
                     ratingGiven: 5.0
@@ -5719,13 +5705,11 @@ export default function App() {
                 {/* DRIVER ACTIVE ACCEPTED TRIP COCKPIT (IF DRIVER HAS ACCEPTED A TRIP) */}
                 {(() => {
                   const driverActiveTrip = passengerRequests.find(r => 
-                    (r.status === 'accepted' || (r as any).status === 'in_transit') && 
+                    r.status === 'accepted' && 
                     (r.driverId === driverProfile.id || r.driverPhone === driverProfile.phone || !r.driverId)
                   );
 
                   if (!driverActiveTrip) return null;
-
-                  const isTripInTransit = (driverActiveTrip as any).status === 'in_transit';
 
                   return (
                     <div className="bg-gradient-to-br from-emerald-950 via-slate-900 to-teal-950 text-white rounded-3xl p-4 sm:p-5 border-2 border-emerald-400 shadow-xl mb-3.5 animate-in fade-in">
@@ -5733,10 +5717,10 @@ export default function App() {
                         <div className="flex items-center gap-2">
                           <span className="w-3 h-3 rounded-full bg-emerald-400 animate-ping"></span>
                           <span className="bg-emerald-500 text-slate-950 font-black text-xs px-2.5 py-0.5 rounded-full uppercase tracking-wider">
-                            {isTripInTransit ? '🟢 গন্তব্যে যাত্রা চলছে (Phase 2)' : '🚗 পিকআপে রওনা (Phase 1)'}
+                            চলমান ট্রিপ (Active Trip)
                           </span>
                           <span className="text-xs text-emerald-300 font-bold hidden sm:inline">
-                            {isTripInTransit ? 'যাত্রী নিয়ে গন্তব্যের দিকে সাবধানে ড্রাইভ করুন' : 'যাত্রীর পিকআপ লোকেশনে পৌঁছান'}
+                            যাত্রীর কাছে রওনা দিন
                           </span>
                         </div>
                         <div className="flex items-center gap-2">
@@ -5829,7 +5813,11 @@ export default function App() {
                             title="গুগল ম্যাপে লাইভ টার্ন-বাই-টার্ন ভয়েস নেভিগেশন খুলুন"
                           >
                             <Navigation className="w-3.5 h-3.5 text-white" />
-                            <span>{isTripInTransit ? 'গুগল ম্যাপে GPS (গন্তব্যের দিকে)' : 'গুগল ম্যাপে GPS (পিকআপের দিকে)'}</span>
+                            <span>
+                              {(driverActiveTrip as any).status === 'in_transit'
+                                ? 'গুগল ম্যাপে GPS (গন্তব্যের দিকে)'
+                                : 'গুগল ম্যাপে GPS (পিকআপ পয়েন্টের দিকে)'}
+                            </span>
                           </a>
 
                           <button
@@ -5909,39 +5897,23 @@ export default function App() {
                               onStartGpsTracking={startGpsTracking}
                               userRole="driver"
                               onSelectDriver={() => {}}
-                              activeBooking={(() => {
-                                const isDest = (driverActiveTrip as any).status === 'in_transit';
-                                const dLat = liveGps.lat || 24.4536;
-                                const dLng = liveGps.lng || 90.5479;
-                                const pLat = (driverActiveTrip as any).pickupCoords?.lat || (activeBooking as any)?.passengerLat || 24.4536;
-                                const pLng = (driverActiveTrip as any).pickupCoords?.lng || (activeBooking as any)?.passengerLng || 90.5479;
-                                const dTargetLat = (driverActiveTrip as any).destCoords?.lat || destCoords?.lat || 24.4515;
-                                const dTargetLng = (driverActiveTrip as any).destCoords?.lng || destCoords?.lng || 90.5535;
-
-                                const targetLat = isDest ? dTargetLat : pLat;
-                                const targetLng = isDest ? dTargetLng : pLng;
-                                const dist = Number(calculateDistanceKm(dLat, dLng, targetLat, targetLng).toFixed(2));
-                                const eta = Math.max(1, calculateEtaMinutes(dist, 30));
-
-                                return {
-                                  driverName: driverProfile.name || 'আমি (চালক)',
-                                  driverPhone: driverProfile.phone,
-                                  driverCategory: driverProfile.category,
-                                  driverPhoto: driverProfile.driverPhoto || '/assets/drivers/tasnimul_kabeer.png',
-                                  currentDriverLat: dLat,
-                                  currentDriverLng: dLng,
-                                  passengerLat: pLat,
-                                  passengerLng: pLng,
-                                  destLat: dTargetLat,
-                                  destLng: dTargetLng,
-                                  pickupTitle: driverActiveTrip.pickupPoint || 'পিকআপ স্থান',
-                                  destTitle: driverActiveTrip.destination || 'গন্তব্য স্থান',
-                                  distanceKm: dist,
-                                  etaMinutes: eta,
-                                  status: isDest ? 'in_transit' : 'en_route',
-                                  fare: driverActiveTrip.estFare
-                                };
-                              })()}
+                              activeBooking={{
+                                driverName: driverProfile.name || 'আমি (চালক)',
+                                driverPhone: driverProfile.phone,
+                                driverCategory: driverProfile.category,
+                                driverPhoto: driverProfile.driverPhoto || ((driverProfile.phone?.includes('01304841550') || driverProfile.name?.toUpperCase().includes('TASNIMUL')) ? '/assets/drivers/tasnimul_kabeer.png' : undefined),
+                                currentDriverLat: liveGps.lat || 24.4536,
+                                currentDriverLng: liveGps.lng || 90.5479,
+                                passengerLat: (driverActiveTrip as any).pickupCoords?.lat || (activeBooking as any)?.passengerLat || 24.4536,
+                                passengerLng: (driverActiveTrip as any).pickupCoords?.lng || (activeBooking as any)?.passengerLng || 90.5479,
+                                destLat: (driverActiveTrip as any).destCoords?.lat || destCoords?.lat || 24.4515,
+                                destLng: (driverActiveTrip as any).destCoords?.lng || destCoords?.lng || 90.5535,
+                                pickupTitle: driverActiveTrip.pickupPoint || 'পিকআপ স্থান',
+                                destTitle: driverActiveTrip.destination || 'গন্তব্য স্থান',
+                                distanceKm: driverActiveTrip.distanceKm || 1.2,
+                                etaMinutes: Math.round((driverActiveTrip.distanceKm || 1.2) * 2.5),
+                                status: (driverActiveTrip as any).status || 'en_route'
+                              }}
                             />
                           </div>
                         </div>
@@ -6421,7 +6393,7 @@ export default function App() {
                       driverName: activeBooking.driver.name,
                       driverPhone: activeBooking.driver.phone,
                       driverCategory: activeBooking.driver.category,
-                      driverPhoto: (activeBooking.driver as any).driverPhoto || (activeBooking.driver.phone?.includes('01304841550') || activeBooking.driver.name?.toUpperCase().includes('TASNIMUL') ? '/assets/drivers/tasnimul_kabeer.png' : undefined),
+                      driverPhoto: activeBooking.driver.driverPhoto || ((activeBooking.driver.phone?.includes('01304841550') || activeBooking.driver.name?.toUpperCase().includes('TASNIMUL')) ? '/assets/drivers/tasnimul_kabeer.png' : undefined),
                       currentDriverLat: activeBooking.currentDriverLat,
                       currentDriverLng: activeBooking.currentDriverLng,
                       passengerLat: activeBooking.passengerLat,
@@ -6432,7 +6404,6 @@ export default function App() {
                       destTitle: activeBooking.destTitle || passengerDestination,
                       distanceKm: activeBooking.distanceKm,
                       etaMinutes: activeBooking.etaMinutes,
-                      fare: activeBooking.fare,
                       status: activeBooking.status
                     } : null}
                     onSelectPickupPlace={(standName: string) => {
@@ -7855,19 +7826,36 @@ export default function App() {
                           </div>
                         </div>
 
-                        {/* Driver info & action */}
-                        <div className="flex items-center justify-between pt-1 border-t border-slate-100 text-[11px]">
-                          <div className="text-slate-600">
-                            <span>{trip.vehicleModel}</span> • <span className="font-semibold">{trip.plateNumber}</span>
-                          </div>
-                          <a
-                            href={`tel:${trip.driverPhone}`}
-                            className="inline-flex items-center gap-1 text-emerald-700 hover:text-emerald-800 font-bold bg-emerald-50 px-2 py-1 rounded-md border border-emerald-200"
-                          >
-                            <PhoneCall className="w-3 h-3" />
-                            <span>পুনরায় কল</span>
-                          </a>
-                        </div>
+                        {/* Driver info & action (100% Dynamic Vehicle & Non-breaking Registration Plate) */}
+                        {(() => {
+                          const matchedDriver = drivers.find(d => 
+                            (trip.driverPhone && d.phone && d.phone.replace(/[^0-9]/g, '') === trip.driverPhone.replace(/[^0-9]/g, '')) ||
+                            (trip.driverName && d.name && d.name.trim().toLowerCase() === trip.driverName.trim().toLowerCase())
+                          );
+                          const cleanPlate = (trip.plateNumber && !trip.plateNumber.includes('১২-৩৪৫৬') && trip.plateNumber.trim() !== '')
+                            ? trip.plateNumber
+                            : (matchedDriver?.plateNumber || trip.plateNumber || 'নিবন্ধিত নম্বর');
+                          const cleanModel = (trip.vehicleModel && trip.vehicleModel.trim() !== '')
+                            ? trip.vehicleModel
+                            : (matchedDriver?.vehicleModel || 'বাহন');
+
+                          return (
+                            <div className="flex items-center justify-between pt-1.5 border-t border-slate-100 text-[11px] gap-2">
+                              <div className="text-slate-600 min-w-0 flex-1 truncate">
+                                <span className="font-medium text-slate-700">{cleanModel}</span>
+                                <span className="text-slate-400 mx-1">•</span>
+                                <span className="font-bold text-slate-900 whitespace-nowrap inline-block">{cleanPlate}</span>
+                              </div>
+                              <a
+                                href={`tel:${trip.driverPhone}`}
+                                className="inline-flex items-center gap-1 text-emerald-700 hover:text-emerald-800 font-bold bg-emerald-50 hover:bg-emerald-100 px-2.5 py-1 rounded-md border border-emerald-200 shrink-0 text-xs shadow-2xs transition"
+                              >
+                                <PhoneCall className="w-3 h-3" />
+                                <span className="whitespace-nowrap">পুনরায় কল</span>
+                              </a>
+                            </div>
+                          );
+                        })()}
                       </div>
                     ))
                   )}

@@ -22,6 +22,7 @@ import {
 import confetti from 'canvas-confetti';
 import { sounds } from '../utils/audio';
 import { PauseMarqueeText } from './PauseMarqueeText';
+import { toBengaliNumber } from '../utils/calculator';
 
 export interface PassengerRideCockpitProps {
   request: {
@@ -253,9 +254,19 @@ export const PassengerRideCockpit: React.FC<PassengerRideCockpitProps> = ({
       {/* ============================================================== */}
       {activeBooking && (
         <div className="mb-4 rounded-2xl bg-slate-900 text-white border-2 border-emerald-500 shadow-2xl p-4 sm:p-5 animate-in slide-in-from-top-3 relative overflow-hidden">
-          {/* Top Status Bar */}
+          {/* Top Status Bar with Dynamic Phase 1 & Phase 2 Badges */}
           <div className="flex flex-col sm:flex-row sm:items-center justify-between pb-3.5 mb-3.5 border-b border-slate-800 gap-2.5">
             <div className="flex items-center gap-2 flex-wrap">
+              {/* Dynamic Status Badge */}
+              <div className="bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 px-3 py-1 rounded-full text-xs font-bold flex items-center gap-1.5 shadow-sm">
+                <span className="w-2 h-2 rounded-full bg-emerald-400 animate-ping shrink-0" />
+                <span>
+                  {activeBooking.status === 'in_transit'
+                    ? 'গন্তব্যের দিকে যাত্রা চলছে'
+                    : 'চালক আপনার পিকআপের দিকে আসছেন'}
+                </span>
+              </div>
+
               {/* Ride Start Security OTP Code */}
               <div
                 onClick={() => {
@@ -271,6 +282,16 @@ export const PassengerRideCockpit: React.FC<PassengerRideCockpitProps> = ({
                 <Lock className="w-3 h-3 text-amber-400" />
                 <span>যাত্রা পিন: <b className="text-amber-200 tracking-wider text-sm">{activeBooking.otp || '৫২০১'}</b></span>
                 {copiedOtp && <span className="text-[10px] text-emerald-400">✓ কপিড</span>}
+              </div>
+
+              {/* Live ETA & Distance Remaining */}
+              <div className="bg-slate-950/90 text-slate-200 border border-slate-700/80 px-3 py-1 rounded-full text-xs font-bold flex items-center gap-1.5 shadow-xs">
+                <Clock className="w-3.5 h-3.5 text-amber-400 shrink-0" />
+                <span>
+                  {activeBooking.status === 'in_transit'
+                    ? `গন্তব্যে বাকি: ~${toBengaliNumber(activeBooking.etaMinutes || 3)} মিনিট (${toBengaliNumber(activeBooking.distanceKm || 1.2)} কিমি)`
+                    : `বাকি: ${toBengaliNumber(activeBooking.etaMinutes || 4)} মিনিট (${toBengaliNumber(activeBooking.distanceKm || 1.5)} কিমি)`}
+                </span>
               </div>
             </div>
 
