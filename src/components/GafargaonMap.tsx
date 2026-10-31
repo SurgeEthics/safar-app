@@ -67,6 +67,7 @@ interface GafargaonMapProps {
     driverName: string;
     driverPhone: string;
     driverCategory: string;
+    driverPhoto?: string;
     currentDriverLat: number;
     currentDriverLng: number;
     passengerLat: number;
@@ -539,82 +540,121 @@ export const GafargaonMap: React.FC<GafargaonMapProps> = ({
       userMarkerRef.current = myMarker;
     }
 
-    // E. Mutual Live Booking Tracking Line & Markers
+    // E. Mutual Live Booking Tracking Line & Markers (2-Phase System)
     if (activeBooking) {
       const catDetails = getCategoryDetails(activeBooking.driverCategory);
+      const isInTransit = activeBooking.status === 'in_transit';
+      const effectiveDestLat = activeBooking.destLat || destCoords?.lat;
+      const effectiveDestLng = activeBooking.destLng || destCoords?.lng;
 
-      // 1. Driver Marker (Moving towards passenger)
+      // Driver photo resolution
+      const driverPhotoUrl = activeBooking.driverPhoto;
+
+      // 1. Driver/Vehicle Live Marker (Moving towards Pickup in Phase 1, or towards Destination in Phase 2)
       const driverLiveIcon = L.divIcon({
         className: 'custom-active-driver-tracking-marker',
         html: `
-          <div style="position: relative; cursor: pointer;">
-            <div style="position: absolute; width: 48px; height: 48px; border-radius: 50%; background: rgba(5, 150, 105, 0.45); animation: ping 1.8s cubic-bezier(0, 0, 0.2, 1) infinite; top: -5px; left: -5px;"></div>
+          <div style="position: relative; display: flex; flex-direction: column; align-items: center; cursor: pointer;">
+            <!-- Driver Name Top Badge -->
             <div style="
-              background: linear-gradient(135deg, #059669 0%, #047857 100%);
-              color: white;
-              width: 38px;
-              height: 38px;
-              border-radius: 50%;
-              display: flex;
-              align-items: center;
-              justify-content: center;
-              box-shadow: 0 4px 14px rgba(4, 120, 87, 0.6);
-              border: 3px solid #facc15;
-              font-size: 16px;
-              font-weight: 900;
-            ">
-              ${catDetails.symbol}
-            </div>
-            <div style="
-              position: absolute;
-              bottom: -18px;
-              left: 50%;
-              transform: translateX(-50%);
               background: #0f172a;
               color: #facc15;
+              font-size: 10px;
+              font-weight: 900;
+              white-space: nowrap;
+              padding: 2px 7px;
+              border-radius: 8px;
+              border: 1.5px solid #facc15;
+              box-shadow: 0 2px 6px rgba(0,0,0,0.5);
+              margin-bottom: 2px;
+              max-width: 120px;
+              overflow: hidden;
+              text-overflow: ellipsis;
+            ">
+              ${activeBooking.driverName || 'চালক'}
+            </div>
+
+            <!-- Avatar / Photo Circle with Ping Animation -->
+            <div style="position: relative; width: 44px; height: 44px;">
+              <div style="position: absolute; inset: -4px; border-radius: 50%; background: ${isInTransit ? 'rgba(37, 99, 235, 0.45)' : 'rgba(5, 150, 105, 0.45)'}; animation: ping 1.8s cubic-bezier(0, 0, 0.2, 1) infinite;"></div>
+              <div style="
+                position: relative;
+                width: 44px;
+                height: 44px;
+                border-radius: 50%;
+                background: ${isInTransit ? 'linear-gradient(135deg, #2563eb, #1d4ed8)' : 'linear-gradient(135deg, #059669, #047857)'};
+                border: 3px solid ${isInTransit ? '#60a5fa' : '#facc15'};
+                box-shadow: 0 4px 14px rgba(0,0,0,0.5);
+                overflow: hidden;
+                display: flex;
+                align-items: center;
+                justify-content: center;
+              ">
+                ${driverPhotoUrl 
+                  ? `<img src="${driverPhotoUrl}" alt="${activeBooking.driverName}" style="width: 100%; height: 100%; object-fit: cover;" onerror="this.onerror=null; this.parentElement.innerHTML='<span style=\\'color:white;font-size:18px;font-weight:900;\\'>${catDetails.symbol}</span>';" />` 
+                  : `<span style="color: white; font-size: 18px; font-weight: 900;">${catDetails.symbol}</span>`
+                }
+              </div>
+            </div>
+
+            <!-- Dynamic Phase Status Badge Below -->
+            <div style="
+              margin-top: 2px;
+              background: #0f172a;
+              color: ${isInTransit ? '#60a5fa' : '#facc15'};
               font-size: 9.5px;
               font-weight: 800;
               white-space: nowrap;
-              padding: 1px 6px;
+              padding: 1.5px 7px;
               border-radius: 10px;
-              border: 1px solid #facc15;
+              border: 1px solid ${isInTransit ? '#60a5fa' : '#facc15'};
               box-shadow: 0 2px 5px rgba(0,0,0,0.4);
             ">
-              চালক আসছে
+              ${isInTransit ? '🟢 গন্তব্যে চলছে' : '🚗 চালক আসছে'}
             </div>
           </div>
         `,
-        iconSize: [38, 38],
-        iconAnchor: [19, 19],
-        popupAnchor: [0, -22]
+        iconSize: [44, 76],
+        iconAnchor: [22, 50],
+        popupAnchor: [0, -50]
       });
 
       const bDriverMarker = L.marker([activeBooking.currentDriverLat, activeBooking.currentDriverLng], { icon: driverLiveIcon });
+      
+      const navTargetLat = isInTransit ? (effectiveDestLat || activeBooking.passengerLat) : activeBooking.passengerLat;
+      const navTargetLng = isInTransit ? (effectiveDestLng || activeBooking.passengerLng) : activeBooking.passengerLng;
+      const navTargetLabel = isInTransit ? 'গন্তব্যের দিকে টার্ন-বাই-টার্ন GPS' : 'পিকআপের দিকে টার্ন-বাই-টার্ন GPS';
+
       bDriverMarker.bindPopup(`
-        <div style="font-family: 'Hind Siliguri', sans-serif; padding: 4px; min-width: 205px;">
+        <div style="font-family: 'Hind Siliguri', sans-serif; padding: 4px; min-width: 215px;">
           <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 4px;">
-            <span style="font-size: 10px; background: #ecfdf5; color: #047857; font-weight: 800; padding: 2px 6px; border-radius: 4px; border: 1px solid #a7f3d0;">
-              🟢 চালক আপনার দিকে রওনা দিয়েছেন
+            <span style="font-size: 10px; background: ${isInTransit ? '#eff6ff' : '#ecfdf5'}; color: ${isInTransit ? '#1d4ed8' : '#047857'}; font-weight: 800; padding: 2px 6px; border-radius: 4px; border: 1px solid ${isInTransit ? '#bfdbfe' : '#a7f3d0'};">
+              ${isInTransit ? '🟢 গন্তব্যে যাত্রা চলছে (Phase 2)' : '🚗 চালক পিকআপে আসছেন (Phase 1)'}
             </span>
             <span style="font-size: 11px; color: #0284c7; font-weight: 800;">${activeBooking.distanceKm} কিমি</span>
           </div>
-          <h4 style="font-weight: 900; color: #0f172a; margin: 2px 0; font-size: 14px;">${activeBooking.driverName}</h4>
-          <div style="font-size: 11px; color: #475569; margin-bottom: 5px;">বাহন: <b>${catDetails.name}</b> • সময়: <b>~${activeBooking.etaMinutes} মিনিট</b></div>
+          <div style="display: flex; align-items: center; gap: 8px; margin: 4px 0;">
+            ${driverPhotoUrl ? `<img src="${driverPhotoUrl}" alt="${activeBooking.driverName}" style="width: 38px; height: 38px; border-radius: 8px; object-fit: cover; border: 1px solid #cbd5e1;" />` : ''}
+            <div>
+              <h4 style="font-weight: 900; color: #0f172a; margin: 0; font-size: 14px;">${activeBooking.driverName}</h4>
+              <div style="font-size: 11px; color: #475569;">বাহন: <b>${catDetails.name}</b> • সময়: <b>~${activeBooking.etaMinutes} মিনিট</b></div>
+            </div>
+          </div>
           <a href="tel:${activeBooking.driverPhone.replace(/[^0-9]/g, '')}" 
-             style="display: block; text-align: center; background: #059669; color: white; padding: 6px 10px; border-radius: 8px; font-weight: 800; font-size: 11.5px; text-decoration: none; margin-bottom: 4px;">
+             style="display: block; text-align: center; background: #059669; color: white; padding: 6px 10px; border-radius: 8px; font-weight: 800; font-size: 11.5px; text-decoration: none; margin: 6px 0 4px 0;">
             📞 চালককে সরাসরি কল (${activeBooking.driverPhone})
           </a>
-          <a href="${userGps.isTracking && userGps.lat ? `https://www.google.com/maps/dir/?api=1&origin=${userGps.lat},${userGps.lng}&destination=${activeBooking.passengerLat},${activeBooking.passengerLng}&travelmode=driving` : `https://www.google.com/maps/dir/?api=1&destination=${activeBooking.passengerLat},${activeBooking.passengerLng}&travelmode=driving`}"
+          <a href="${userGps.isTracking && userGps.lat ? `https://www.google.com/maps/dir/?api=1&origin=${userGps.lat},${userGps.lng}&destination=${navTargetLat},${navTargetLng}&travelmode=driving` : `https://www.google.com/maps/dir/?api=1&destination=${navTargetLat},${navTargetLng}&travelmode=driving`}"
              target="_blank" rel="noopener noreferrer"
              style="display: block; text-align: center; background: #2563eb; color: white; padding: 6px 10px; border-radius: 8px; font-weight: 800; font-size: 11px; text-decoration: none;">
-            🗺️ গুগল ম্যাপে টার্ন-বাই-টার্ন লাইভ রুট (GPS)
+            🗺️ ${navTargetLabel}
           </a>
         </div>
       `);
-      bDriverMarker.bindTooltip(`🚗 চালক: ${activeBooking.driverName} (~${activeBooking.etaMinutes} মি.)`, { direction: 'top', offset: [0, -22], opacity: 0.95 });
+      bDriverMarker.bindTooltip(`${isInTransit ? '🟢 গন্তব্যে চলছে' : '🚗 চালক'}: ${activeBooking.driverName} (~${activeBooking.etaMinutes} মি.)`, { direction: 'top', offset: [0, -50], opacity: 0.95 });
       markersGroup.addLayer(bDriverMarker);
 
-      // 2. Passenger Pickup Point Marker
+      // 2. Passenger Pickup Point Marker (A)
       const passPickupIcon = L.divIcon({
         className: 'custom-active-passenger-pickup-marker',
         html: `
@@ -636,10 +676,10 @@ export const GafargaonMap: React.FC<GafargaonMapProps> = ({
       bPassMarker.bindTooltip(`📍 পিকআপ (A): ${activeBooking.pickupTitle || pickupTitle || 'যাত্রী পিকআপ'}`, { direction: 'top', offset: [0, -18] });
       markersGroup.addLayer(bPassMarker);
 
-      // 3. Destination Marker (B) & Connecting Line
-      const effectiveDestLat = activeBooking.destLat || destCoords?.lat;
-      const effectiveDestLng = activeBooking.destLng || destCoords?.lng;
-      if (effectiveDestLat && effectiveDestLng) {
+      // 3. Destination Marker (B) & Connecting Route Line
+      // In Phase 1: Only Driver and Pickup (A) are shown. Destination (B) is hidden.
+      // In Phase 2: Pickup (A) and Destination (B) are shown. Polyline is Driver/Vehicle -> Destination (B).
+      if (isInTransit && effectiveDestLat && effectiveDestLng) {
         const destIcon = L.divIcon({
           className: 'custom-active-destination-marker',
           html: `
@@ -661,51 +701,55 @@ export const GafargaonMap: React.FC<GafargaonMapProps> = ({
         bDestMarker.bindTooltip(`🏁 গন্তব্য (B): ${activeBooking.destTitle || destTitle || 'গন্তব্য স্থান'}`, { direction: 'top', offset: [0, -18] });
         markersGroup.addLayer(bDestMarker);
 
-        // Connecting route from Pickup to Destination (emerald line)
+        // Phase 2 Route: From Vehicle/Driver directly towards Destination (B) with bright royal blue line
         const destRoutePoints: [number, number][] = [
-          [activeBooking.passengerLat, activeBooking.passengerLng],
+          [activeBooking.currentDriverLat, activeBooking.currentDriverLng],
           [effectiveDestLat, effectiveDestLng]
         ];
-        L.polyline(destRoutePoints, {
-          color: '#059669',
-          weight: 4,
-          opacity: 0.85,
-          dashArray: '6, 6',
-          lineCap: 'round'
+        const polyline = L.polyline(destRoutePoints, {
+          color: '#2563eb',
+          weight: 6,
+          opacity: 0.95,
+          lineCap: 'round',
+          lineJoin: 'round'
         }).addTo(map);
-      }
 
-      // 4. Dynamic Curved/Direct Polyline Connecting Driver and Passenger
-      const routePoints: [number, number][] = [
-        [activeBooking.currentDriverLat, activeBooking.currentDriverLng],
-        [
-          (activeBooking.currentDriverLat + activeBooking.passengerLat) / 2 + 0.0004,
-          (activeBooking.currentDriverLng + activeBooking.passengerLng) / 2 - 0.0003
-        ],
-        [activeBooking.passengerLat, activeBooking.passengerLng]
-      ];
-
-      const polyline = L.polyline(routePoints, {
-        color: '#2563eb',
-        weight: 5,
-        opacity: 0.9,
-        dashArray: '8, 8',
-        lineCap: 'round'
-      }).addTo(map);
-
-      routePolylineRef.current = polyline;
-
-      // Fit bounds ONLY ONCE per booking session and NEVER override user manual zoom
-      const bookingSessionKey = `${activeBooking.driverPhone || 'driver'}_${activeBooking.status || 'active'}_${(activeBooking.pickupTitle || '').slice(0, 8)}`;
-      if (!userInteractedRef.current && lastFittedBookingIdRef.current !== bookingSessionKey) {
-        lastFittedBookingIdRef.current = bookingSessionKey;
-        const pointsToFit: [number, number][] = [
+        routePolylineRef.current = polyline;
+      } else {
+        // Phase 1 Route: Connecting Driver to Pickup (A) with dynamic blue route line
+        const routePoints: [number, number][] = [
           [activeBooking.currentDriverLat, activeBooking.currentDriverLng],
+          [
+            (activeBooking.currentDriverLat + activeBooking.passengerLat) / 2 + 0.0004,
+            (activeBooking.currentDriverLng + activeBooking.passengerLng) / 2 - 0.0003
+          ],
           [activeBooking.passengerLat, activeBooking.passengerLng]
         ];
-        if (effectiveDestLat && effectiveDestLng) {
-          pointsToFit.push([effectiveDestLat, effectiveDestLng]);
-        }
+
+        const polyline = L.polyline(routePoints, {
+          color: '#2563eb',
+          weight: 5,
+          opacity: 0.9,
+          dashArray: '8, 8',
+          lineCap: 'round'
+        }).addTo(map);
+
+        routePolylineRef.current = polyline;
+      }
+
+      // Fit bounds ONLY ONCE per booking session/phase and NEVER override user manual zoom
+      const bookingSessionKey = `${activeBooking.driverPhone || 'driver'}_${activeBooking.status || 'en_route'}_${(activeBooking.pickupTitle || '').slice(0, 8)}`;
+      if (!userInteractedRef.current && lastFittedBookingIdRef.current !== bookingSessionKey) {
+        lastFittedBookingIdRef.current = bookingSessionKey;
+        const pointsToFit: [number, number][] = isInTransit && effectiveDestLat && effectiveDestLng
+          ? [
+              [activeBooking.currentDriverLat, activeBooking.currentDriverLng],
+              [effectiveDestLat, effectiveDestLng]
+            ]
+          : [
+              [activeBooking.currentDriverLat, activeBooking.currentDriverLng],
+              [activeBooking.passengerLat, activeBooking.passengerLng]
+            ];
         const bounds = L.latLngBounds(pointsToFit);
         map.fitBounds(bounds, { padding: [55, 55], maxZoom: 15 });
       }
@@ -1005,12 +1049,12 @@ export const GafargaonMap: React.FC<GafargaonMapProps> = ({
             <span className="hidden sm:inline text-[11px]">রিসেট</span>
           </button>
 
-          {/* Fullscreen / Landscape Expand Button */}
+          {/* Fullscreen Expand Button - Hidden on PC & Tablets as requested */}
           <button
             type="button"
             onClick={() => setIsFullscreen(!isFullscreen)}
-            className="px-2.5 py-1 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-xs font-bold flex items-center gap-1 transition-colors cursor-pointer shadow-xs"
-            title={isFullscreen ? 'ফুলস্ক্রিন বন্ধ করুন' : 'মোবাইলে সর্বোচ্চ চওড়া ফুলস্ক্রিন ও ল্যান্ডস্কেপ ভিউ'}
+            className="sm:hidden px-2.5 py-1 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-xs font-bold flex items-center gap-1 transition-colors cursor-pointer shadow-xs"
+            title={isFullscreen ? 'ফুলস্ক্রিন বন্ধ করুন' : 'মোবাইলে সর্বোচ্চ চওড়া ফুলস্ক্রিন ভিউ'}
           >
             {isFullscreen ? <Minimize2 className="w-3.5 h-3.5" /> : <Maximize2 className="w-3.5 h-3.5" />}
             <span className="text-[11px] font-bold">{isFullscreen ? 'প্রস্থান' : 'ফুলস্ক্রিন'}</span>
@@ -1212,8 +1256,12 @@ export const GafargaonMap: React.FC<GafargaonMapProps> = ({
             >
               <div className="flex items-center justify-between gap-1 mb-1">
                 <div className="flex items-center gap-1.5 text-emerald-400 font-extrabold text-[11px] truncate">
-                  <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse shrink-0"></span>
-                  <span className="truncate">{activeBooking ? 'সক্রিয় ট্রিপ রুট' : 'রুট প্ল্যান ও নির্ভুল দূরত্ব'}</span>
+                  <span className={`w-2 h-2 rounded-full shrink-0 animate-pulse ${activeBooking?.status === 'in_transit' ? 'bg-sky-400' : 'bg-emerald-400'}`}></span>
+                  <span className="truncate">
+                    {activeBooking 
+                      ? (activeBooking.status === 'in_transit' ? '🟢 গন্তব্যের দিকে যাত্রা (Phase 2)' : '🚗 পিকআপের দিকে রওনা (Phase 1)') 
+                      : 'রুট প্ল্যান ও নির্ভুল দূরত্ব'}
+                  </span>
                 </div>
                 <div className="flex items-center gap-0.5 shrink-0">
                   <button
@@ -1257,7 +1305,7 @@ export const GafargaonMap: React.FC<GafargaonMapProps> = ({
               {/* Marquee Animated Full Route text */}
               <div className="border-t border-white/20 pt-1.5 overflow-hidden w-full">
                 <AutoMarqueeText
-                  text={`A: ${effectivePickup} ➔ B: ${effectiveDest}`}
+                  text={activeBooking && activeBooking.status !== 'in_transit' ? `চালক ➔ পিকআপ: ${effectivePickup}` : `A: ${effectivePickup} ➔ B: ${effectiveDest}`}
                   className="text-[10.5px] font-bold text-slate-100"
                   speed={32}
                   pauseAtEndMs={1500}
