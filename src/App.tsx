@@ -1085,9 +1085,9 @@ export default function App() {
       const saved = localStorage.getItem('safar_stands_v6');
       if (saved) {
         const parsed = JSON.parse(saved);
-        if (Array.isArray(parsed) && parsed.length >= 40) {
-          const hasOutdatedGps = parsed.some((s: any) => s.lat > 24.52 || s.lat < 24.2);
-          if (!hasOutdatedGps) return parsed;
+        if (Array.isArray(parsed) && parsed.length >= 10) {
+          const hasInvalidCoords = parsed.some((s: any) => typeof s.lat !== 'number' || typeof s.lng !== 'number' || s.lat > 25.0 || s.lat < 24.0);
+          if (!hasInvalidCoords) return parsed;
         }
       }
     } catch {}
@@ -1259,8 +1259,8 @@ export default function App() {
             regAppId: data.regAppId || `SAFAR-REG-${docSnap.id.slice(-4)}`,
             registeredAt: data.registeredAt || 'অনলাইন',
             standName: data.standName || 'গফরগাঁও রেলওয়ে স্টেশন স্ট্যান্ড',
-            lat: typeof data.lat === 'number' ? data.lat : 24.5518,
-            lng: typeof data.lng === 'number' ? data.lng : 90.5512,
+            lat: typeof data.lat === 'number' ? data.lat : 24.4536,
+            lng: typeof data.lng === 'number' ? data.lng : 90.5479,
             rating: typeof data.rating === 'number' ? data.rating : 5.0,
             totalTrips: typeof data.totalTrips === 'number' ? data.totalTrips : 0,
             avatarBg: data.avatarBg || 'bg-emerald-700',
@@ -1455,8 +1455,8 @@ export default function App() {
   const [standForm, setStandForm] = useState({
     bengaliName: '',
     name: '',
-    lat: 24.5535,
-    lng: 90.5518
+    lat: 24.4536,
+    lng: 90.5479
   });
 
   // Category Form Modal (Add / Edit)
@@ -1496,8 +1496,8 @@ export default function App() {
 
   // User Geolocation (Passenger GPS)
   const [passengerLocation, setPassengerLocation] = useState<{ lat: number; lng: number; isLiveGps: boolean }>({
-    lat: 24.5562, // Gafargaon Pouroshova default center
-    lng: 90.5539,
+    lat: 24.4527, // Gafargaon Pouroshova default center
+    lng: 90.5545,
     isLiveGps: false
   });
 
@@ -2653,8 +2653,8 @@ export default function App() {
             bengaliName: bName,
             category: data.category || 'অন্যান্য',
             area: area,
-            lat: typeof data.lat === 'number' ? data.lat : 24.5518,
-            lng: typeof data.lng === 'number' ? data.lng : 90.5512
+            lat: typeof data.lat === 'number' ? data.lat : 24.4536,
+            lng: typeof data.lng === 'number' ? data.lng : 90.5479
           });
         });
         setPopularPlaces(firestorePlaces);
@@ -2934,8 +2934,8 @@ export default function App() {
             phone: myActiveDoc.driverPhone || '০১৭১১-২২৩৩৪৪',
             category: myActiveDoc.category,
             categoryBengali: categories.find(c => c.id === myActiveDoc.category)?.nameBengali || 'যানবাহন',
-            lat: myActiveDoc.driverLat || 24.5520,
-            lng: myActiveDoc.driverLng || 90.5515,
+            lat: myActiveDoc.driverLat || 24.4536,
+            lng: myActiveDoc.driverLng || 90.5479,
             rating: myActiveDoc.driverRating || 5.0,
             totalTrips: 25,
             isOnline: true,
@@ -2951,7 +2951,7 @@ export default function App() {
             approxSpeedKmh: 25
           };
 
-          const pCoords = pickupCoords || { lat: 24.5518, lng: 90.5512 };
+          const pCoords = pickupCoords || { lat: 24.4536, lng: 90.5479 };
           setActiveBooking({
             id: myActiveDoc.id,
             requestId: myActiveDoc.id,
@@ -3234,8 +3234,8 @@ export default function App() {
       requestedAt: 'এইমাত্র',
       distanceKm: validDistance,
       estFare: validFare,
-      pickupCoords: pickupCoords || { lat: 24.5518, lng: 90.5512 },
-      destCoords: destCoords || { lat: 24.5535, lng: 90.5518 },
+      pickupCoords: pickupCoords || { lat: 24.4536, lng: 90.5479 },
+      destCoords: destCoords || { lat: 24.4515, lng: 90.5535 },
       status: 'pending'
     };
 
@@ -3251,8 +3251,8 @@ export default function App() {
       category: newRequest.category,
       distanceKm: newRequest.distanceKm,
       estFare: newRequest.estFare,
-      pickupCoords: pickupCoords || { lat: 24.5518, lng: 90.5512 },
-      destCoords: destCoords || { lat: 24.5535, lng: 90.5518 },
+      pickupCoords: pickupCoords || { lat: 24.4536, lng: 90.5479 },
+      destCoords: destCoords || { lat: 24.4515, lng: 90.5535 },
       status: 'pending',
       requestedAt: new Date().toISOString()
     }).catch(err => {
@@ -3320,8 +3320,8 @@ export default function App() {
   // Driver accepts request (Real-Time Firestore Update)
   const handleDriverAcceptRequest = async (requestId: string) => {
     const driverStand = stands.find(s => s.name === driverProfile.standName || s.bengaliName === driverProfile.standName);
-    const driverLat = driverStand ? driverStand.lat : 24.5520;
-    const driverLng = driverStand ? driverStand.lng : 90.5515;
+    const driverLat = driverStand ? driverStand.lat : 24.4536;
+    const driverLng = driverStand ? driverStand.lng : 90.5479;
 
     const activeDriver: Driver = (userRole === 'driver' && driverProfile.id)
       ? {
@@ -3352,8 +3352,8 @@ export default function App() {
           phone: '০১৭১১-২২৩৩৪৪',
           category: 'cng',
           categoryBengali: 'সিএনজি',
-          lat: 24.5520,
-          lng: 90.5515,
+          lat: 24.4536,
+          lng: 90.5479,
           rating: 5.0,
           totalTrips: 20,
           isOnline: true,
@@ -3593,7 +3593,7 @@ export default function App() {
       }
 
       const map = L.map(mapContainerRef.current, {
-        center: [24.5535, 90.5518],
+        center: [24.4536, 90.5479],
         zoom: 14,
         zoomControl: true,
         dragging: !L.Browser.mobile || isMapTouchUnlocked,
@@ -4085,8 +4085,8 @@ export default function App() {
       regAppId: newRegAppId,
       registeredAt: new Date().toLocaleTimeString('bn-BD', { hour: '2-digit', minute: '2-digit' }),
       standName: targetStand ? targetStand.bengaliName : registerForm.standName,
-      lat: (targetStand ? targetStand.lat : 24.5530) + (Math.random() - 0.5) * 0.008,
-      lng: (targetStand ? targetStand.lng : 90.5520) + (Math.random() - 0.5) * 0.008,
+      lat: (targetStand ? targetStand.lat : 24.4536) + (Math.random() - 0.5) * 0.005,
+      lng: (targetStand ? targetStand.lng : 90.5479) + (Math.random() - 0.5) * 0.005,
       rating: 5.0,
       totalTrips: 0,
       avatarBg: 'bg-emerald-700',
@@ -4385,8 +4385,8 @@ export default function App() {
       const updatedStand = {
         bengaliName: standForm.bengaliName.trim(),
         name: standForm.name.trim() || standForm.bengaliName.trim(),
-        lat: Number(standForm.lat) || 24.5535,
-        lng: Number(standForm.lng) || 90.5518
+        lat: Number(standForm.lat) || 24.4536,
+        lng: Number(standForm.lng) || 90.5479
       };
       setStands(prev => prev.map(s => 
         s.id === editingStandId 
@@ -4404,8 +4404,8 @@ export default function App() {
         id: `stand-${Date.now()}`,
         bengaliName: standForm.bengaliName.trim(),
         name: standForm.name.trim() || standForm.bengaliName.trim(),
-        lat: Number(standForm.lat) || 24.5535,
-        lng: Number(standForm.lng) || 90.5518,
+        lat: Number(standForm.lat) || 24.4536,
+        lng: Number(standForm.lng) || 90.5479,
         activeDrivers: 0
       };
       setStands(prev => [...prev, newStand]);
@@ -4418,7 +4418,7 @@ export default function App() {
 
     setIsStandModalOpen(false);
     setEditingStandId(null);
-    setStandForm({ bengaliName: '', name: '', lat: 24.5535, lng: 90.5518 });
+    setStandForm({ bengaliName: '', name: '', lat: 24.4536, lng: 90.5479 });
   };
 
   // Delete Stand
@@ -4762,8 +4762,8 @@ export default function App() {
       regAppId: 'SAFAR-ADM-' + Math.floor(1000 + Math.random() * 9000),
       registeredAt: new Date().toLocaleTimeString('bn-BD', { hour: '2-digit', minute: '2-digit' }),
       standName: targetStand ? targetStand.bengaliName : 'গফরগাঁও রেলওয়ে স্টেশন স্ট্যান্ড',
-      lat: targetStand ? targetStand.lat + (Math.random() - 0.5) * 0.005 : 24.5518,
-      lng: targetStand ? targetStand.lng + (Math.random() - 0.5) * 0.005 : 90.5512,
+      lat: targetStand ? targetStand.lat + (Math.random() - 0.5) * 0.005 : 24.4536,
+      lng: targetStand ? targetStand.lng + (Math.random() - 0.5) * 0.005 : 90.5479,
       rating: 5.0,
       totalTrips: 1,
       avatarBg: 'bg-emerald-700',
@@ -5776,9 +5776,17 @@ export default function App() {
 
                           <a
                             href={
-                              (driverActiveTrip as any).status === 'in_transit' && (driverActiveTrip as any).destCoords
-                                ? `https://www.google.com/maps/dir/?api=1&origin=${(driverActiveTrip as any).pickupCoords?.lat || 24.5518},${(driverActiveTrip as any).pickupCoords?.lng || 90.5512}&destination=${(driverActiveTrip as any).destCoords?.lat || 24.5479},${(driverActiveTrip as any).destCoords?.lng || 90.5436}&travelmode=driving`
-                                : `https://www.google.com/maps/dir/?api=1&origin=${liveGps.lat || 24.5520},${liveGps.lng || 90.5515}&destination=${(driverActiveTrip as any).pickupCoords?.lat || 24.5518},${(driverActiveTrip as any).pickupCoords?.lng || 90.5512}&travelmode=driving`
+                              (() => {
+                                const isDest = (driverActiveTrip as any).status === 'in_transit';
+                                const targetCoords = isDest
+                                  ? ((driverActiveTrip as any).destCoords?.lat ? (driverActiveTrip as any).destCoords : resolveLocationCoordinates(driverActiveTrip.destination, true, stands))
+                                  : ((driverActiveTrip as any).pickupCoords?.lat ? (driverActiveTrip as any).pickupCoords : resolveLocationCoordinates(driverActiveTrip.pickupPoint, false, stands));
+                                const lat = targetCoords?.lat || (isDest ? 24.4515 : 24.4536);
+                                const lng = targetCoords?.lng || (isDest ? 90.5535 : 90.5479);
+                                return liveGps.isTracking && liveGps.lat
+                                  ? `https://www.google.com/maps/dir/?api=1&origin=${liveGps.lat},${liveGps.lng}&destination=${lat},${lng}&travelmode=driving`
+                                  : `https://www.google.com/maps/dir/?api=1&destination=${lat},${lng}&travelmode=driving`;
+                              })()
                             }
                             target="_blank"
                             rel="noopener noreferrer"
@@ -5870,12 +5878,12 @@ export default function App() {
                                 driverName: driverProfile.name || 'আমি (চালক)',
                                 driverPhone: driverProfile.phone,
                                 driverCategory: driverProfile.category,
-                                currentDriverLat: liveGps.lat || 24.5520,
-                                currentDriverLng: liveGps.lng || 90.5515,
-                                passengerLat: (driverActiveTrip as any).pickupCoords?.lat || (activeBooking as any)?.passengerLat || 24.5518,
-                                passengerLng: (driverActiveTrip as any).pickupCoords?.lng || (activeBooking as any)?.passengerLng || 90.5512,
-                                destLat: (driverActiveTrip as any).destCoords?.lat || destCoords?.lat || 24.5479,
-                                destLng: (driverActiveTrip as any).destCoords?.lng || destCoords?.lng || 90.5436,
+                                currentDriverLat: liveGps.lat || 24.4536,
+                                currentDriverLng: liveGps.lng || 90.5479,
+                                passengerLat: (driverActiveTrip as any).pickupCoords?.lat || (activeBooking as any)?.passengerLat || 24.4536,
+                                passengerLng: (driverActiveTrip as any).pickupCoords?.lng || (activeBooking as any)?.passengerLng || 90.5479,
+                                destLat: (driverActiveTrip as any).destCoords?.lat || destCoords?.lat || 24.4515,
+                                destLng: (driverActiveTrip as any).destCoords?.lng || destCoords?.lng || 90.5535,
                                 pickupTitle: driverActiveTrip.pickupPoint || 'পিকআপ স্থান',
                                 destTitle: driverActiveTrip.destination || 'গন্তব্য স্থান',
                                 distanceKm: driverActiveTrip.distanceKm || 1.2,

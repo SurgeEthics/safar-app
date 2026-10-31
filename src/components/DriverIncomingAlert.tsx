@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Bell, MapPin, Navigation, Clock, Check, X, Shield, PhoneCall } from 'lucide-react';
 import { sounds } from '../utils/audio';
+import { PauseMarqueeText } from './PauseMarqueeText';
 
 export interface DriverIncomingAlertProps {
   request: {
@@ -51,7 +52,7 @@ export const DriverIncomingAlert: React.FC<DriverIncomingAlertProps> = ({
   const progressPercent = (secondsRemaining / 15) * 100;
 
   return (
-    <div className="fixed inset-x-3 sm:inset-x-auto sm:right-6 top-20 z-50 max-w-md w-full bg-slate-950 text-white rounded-3xl p-4 sm:p-5 shadow-2xl border-2 border-amber-400 animate-in slide-in-from-top-4">
+    <div className="fixed top-20 z-50 left-3 right-3 sm:left-auto sm:right-6 sm:w-full sm:max-w-md bg-slate-950 text-white rounded-3xl p-4 sm:p-5 shadow-2xl border-2 border-amber-400 animate-in slide-in-from-top-4">
       {/* Top Header */}
       <div className="flex items-center justify-between pb-2.5 mb-2.5 border-b border-slate-800">
         <div className="flex items-center gap-2">
@@ -86,25 +87,32 @@ export const DriverIncomingAlert: React.FC<DriverIncomingAlertProps> = ({
 
       {/* Route & Passenger Information */}
       <div className="bg-slate-900 p-3 rounded-2xl border border-slate-800 space-y-2 mb-3.5">
-        <div className="flex items-start gap-2">
+        <div className="flex items-start gap-2 min-w-0">
           <MapPin className="w-4 h-4 text-emerald-400 shrink-0 mt-0.5" />
-          <div className="min-w-0">
+          <div className="min-w-0 flex-1">
             <span className="text-[10px] text-slate-400 font-semibold block">পিকআপ পয়েন্ট:</span>
-            <span className="text-xs font-bold text-white truncate block">{request.pickupPoint}</span>
+            <div className="min-w-0 w-full overflow-hidden">
+              <PauseMarqueeText text={request.pickupPoint} className="text-xs font-bold text-emerald-300" pauseSec={1.5} />
+            </div>
           </div>
         </div>
 
-        <div className="flex items-start gap-2">
+        <div className="flex items-start gap-2 min-w-0">
           <Navigation className="w-4 h-4 text-red-400 shrink-0 mt-0.5" />
-          <div className="min-w-0">
+          <div className="min-w-0 flex-1">
             <span className="text-[10px] text-slate-400 font-semibold block">গন্তব্য স্থল:</span>
-            <span className="text-xs font-bold text-white truncate block">{request.destination}</span>
+            <div className="min-w-0 w-full overflow-hidden">
+              <PauseMarqueeText text={request.destination} className="text-xs font-bold text-white" pauseSec={1.5} />
+            </div>
           </div>
         </div>
 
         <div className="pt-2 border-t border-slate-800/80 flex items-center justify-between text-xs text-slate-300">
-          <span>যাত্রী: <strong className="text-white">{request.passengerName}</strong></span>
-          <span>দূরত্ব: <strong className="text-emerald-300">{request.distanceKm} কিমি</strong></span>
+          <div className="min-w-0 flex-1 flex items-center gap-1 mr-2">
+            <span className="shrink-0">যাত্রী:</span>
+            <strong className="text-white truncate">{request.passengerName}</strong>
+          </div>
+          <span className="shrink-0">দূরত্ব: <strong className="text-emerald-300">{request.distanceKm} কিমি</strong></span>
         </div>
       </div>
 

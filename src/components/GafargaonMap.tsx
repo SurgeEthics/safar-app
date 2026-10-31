@@ -604,7 +604,7 @@ export const GafargaonMap: React.FC<GafargaonMapProps> = ({
              style="display: block; text-align: center; background: #059669; color: white; padding: 6px 10px; border-radius: 8px; font-weight: 800; font-size: 11.5px; text-decoration: none; margin-bottom: 4px;">
             📞 চালককে সরাসরি কল (${activeBooking.driverPhone})
           </a>
-          <a href="https://www.google.com/maps/dir/?api=1&origin=${activeBooking.currentDriverLat},${activeBooking.currentDriverLng}&destination=${activeBooking.passengerLat},${activeBooking.passengerLng}"
+          <a href="${userGps.isTracking && userGps.lat ? `https://www.google.com/maps/dir/?api=1&origin=${userGps.lat},${userGps.lng}&destination=${activeBooking.passengerLat},${activeBooking.passengerLng}&travelmode=driving` : `https://www.google.com/maps/dir/?api=1&destination=${activeBooking.passengerLat},${activeBooking.passengerLng}&travelmode=driving`}"
              target="_blank" rel="noopener noreferrer"
              style="display: block; text-align: center; background: #2563eb; color: white; padding: 6px 10px; border-radius: 8px; font-weight: 800; font-size: 11px; text-decoration: none;">
             🗺️ গুগল ম্যাপে টার্ন-বাই-টার্ন লাইভ রুট (GPS)
@@ -1062,26 +1062,12 @@ export const GafargaonMap: React.FC<GafargaonMapProps> = ({
                 <p className="text-[10px] text-slate-300 truncate">
                   {activeBooking
                     ? `পিকআপ: ${activeBooking.pickupTitle || pickupTitle || ''} ➔ গন্তব্য: ${activeBooking.destTitle || destTitle || ''}`
-                    : 'সর্বোচ্চ চওড়া ভিউ • ফুলস্ক্রিন ও ল্যান্ডস্কেপ মোড'}
+                    : 'সর্বোচ্চ চওড়া ভিউ • ফুলস্ক্রিন মোড'}
                 </p>
               </div>
             </div>
 
             <div className="flex items-center gap-1.5 shrink-0">
-              <button
-                type="button"
-                onClick={() => setIsLandscapeMode(!isLandscapeMode)}
-                className={`px-2.5 py-1.5 rounded-xl text-xs font-bold border flex items-center gap-1 transition ${
-                  isLandscapeMode
-                    ? 'bg-amber-500 text-slate-950 border-amber-300'
-                    : 'bg-slate-800 text-amber-300 border-amber-400/40 hover:bg-slate-700'
-                }`}
-                title="মোবাইলে ল্যান্ডস্কেপ ওরিয়েন্টেশন বা ওয়াইড ভিউ"
-              >
-                <RotateCcw className="w-3.5 h-3.5" />
-                <span className="text-[11px] font-bold">ল্যান্ডস্কেপ</span>
-              </button>
-
               <button
                 type="button"
                 onClick={() => setIsFullscreen(false)}
@@ -1181,16 +1167,26 @@ export const GafargaonMap: React.FC<GafargaonMapProps> = ({
               const targetLat = activeBooking.destLat || destCoords?.lat;
               const targetLng = activeBooking.destLng || destCoords?.lng;
               if (targetLat && targetLng) {
-                googleMapsUrl = `https://www.google.com/maps/dir/?api=1&origin=${activeBooking.passengerLat},${activeBooking.passengerLng}&destination=${targetLat},${targetLng}&travelmode=driving`;
-                googleMapsLabel = 'গুগল ম্যাপে GPS (পিকআপ ➔ গন্তব্য)';
+                googleMapsUrl = userGps.isTracking && userGps.lat
+                  ? `https://www.google.com/maps/dir/?api=1&origin=${userGps.lat},${userGps.lng}&destination=${targetLat},${targetLng}&travelmode=driving`
+                  : `https://www.google.com/maps/dir/?api=1&destination=${targetLat},${targetLng}&travelmode=driving`;
+                googleMapsLabel = 'গুগল ম্যাপে GPS (গন্তব্যের দিকে)';
               }
             } else {
-              googleMapsUrl = `https://www.google.com/maps/dir/?api=1&origin=${activeBooking.currentDriverLat},${activeBooking.currentDriverLng}&destination=${activeBooking.passengerLat},${activeBooking.passengerLng}&travelmode=driving`;
-              googleMapsLabel = 'গুগল ম্যাপে GPS (চালক ➔ পিকআপ)';
+              const targetLat = activeBooking.passengerLat || pickupCoords?.lat;
+              const targetLng = activeBooking.passengerLng || pickupCoords?.lng;
+              if (targetLat && targetLng) {
+                googleMapsUrl = userGps.isTracking && userGps.lat
+                  ? `https://www.google.com/maps/dir/?api=1&origin=${userGps.lat},${userGps.lng}&destination=${targetLat},${targetLng}&travelmode=driving`
+                  : `https://www.google.com/maps/dir/?api=1&destination=${targetLat},${targetLng}&travelmode=driving`;
+                googleMapsLabel = 'গুগল ম্যাপে GPS (পিকআপ পয়েন্টের দিকে)';
+              }
             }
           }
           if (!googleMapsUrl && pickupCoords && destCoords) {
-            googleMapsUrl = `https://www.google.com/maps/dir/?api=1&origin=${pickupCoords.lat},${pickupCoords.lng}&destination=${destCoords.lat},${destCoords.lng}&travelmode=driving`;
+            googleMapsUrl = userGps.isTracking && userGps.lat
+              ? `https://www.google.com/maps/dir/?api=1&origin=${userGps.lat},${userGps.lng}&destination=${destCoords.lat},${destCoords.lng}&travelmode=driving`
+              : `https://www.google.com/maps/dir/?api=1&destination=${destCoords.lat},${destCoords.lng}&travelmode=driving`;
             googleMapsLabel = 'গুগল ম্যাপে লাইভ রুট (GPS)';
           }
 
