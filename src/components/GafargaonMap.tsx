@@ -547,11 +547,13 @@ export const GafargaonMap: React.FC<GafargaonMapProps> = ({
       const effectiveDestLat = activeBooking.destLat || destCoords?.lat;
       const effectiveDestLng = activeBooking.destLng || destCoords?.lng;
 
-      // Calculate accurate distance for Phase 2 (remaining distance to destination) vs Phase 1 (to pickup)
-      const phaseRemainingKm = isInTransit && effectiveDestLat && effectiveDestLng
-        ? calculateDistanceKm(activeBooking.currentDriverLat, activeBooking.currentDriverLng, effectiveDestLat, effectiveDestLng)
-        : activeBooking.distanceKm;
-      const phaseRemainingEta = Math.max(2, Math.round(phaseRemainingKm * 2.5));
+      // Calculate accurate dynamic distance for Phase 2 (remaining distance to destination) vs Phase 1 (to pickup)
+      const targetMarkerLat = isInTransit ? effectiveDestLat : (activeBooking.passengerLat || pickupCoords?.lat);
+      const targetMarkerLng = isInTransit ? effectiveDestLng : (activeBooking.passengerLng || pickupCoords?.lng);
+      const phaseRemainingKm = (targetMarkerLat && targetMarkerLng && activeBooking.currentDriverLat && activeBooking.currentDriverLng)
+        ? calculateDistanceKm(activeBooking.currentDriverLat, activeBooking.currentDriverLng, targetMarkerLat, targetMarkerLng)
+        : (activeBooking.distanceKm || 1.2);
+      const phaseRemainingEta = Math.max(1, Math.round(phaseRemainingKm * 2.5));
 
       // 1. Driver Marker (Shows Driver Recent Photo if available, Driver Name on Top, and Dynamic Status Badge)
       const driverLiveIcon = L.divIcon({
@@ -1208,12 +1210,13 @@ export const GafargaonMap: React.FC<GafargaonMapProps> = ({
           const effectiveDestLng = activeBooking?.destLng || destCoords?.lng;
 
           const isInTransit = activeBooking?.status === 'in_transit';
-          const effectiveDistance = (isInTransit && effectiveDestLat && effectiveDestLng)
-            ? calculateDistanceKm(activeBooking.currentDriverLat, activeBooking.currentDriverLng, effectiveDestLat, effectiveDestLng)
+          const targetLat = isInTransit ? effectiveDestLat : (activeBooking?.passengerLat || pickupCoords?.lat);
+          const targetLng = isInTransit ? effectiveDestLng : (activeBooking?.passengerLng || pickupCoords?.lng);
+          const hasDriverGps = Boolean(activeBooking?.currentDriverLat && activeBooking?.currentDriverLng);
+          const effectiveDistance = (activeBooking && hasDriverGps && targetLat && targetLng)
+            ? calculateDistanceKm(activeBooking.currentDriverLat, activeBooking.currentDriverLng, targetLat, targetLng)
             : (activeBooking?.distanceKm || calculatedDistance || 1.2);
-          const effectiveDuration = isInTransit
-            ? Math.max(2, Math.round(effectiveDistance * 2.5))
-            : (activeBooking?.etaMinutes || calculatedDurationMinutes || Math.max(2, Math.round(effectiveDistance * 2.5)));
+          const effectiveDuration = Math.max(1, Math.round(effectiveDistance * 2.5));
 
           let googleMapsUrl = '';
           let googleMapsLabel = 'গুগল ম্যাপে লাইভ রুট (GPS)';

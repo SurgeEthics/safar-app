@@ -2873,6 +2873,34 @@ export default function App() {
             deleteDoc(doc(db, 'ride_requests', docSnap.id)).catch(() => {});
           }
 
+          // If driver completed this trip, update passenger's history and reset state
+          if (data.status === 'completed') {
+            if (activeBooking && (activeBooking as any).requestId === docSnap.id) {
+              const finalFare = data.estFare || activeBooking.fare || 40;
+              const newTripRecord: PassengerTripRecord = {
+                id: `trip-${Date.now()}`,
+                date: 'আজ, ' + new Date().toLocaleTimeString('bn-BD', { hour: '2-digit', minute: '2-digit' }),
+                pickupPoint: activeBooking.pickupTitle || passengerPickup || 'শুরুর স্থান',
+                destination: activeBooking.destTitle || passengerDestination || 'গন্তব্য স্থান',
+                driverName: data.driverName || activeBooking.driver.name,
+                driverPhone: data.driverPhone || activeBooking.driver.phone,
+                vehicleCategory: data.driverCategory || activeBooking.driver.category,
+                vehicleModel: data.driverVehicleModel || activeBooking.driver.vehicleModel,
+                plateNumber: data.driverLicensePlate || activeBooking.driver.plateNumber,
+                fare: finalFare,
+                status: 'সম্পন্ন',
+                ratingGiven: 5.0
+              };
+              setTripHistory(prev => [newTripRecord, ...prev]);
+              setActiveBooking(null);
+              setPickupCoords(null);
+              setDestCoords(null);
+              setPassengerPickup('');
+              setPassengerDestination('');
+              showAdminToastMessage(`🎉 চালক ট্রিপ সফলভাবে সম্পন্ন করেছেন! নির্ধারিত ভাড়া: ৳ ${finalFare}`);
+            }
+          }
+
           // If current passenger was waiting for or in this trip and it was cancelled, reset state cleanly
           if (data.status === 'cancelled') {
             if (passengerPendingRequest && passengerPendingRequest.id === docSnap.id) {
@@ -2916,7 +2944,9 @@ export default function App() {
             driverVehicleModel: data.driverVehicleModel,
             driverLicensePlate: data.driverLicensePlate,
             driverRating: data.driverRating,
-            otp: data.otp
+            otp: data.otp,
+            pickupCoords: data.pickupCoords || null,
+            destCoords: data.destCoords || null
           });
         }
       });
@@ -2927,7 +2957,7 @@ export default function App() {
       // Check if current passenger's pending request was accepted by a driver
       if (passengerPendingRequest) {
         const myActiveDoc = liveList.find(r => r.id === passengerPendingRequest.id);
-        if (myActiveDoc && myActiveDoc.status === 'accepted' && myActiveDoc.driverId) {
+        if (myActiveDoc && (myActiveDoc.status === 'accepted' || myActiveDoc.status === 'in_transit') && myActiveDoc.driverId) {
           const matchedDriver: Driver = drivers.find(d => d.id === myActiveDoc.driverId) || {
             id: myActiveDoc.driverId,
             name: myActiveDoc.driverName || 'ভেরিফাইড চালক',
@@ -2952,13 +2982,19 @@ export default function App() {
             approxSpeedKmh: 25
           };
 
-          const pCoords = pickupCoords || { lat: 24.4536, lng: 90.5479 };
+          const pCoords = myActiveDoc.pickupCoords || pickupCoords || resolveLocationCoordinates(myActiveDoc.pickupPoint, false, stands) || { lat: 24.4536, lng: 90.5479 };
+          const dCoords = myActiveDoc.destCoords || destCoords || resolveLocationCoordinates(myActiveDoc.destination, true, stands) || { lat: 24.4515, lng: 90.5535 };
+          setPickupCoords(pCoords);
+          setDestCoords(dCoords);
+
           setActiveBooking({
             id: myActiveDoc.id,
             requestId: myActiveDoc.id,
             driver: matchedDriver,
             passengerLat: pCoords.lat,
             passengerLng: pCoords.lng,
+            destLat: dCoords.lat,
+            destLng: dCoords.lng,
             currentDriverLat: myActiveDoc.driverLat || matchedDriver.lat,
             currentDriverLng: myActiveDoc.driverLng || matchedDriver.lng,
             confirmedAt: Date.now(),
@@ -2983,15 +3019,20 @@ export default function App() {
           const newStatus = (activeDoc.status as any) || activeBooking.status;
           const newLat = activeDoc.driverLat || activeBooking.currentDriverLat;
           const newLng = activeDoc.driverLng || activeBooking.currentDriverLng;
+          const effDestLat = activeDoc.destCoords?.lat || activeBooking.destLat || destCoords?.lat;
+          const effDestLng = activeDoc.destCoords?.lng || activeBooking.destLng || destCoords?.lng;
+
           if (newLat !== activeBooking.currentDriverLat || newLng !== activeBooking.currentDriverLng || newStatus !== activeBooking.status) {
-            const dist = newStatus === 'in_transit' && activeBooking.destLat && activeBooking.destLng
-              ? Number(calculateDistanceKm(newLat, newLng, activeBooking.destLat, activeBooking.destLng).toFixed(2))
+            const dist = newStatus === 'in_transit' && effDestLat && effDestLng
+              ? Number(calculateDistanceKm(newLat, newLng, effDestLat, effDestLng).toFixed(2))
               : Number(calculateDistanceKm(newLat, newLng, activeBooking.passengerLat, activeBooking.passengerLng).toFixed(2));
             const eta = Math.max(1, calculateEtaMinutes(dist, activeBooking.driver.approxSpeedKmh || 30));
             setActiveBooking(prev => prev ? {
               ...prev,
               currentDriverLat: newLat,
               currentDriverLng: newLng,
+              destLat: effDestLat || prev.destLat,
+              destLng: effDestLng || prev.destLng,
               distanceKm: dist,
               etaMinutes: eta,
               status: newStatus
@@ -3032,6 +3073,30 @@ export default function App() {
       status: activeBooking ? 'on_trip' : passengerPendingRequest ? 'seeking_ride' : 'idle'
     } : undefined
   });
+
+  // Auto-start device GPS tracking when user switches to driver mode
+  useEffect(() => {
+    if (userRole === 'driver' && !liveGps.isTracking) {
+      startGpsTracking();
+    }
+  }, [userRole, liveGps.isTracking, startGpsTracking]);
+
+  // Real-time Driver GPS Broadcast to active accepted/in_transit trip in Firestore
+  useEffect(() => {
+    if (userRole === 'driver' && liveGps.lat && liveGps.lng) {
+      const activeTrip = passengerRequests.find(r => 
+        (r.status === 'accepted' || r.status === 'in_transit') &&
+        (r.driverId === driverProfile.id || r.driverPhone === driverProfile.phone || !r.driverId)
+      );
+      if (activeTrip && activeTrip.id) {
+        updateDoc(doc(db, 'ride_requests', activeTrip.id), {
+          driverLat: liveGps.lat,
+          driverLng: liveGps.lng,
+          lastGpsUpdate: new Date().toISOString()
+        }).catch(() => {});
+      }
+    }
+  }, [userRole, liveGps.lat, liveGps.lng, passengerRequests, driverProfile.id, driverProfile.phone]);
 
   // Helper: check if a location title implies real device live GPS
   const isLiveLocationQuery = (text: string): boolean => {
@@ -3326,9 +3391,17 @@ export default function App() {
 
   // Driver accepts request (Real-Time Firestore Update)
   const handleDriverAcceptRequest = async (requestId: string) => {
+    if (!liveGps.isTracking) {
+      startGpsTracking();
+    }
     const driverStand = stands.find(s => s.name === driverProfile.standName || s.bengaliName === driverProfile.standName);
-    const driverLat = driverStand ? driverStand.lat : 24.4536;
-    const driverLng = driverStand ? driverStand.lng : 90.5479;
+    // Prioritize real device GPS location over registered stand!
+    const driverLat = (liveGps.lat && liveGps.lng)
+      ? liveGps.lat
+      : (driverProfile.lat || (driverStand ? driverStand.lat : 24.4536));
+    const driverLng = (liveGps.lat && liveGps.lng)
+      ? liveGps.lng
+      : (driverProfile.lng || (driverStand ? driverStand.lng : 90.5479));
 
     const activeDriver: Driver = (userRole === 'driver' && driverProfile.id)
       ? {
@@ -4213,8 +4286,11 @@ export default function App() {
   // Handle Passenger Confirm Ride with Live Distance & ETA calculation
   // Handle Passenger Confirm Ride with Live Distance, ETA & Automatic State/History Sync
   const handleConfirmRide = (driver: Driver) => {
-    const pLat = passengerLocation.lat;
-    const pLng = passengerLocation.lng;
+    const pLat = pickupCoords?.lat || passengerLocation.lat || 24.4536;
+    const pLng = pickupCoords?.lng || passengerLocation.lng || 90.5479;
+    const resolvedDest = destCoords || resolveLocationCoordinates(dTitle, true, stands) || { lat: 24.4515, lng: 90.5535 };
+    const dLat = resolvedDest.lat;
+    const dLng = resolvedDest.lng;
     const dist = calculateDistanceKm(driver.lat, driver.lng, pLat, pLng);
     const eta = calculateEtaMinutes(dist, driver.approxSpeedKmh);
     const estFare = Math.max(35, Math.round(dist * (driver.category === 'bike' ? 22 : driver.category === 'cng' ? 26 : driver.category === 'ambulance' ? 60 : 35)));
@@ -4223,7 +4299,7 @@ export default function App() {
     const dTitle = passengerDestination || driver.standName || 'উপজেলা স্বাস্থ্য কমপ্লেক্স';
     const validFare = (estFare && estFare > 0) ? estFare : (categories.find(c => c.id === driver.category)?.baseFare || 40);
 
-    // Automatically dispatch live passenger request to Driver Cockpit (saved to localStorage)
+    // Automatically dispatch live passenger request to Driver Cockpit (saved to localStorage & Firestore)
     const newRideRequest: PassengerRideRequest = {
       id: `req-${Date.now()}`,
       passengerName: passengerProfile.name || 'সম্মানিত যাত্রী',
@@ -4234,6 +4310,8 @@ export default function App() {
       requestedAt: 'এইমাত্র',
       distanceKm: dist,
       estFare: validFare,
+      pickupCoords: { lat: pLat, lng: pLng },
+      destCoords: { lat: dLat, lng: dLng },
       status: 'accepted'
     };
     setPassengerRequests(prev => [newRideRequest, ...prev]);
@@ -4247,9 +4325,13 @@ export default function App() {
     }).catch(err => console.warn('Firestore ride request sync error:', err));
 
     setActiveBooking({
+      id: newRideRequest.id,
+      requestId: newRideRequest.id,
       driver,
       passengerLat: pLat,
       passengerLng: pLng,
+      destLat: dLat,
+      destLng: dLng,
       currentDriverLat: driver.lat,
       currentDriverLng: driver.lng,
       confirmedAt: Date.now(),
@@ -5103,11 +5185,25 @@ export default function App() {
               onCancelBooking={handleCancelBooking}
               onStartRide={() => {
                 if (activeBooking) {
-                  setActiveBooking({ ...activeBooking, status: 'in_transit' });
+                  const currentLat = (liveGps.lat && liveGps.lng && liveGps.isTracking)
+                    ? liveGps.lat
+                    : (activeBooking.passengerLat || pickupCoords?.lat || 24.4335);
+                  const currentLng = (liveGps.lat && liveGps.lng && liveGps.isTracking)
+                    ? liveGps.lng
+                    : (activeBooking.passengerLng || pickupCoords?.lng || 90.5512);
+
+                  setActiveBooking({
+                    ...activeBooking,
+                    status: 'in_transit',
+                    currentDriverLat: currentLat,
+                    currentDriverLng: currentLng
+                  });
                   const bId = (activeBooking as any).requestId || (activeBooking as any).id;
                   if (bId) {
                     updateDoc(doc(db, 'ride_requests', bId), {
                       status: 'in_transit',
+                      driverLat: currentLat,
+                      driverLng: currentLng,
                       boardedAt: new Date().toISOString()
                     }).catch(() => {});
                   }
@@ -5709,7 +5805,7 @@ export default function App() {
                 {/* DRIVER ACTIVE ACCEPTED TRIP COCKPIT (IF DRIVER HAS ACCEPTED A TRIP) */}
                 {(() => {
                   const driverActiveTrip = passengerRequests.find(r => 
-                    r.status === 'accepted' && 
+                    (r.status === 'accepted' || r.status === 'in_transit') && 
                     (r.driverId === driverProfile.id || r.driverPhone === driverProfile.phone || !r.driverId)
                   );
 
@@ -5911,12 +6007,12 @@ export default function App() {
                                 driverPhone: driverProfile.phone,
                                 driverCategory: driverProfile.category,
                                 driverPhoto: driverProfile.driverPhoto || ((driverProfile.phone?.includes('01304841550') || driverProfile.name?.toUpperCase().includes('TASNIMUL')) ? '/assets/drivers/tasnimul_kabeer.png' : undefined),
-                                currentDriverLat: liveGps.lat || 24.4536,
-                                currentDriverLng: liveGps.lng || 90.5479,
-                                passengerLat: (driverActiveTrip as any).pickupCoords?.lat || (activeBooking as any)?.passengerLat || 24.4536,
-                                passengerLng: (driverActiveTrip as any).pickupCoords?.lng || (activeBooking as any)?.passengerLng || 90.5479,
-                                destLat: (driverActiveTrip as any).destCoords?.lat || destCoords?.lat || 24.4515,
-                                destLng: (driverActiveTrip as any).destCoords?.lng || destCoords?.lng || 90.5535,
+                                currentDriverLat: (liveGps.lat && liveGps.lng && liveGps.isTracking) ? liveGps.lat : ((driverActiveTrip as any).driverLat || driverProfile.lat || 24.4536),
+                                currentDriverLng: (liveGps.lat && liveGps.lng && liveGps.isTracking) ? liveGps.lng : ((driverActiveTrip as any).driverLng || driverProfile.lng || 90.5479),
+                                passengerLat: (driverActiveTrip as any).pickupCoords?.lat || (activeBooking as any)?.passengerLat || resolveLocationCoordinates(driverActiveTrip.pickupPoint, false, stands)?.lat || 24.4536,
+                                passengerLng: (driverActiveTrip as any).pickupCoords?.lng || (activeBooking as any)?.passengerLng || resolveLocationCoordinates(driverActiveTrip.pickupPoint, false, stands)?.lng || 90.5479,
+                                destLat: (driverActiveTrip as any).destCoords?.lat || destCoords?.lat || resolveLocationCoordinates(driverActiveTrip.destination, true, stands)?.lat || 24.4515,
+                                destLng: (driverActiveTrip as any).destCoords?.lng || destCoords?.lng || resolveLocationCoordinates(driverActiveTrip.destination, true, stands)?.lng || 90.5535,
                                 pickupTitle: driverActiveTrip.pickupPoint || 'পিকআপ স্থান',
                                 destTitle: driverActiveTrip.destination || 'গন্তব্য স্থান',
                                 distanceKm: driverActiveTrip.distanceKm || 1.2,

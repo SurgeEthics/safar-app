@@ -643,7 +643,7 @@ export const AdminControlPanel: React.FC<AdminControlPanelProps> = ({
         window.URL.revokeObjectURL(url);
         document.body.removeChild(link);
       }, 2000);
-      showToast('🎉 সফলভাবে ক্লাউডফ্লেয়ার ফিক্সড সোর্স কোড ও dist জিপ (২.৪ MB) ডাউনলোড হয়েছে!');
+      showToast('🎉 সফলভাবে ক্লাউডফ্লেয়ার ফিক্সড সোর্স কোড ও dist জিপ (২.৯৩ MB) ডাউনলোড হয়েছে!');
     } catch (err: any) {
       console.error('ZIP download error:', err);
       showToast('সরাসরি ডাউনলোড লিঙ্ক ওপেন করা হচ্ছে...');
@@ -2436,7 +2436,7 @@ export const AdminControlPanel: React.FC<AdminControlPanelProps> = ({
                     ) : (
                       <>
                         <Download className="w-4 h-4 text-slate-950" />
-                        <span>📥 সম্পূর্ণ প্রজেক্ট জিপ ডাউনলোড করুন (২.৮৮ MB • ফাইনাল ফ্রেশ সোর্স)</span>
+                        <span>📥 সম্পূর্ণ প্রজেক্ট জিপ ডাউনলোড করুন (২.৯৩ MB • ফাইনাল ফ্রেশ সোর্স)</span>
                       </>
                     )}
                   </button>
@@ -2447,7 +2447,7 @@ export const AdminControlPanel: React.FC<AdminControlPanelProps> = ({
                     className="inline-flex items-center gap-1.5 bg-white hover:bg-slate-50 text-slate-800 font-bold px-3.5 py-2.5 rounded-xl text-xs sm:text-sm shadow-xs border border-slate-300 cursor-pointer transition"
                   >
                     <Download className="w-3.5 h-3.5 text-slate-600" />
-                    <span>সরাসরি লিঙ্ক (২.৮৮ MB)</span>
+                    <span>সরাসরি লিঙ্ক (২.৯৩ MB)</span>
                   </a>
 
                   {onOpenSourceCodeModal && (
