@@ -75,6 +75,7 @@ interface GafargaonMapProps {
     destLat?: number;
     destLng?: number;
     pickupTitle?: string;
+    pickupLandmark?: string;
     destTitle?: string;
     distanceKm: number;
     etaMinutes: number;
@@ -670,7 +671,10 @@ export const GafargaonMap: React.FC<GafargaonMapProps> = ({
           popupAnchor: [0, -18]
         });
         const bPassMarker = L.marker([activeBooking.passengerLat, activeBooking.passengerLng], { icon: passPickupIcon });
-        bPassMarker.bindTooltip(`📍 পিকআপ (A): ${activeBooking.pickupTitle || pickupTitle || 'যাত্রী পিকআপ'}`, { direction: 'top', offset: [0, -18] });
+        const passTooltip = activeBooking.pickupLandmark
+          ? `📍 পিকআপ (A): ${activeBooking.pickupTitle || pickupTitle || 'যাত্রী পিকআপ'} (${activeBooking.pickupLandmark})`
+          : `📍 পিকআপ (A): ${activeBooking.pickupTitle || pickupTitle || 'যাত্রী পিকআপ'}`;
+        bPassMarker.bindTooltip(passTooltip, { direction: 'top', offset: [0, -18] });
         markersGroup.addLayer(bPassMarker);
 
         // Phase 1 Route Line (Driver -> Pickup Point A)

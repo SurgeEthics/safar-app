@@ -28,6 +28,7 @@ export interface PassengerRideCockpitProps {
   request: {
     id: string;
     pickupPoint: string;
+    pickupLandmark?: string;
     destination: string;
     category: string;
     distanceKm: number;
@@ -52,6 +53,7 @@ export interface PassengerRideCockpitProps {
       standName?: string;
     };
     pickupTitle?: string;
+    pickupLandmark?: string;
     destTitle?: string;
     fare?: number;
     distanceKm?: number;
@@ -213,6 +215,16 @@ export const PassengerRideCockpit: React.FC<PassengerRideCockpitProps> = ({
                   </div>
                 </div>
 
+                {/* 2nd Option: Nearest Known Landmark Reference */}
+                {request.pickupLandmark && (
+                  <div className="flex items-center gap-1.5 text-[11px] text-amber-200/95 pl-5 min-w-0 bg-amber-500/10 py-0.5 px-2 rounded-lg border border-amber-400/20">
+                    <span className="shrink-0 text-amber-300 font-extrabold text-[9.5px] bg-amber-400/20 px-1.5 py-0.2 rounded border border-amber-400/30">২য় পরিচিত রেফারেন্স:</span>
+                    <div className="min-w-0 flex-1 overflow-hidden">
+                      <PauseMarqueeText text={request.pickupLandmark} className="text-[11px] font-bold text-amber-100" pauseSec={1.5} />
+                    </div>
+                  </div>
+                )}
+
                 {/* Destination Row with Marquee */}
                 <div className="flex items-center gap-1.5 text-[12px] min-w-0">
                   <Navigation className="w-3.5 h-3.5 text-red-400 shrink-0" />
@@ -372,6 +384,14 @@ export const PassengerRideCockpit: React.FC<PassengerRideCockpitProps> = ({
                         />
                       </div>
                     </div>
+                    {(activeBooking.pickupLandmark || request?.pickupLandmark) && (
+                      <div className="flex items-center gap-1.5 text-[10.5px] text-amber-200/95 pl-5 min-w-0 bg-amber-500/10 py-0.5 px-2 rounded-lg border border-amber-400/20">
+                        <span className="shrink-0 text-amber-300 font-extrabold text-[9px] bg-amber-400/20 px-1 py-0.2 rounded border border-amber-400/30">২য় পরিচিত স্থান:</span>
+                        <div className="min-w-0 flex-1 overflow-hidden">
+                          <PauseMarqueeText text={activeBooking.pickupLandmark || request?.pickupLandmark || ''} className="text-[10.5px] font-bold text-amber-100" pauseSec={1.5} />
+                        </div>
+                      </div>
+                    )}
                     <div className="flex items-center gap-1.5 min-w-0">
                       <Navigation className="w-3.5 h-3.5 text-blue-400 shrink-0" />
                       <span className="shrink-0 text-blue-300 font-bold">গন্তব্য:</span>

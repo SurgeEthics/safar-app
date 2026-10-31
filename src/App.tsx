@@ -125,6 +125,7 @@ export interface PassengerRideRequest {
   passengerName: string;
   passengerPhone: string;
   pickupPoint: string;
+  pickupLandmark?: string; // 2nd option / nearest known landmark reference
   destination: string;
   category: VehicleCategory;
   requestedAt: string;
@@ -2606,6 +2607,7 @@ export default function App() {
   // Passenger Ride Booking Hub State (Dynamic Pickup, Destination & Fare Calculation)
   // Default is empty so no dummy route or distance line is drawn until user selects locations
   const [passengerPickup, setPassengerPickup] = useState<string>('');
+  const [passengerPickupLandmark, setPassengerPickupLandmark] = useState<string>('');
   const [passengerDestination, setPassengerDestination] = useState<string>('');
   const [pickupCoords, setPickupCoords] = useState<{ lat: number; lng: number } | null>(null);
   const [destCoords, setDestCoords] = useState<{ lat: number; lng: number } | null>(null);
@@ -2929,6 +2931,7 @@ export default function App() {
             passengerName: data.passengerName || 'সম্মানিত যাত্রী',
             passengerPhone: data.passengerPhone || '',
             pickupPoint: data.pickupPoint || data.pickupLocation || '',
+            pickupLandmark: data.pickupLandmark || '',
             destination: data.destination || data.destinationLocation || '',
             category: data.category || data.vehicleCategory || 'cng',
             requestedAt: 'এইমাত্র',
@@ -3003,6 +3006,7 @@ export default function App() {
             status: (myActiveDoc.status === 'in_transit' ? 'in_transit' : 'en_route'),
             otp: myActiveDoc.otp || '5201',
             pickupTitle: myActiveDoc.pickupPoint,
+            pickupLandmark: myActiveDoc.pickupLandmark || '',
             destTitle: myActiveDoc.destination,
             fare: myActiveDoc.estFare
           });
@@ -3114,24 +3118,37 @@ export default function App() {
     );
   };
 
-  // Helper: Find nearest union stand or popular landmark to give a human-readable reference for Live GPS
-  const findNearestLandmark = (lat: number, lng: number): { name: string; distanceMeters: number } => {
+  // Helper: Find nearest union stand or popular landmark to give a human-readable 2nd option for Live GPS
+  const findNearestLandmark = useCallback((lat: number, lng: number): { name: string; distanceMeters: number } => {
     let nearestName = 'গফরগাঁও পৌরসভা চত্বর';
     let minDistanceKm = 9999;
-    for (const place of COMPREHENSIVE_UNION_PLACES) {
-      if (place.lat && place.lng) {
+    
+    // Check all autocomplete union places
+    for (const place of allAutocompletePlaces) {
+      if (typeof place.lat === 'number' && typeof place.lng === 'number') {
         const dist = calculateDistanceKm(lat, lng, place.lat, place.lng);
         if (dist < minDistanceKm) {
           minDistanceKm = dist;
-          nearestName = place.bengaliName;
+          nearestName = place.bengaliName || place.name || 'গফরগাঁও';
         }
       }
     }
+    // Also check dynamic stands
+    for (const stand of stands) {
+      if (typeof stand.lat === 'number' && typeof stand.lng === 'number') {
+        const dist = calculateDistanceKm(lat, lng, stand.lat, stand.lng);
+        if (dist < minDistanceKm) {
+          minDistanceKm = dist;
+          nearestName = stand.bengaliName || stand.name || 'গফরগাঁও';
+        }
+      }
+    }
+
     return {
       name: nearestName,
       distanceMeters: Math.round(minDistanceKm * 1000)
     };
-  };
+  }, [allAutocompletePlaces, stands]);
 
   // Helper to extract or resolve coordinates for any stand or custom name in Gafargaon
   const getCoordinatesForLocation = (locName: string, isDest = false): { lat: number; lng: number } | null => {
@@ -3280,11 +3297,13 @@ export default function App() {
       return;
     }
 
-    let pickupTitle = passengerPickup.trim() || 'গফরগাঁও পৌরসভা চত্বর';
-    if (isLiveLocationQuery(pickupTitle) && pickupCoords) {
+    let pickupTitle = passengerPickup.trim() || 'আমার লাইভ অবস্থান (GPS)';
+    let landmarkRef = passengerPickupLandmark;
+    if (pickupCoords) {
       const nearest = findNearestLandmark(pickupCoords.lat, pickupCoords.lng);
-      pickupTitle = nearest.name;
-      setPassengerPickup(nearest.name);
+      if (!landmarkRef && nearest.distanceMeters > 40) {
+        landmarkRef = `${nearest.name} (থেকে ~${toBengaliNumber(nearest.distanceMeters)} মিটার দূরে)`;
+      }
     }
     const destTitle = passengerDestination.trim() || 'উপজেলা স্বাস্থ্য কমপ্লেক্স';
 
@@ -3301,6 +3320,7 @@ export default function App() {
       passengerName: passengerProfile.name,
       passengerPhone: passengerProfile.phone,
       pickupPoint: pickupTitle,
+      pickupLandmark: landmarkRef || undefined,
       destination: destTitle,
       category: passengerSelectedVehicle,
       requestedAt: 'এইমাত্র',
@@ -3319,6 +3339,7 @@ export default function App() {
       passengerName: newRequest.passengerName,
       passengerPhone: newRequest.passengerPhone,
       pickupPoint: newRequest.pickupPoint,
+      pickupLandmark: newRequest.pickupLandmark || '',
       destination: newRequest.destination,
       category: newRequest.category,
       distanceKm: newRequest.distanceKm,
@@ -4299,12 +4320,21 @@ export default function App() {
     const dTitle = passengerDestination || driver.standName || 'উপজেলা স্বাস্থ্য কমপ্লেক্স';
     const validFare = (estFare && estFare > 0) ? estFare : (categories.find(c => c.id === driver.category)?.baseFare || 40);
 
+    let landmarkRef = passengerPickupLandmark;
+    if (!landmarkRef && pLat && pLng) {
+      const nearest = findNearestLandmark(pLat, pLng);
+      if (nearest.distanceMeters > 40) {
+        landmarkRef = `${nearest.name} (থেকে ~${toBengaliNumber(nearest.distanceMeters)} মিটার দূরে)`;
+      }
+    }
+
     // Automatically dispatch live passenger request to Driver Cockpit (saved to localStorage & Firestore)
     const newRideRequest: PassengerRideRequest = {
       id: `req-${Date.now()}`,
       passengerName: passengerProfile.name || 'সম্মানিত যাত্রী',
       passengerPhone: passengerProfile.phone || '০১৭১১-২২৩৩৪৪',
       pickupPoint: pTitle,
+      pickupLandmark: landmarkRef || undefined,
       destination: dTitle,
       category: driver.category,
       requestedAt: 'এইমাত্র',
@@ -4341,6 +4371,7 @@ export default function App() {
       fare: validFare,
       otp: String(Math.floor(1000 + Math.random() * 9000)),
       pickupTitle: pTitle,
+      pickupLandmark: landmarkRef || undefined,
       destTitle: dTitle
     });
 
@@ -5320,56 +5351,78 @@ export default function App() {
                   {/* Route Selector: Pickup & Destination with Autocomplete & Swap Button */}
                   <div className="grid grid-cols-1 md:grid-cols-[1fr_auto_1fr] items-center gap-2 bg-slate-50 p-2.5 sm:p-3 rounded-xl border border-slate-200">
                     
-                    {/* PICKUP POINT WITH AUTOCOMPLETE */}
-                    <LocationAutocomplete
-                      label="শুরুর অবস্থান (পিকআপ):"
-                      isPickup={true}
-                      value={passengerPickup}
-                      places={allAutocompletePlaces}
-                      isGpsActive={liveGps.isTracking || isLiveLocationQuery(passengerPickup)}
-                      userGps={liveGps}
-                      onLocateGps={() => {
-                        startGpsTracking();
-                        if (liveGps.lat && liveGps.lng) {
-                          const lat = liveGps.lat;
-                          const lng = liveGps.lng;
-                          const resolvedName = getNearestLocationName(lat, lng);
-                          setPassengerLocation({ lat, lng, isLiveGps: true });
-                          setPassengerPickup(resolvedName);
-                          setPickupCoords({ lat, lng });
-                          showAdminToastMessage(`📍 নিকটতম স্থান: ${resolvedName} (সঠিকতা: ±${Math.round(liveGps.accuracy || 10)} মি.)`);
-                          return;
-                        }
-                        if ('geolocation' in navigator) {
-                          navigator.geolocation.getCurrentPosition(
-                            (pos) => {
-                              const lat = pos.coords.latitude;
-                              const lng = pos.coords.longitude;
-                              const accuracy = pos.coords.accuracy || 10;
-                              const resolvedName = getNearestLocationName(lat, lng);
-                              setPassengerLocation({ lat, lng, isLiveGps: true });
-                              setPassengerPickup(resolvedName);
-                              setPickupCoords({ lat, lng });
-                              showAdminToastMessage(`📍 নিকটতম স্থান: ${resolvedName} (সঠিকতা: ±${Math.round(accuracy)} মি.)`);
-                            },
-                            () => {
-                              showAdminToastMessage('GPS লোকেশন পাওয়া যায়নি, ম্যানুয়ালি বাছুন');
-                            },
-                            { enableHighAccuracy: true, timeout: 8000 }
-                          );
-                        }
-                      }}
-                      onChangeLocation={(name, coords) => {
-                        setPassengerPickup(name);
-                        if (coords) {
-                          setPickupCoords(coords);
-                        }
-                        if (isLiveLocationQuery(name)) {
+                    <div className="flex flex-col min-w-0">
+                      <LocationAutocomplete
+                        label="শুরুর অবস্থান (পিকআপ):"
+                        isPickup={true}
+                        value={passengerPickup}
+                        places={allAutocompletePlaces}
+                        isGpsActive={liveGps.isTracking || isLiveLocationQuery(passengerPickup)}
+                        userGps={liveGps}
+                        onLocateGps={() => {
                           startGpsTracking();
-                        }
-                      }}
-                      placeholder="পিকআপ স্ট্যান্ড বা এলাকা খুঁজুন..."
-                    />
+                          const handleLocated = (lat: number, lng: number, accuracy: number) => {
+                            setPassengerLocation({ lat, lng, isLiveGps: true });
+                            setPickupCoords({ lat, lng });
+                            const nearest = findNearestLandmark(lat, lng);
+                            if (nearest.distanceMeters < 50) {
+                              setPassengerPickup(nearest.name);
+                              setPassengerPickupLandmark('');
+                              showAdminToastMessage(`📍 অবস্থান: ${nearest.name} (সঠিকতা: ±${Math.round(accuracy)} মি.)`);
+                            } else {
+                              setPassengerPickup('আমার লাইভ অবস্থান (GPS)');
+                              const landmarkText = `${nearest.name} (থেকে ~${toBengaliNumber(nearest.distanceMeters)} মিটার দূরে)`;
+                              setPassengerPickupLandmark(landmarkText);
+                              showAdminToastMessage(`📍 লাইভ GPS অবস্থান চিহ্নিত • ২য় অপশন: ${nearest.name} (~${nearest.distanceMeters} মি.)`);
+                            }
+                          };
+
+                          if (liveGps.lat && liveGps.lng) {
+                            handleLocated(liveGps.lat, liveGps.lng, liveGps.accuracy || 10);
+                            return;
+                          }
+                          if ('geolocation' in navigator) {
+                            navigator.geolocation.getCurrentPosition(
+                              (pos) => {
+                                handleLocated(pos.coords.latitude, pos.coords.longitude, pos.coords.accuracy || 10);
+                              },
+                              () => {
+                                showAdminToastMessage('GPS লোকেশন পাওয়া যায়নি, ম্যানুয়ালি বাছুন');
+                              },
+                              { enableHighAccuracy: true, timeout: 8000 }
+                            );
+                          }
+                        }}
+                        onChangeLocation={(name, coords) => {
+                          setPassengerPickup(name);
+                          if (coords) {
+                            setPickupCoords(coords);
+                            const nearest = findNearestLandmark(coords.lat, coords.lng);
+                            if (nearest.distanceMeters > 50) {
+                              setPassengerPickupLandmark(`${nearest.name} (থেকে ~${toBengaliNumber(nearest.distanceMeters)} মিটার দূরে)`);
+                            } else {
+                              setPassengerPickupLandmark('');
+                            }
+                          } else {
+                            setPassengerPickupLandmark('');
+                          }
+                          if (isLiveLocationQuery(name)) {
+                            startGpsTracking();
+                          }
+                        }}
+                        placeholder="পিকআপ স্ট্যান্ড বা এলাকা খুঁজুন..."
+                      />
+
+                      {/* 2nd Option: Nearest Known Landmark Reference Banner */}
+                      {passengerPickupLandmark && (
+                        <div className="mt-1 flex items-center gap-1.5 text-[10.5px] bg-emerald-50 text-emerald-900 border border-emerald-200/90 px-2 py-0.5 rounded-lg overflow-hidden min-w-0 animate-in fade-in">
+                          <span className="shrink-0 font-extrabold text-[9px] bg-emerald-200/80 text-emerald-950 px-1 rounded">২য় পরিচিত রেফারেন্স:</span>
+                          <div className="min-w-0 flex-1 overflow-hidden">
+                            <PauseMarqueeText text={passengerPickupLandmark} className="text-[10.5px] font-bold text-emerald-900" pauseSec={1.5} />
+                          </div>
+                        </div>
+                      )}
+                    </div>
 
                     {/* SWAP BUTTON */}
                     <div className="flex justify-center md:pt-4">
@@ -5858,6 +5911,14 @@ export default function App() {
                                   <PauseMarqueeText text={driverActiveTrip.pickupPoint} className="text-[11px] font-bold text-white" pauseSec={1.5} />
                                 </div>
                               </div>
+                              {driverActiveTrip.pickupLandmark && (
+                                <div className="flex items-center gap-1 text-[10px] text-amber-200 bg-amber-500/15 px-1.5 py-0.5 rounded border border-amber-400/25 min-w-0">
+                                  <span className="shrink-0 text-amber-300 font-extrabold text-[9px] bg-amber-400/20 px-1 py-0.2 rounded">২য় পরিচিত রেফারেন্স:</span>
+                                  <div className="min-w-0 flex-1 overflow-hidden">
+                                    <PauseMarqueeText text={driverActiveTrip.pickupLandmark} className="text-[10px] font-bold text-amber-100" pauseSec={1.5} />
+                                  </div>
+                                </div>
+                              )}
                               <div className="flex items-center gap-1.5 text-[11px] min-w-0">
                                 <Navigation className="w-3.5 h-3.5 text-blue-400 shrink-0" />
                                 <span className="shrink-0 text-blue-300 font-bold">গন্তব্য:</span>
@@ -6014,6 +6075,7 @@ export default function App() {
                                 destLat: (driverActiveTrip as any).destCoords?.lat || destCoords?.lat || resolveLocationCoordinates(driverActiveTrip.destination, true, stands)?.lat || 24.4515,
                                 destLng: (driverActiveTrip as any).destCoords?.lng || destCoords?.lng || resolveLocationCoordinates(driverActiveTrip.destination, true, stands)?.lng || 90.5535,
                                 pickupTitle: driverActiveTrip.pickupPoint || 'পিকআপ স্থান',
+                                pickupLandmark: driverActiveTrip.pickupLandmark || '',
                                 destTitle: driverActiveTrip.destination || 'গন্তব্য স্থান',
                                 distanceKm: driverActiveTrip.distanceKm || 1.2,
                                 etaMinutes: Math.round((driverActiveTrip.distanceKm || 1.2) * 2.5),
@@ -6084,15 +6146,27 @@ export default function App() {
                           </div>
 
                           <div className="text-xs space-y-1 mb-3 bg-slate-50 p-2 rounded-lg border border-slate-100">
-                            <div className="flex items-center gap-1.5 text-slate-700">
+                            <div className="flex items-center gap-1.5 text-slate-700 min-w-0">
                               <MapPin className="w-3 h-3 text-emerald-600 shrink-0" />
-                              <span className="text-slate-500 text-[11px]">পিকআপ:</span>
-                              <b className="truncate text-[11px]">{req.pickupPoint}</b>
+                              <span className="text-slate-500 text-[11px] shrink-0">পিকআপ:</span>
+                              <div className="min-w-0 flex-1 overflow-hidden">
+                                <PauseMarqueeText text={req.pickupPoint} className="text-[11px] font-bold text-slate-800" pauseSec={1.5} />
+                              </div>
                             </div>
-                            <div className="flex items-center gap-1.5 text-slate-700">
+                            {req.pickupLandmark && (
+                              <div className="flex items-center gap-1 text-[10px] text-amber-800 bg-amber-50 px-1.5 py-0.5 rounded border border-amber-200/80 min-w-0">
+                                <span className="shrink-0 text-amber-700 font-extrabold text-[9px] bg-amber-100 px-1 py-0.2 rounded">২য় পরিচিত রেফারেন্স:</span>
+                                <div className="min-w-0 flex-1 overflow-hidden">
+                                  <PauseMarqueeText text={req.pickupLandmark} className="text-[10px] font-semibold text-amber-900" pauseSec={1.5} />
+                                </div>
+                              </div>
+                            )}
+                            <div className="flex items-center gap-1.5 text-slate-700 min-w-0">
                               <Navigation className="w-3 h-3 text-blue-600 shrink-0" />
-                              <span className="text-slate-500 text-[11px]">গন্তব্য:</span>
-                              <b className="truncate text-[11px]">{req.destination}</b>
+                              <span className="text-slate-500 text-[11px] shrink-0">গন্তব্য:</span>
+                              <div className="min-w-0 flex-1 overflow-hidden">
+                                <PauseMarqueeText text={req.destination} className="text-[11px] font-bold text-slate-800" pauseSec={1.5} />
+                              </div>
                             </div>
                             <div className="flex items-center gap-1.5 text-slate-500 text-[10px] pt-1 border-t border-slate-200/60">
                               <span>দূরত্ব: {req.distanceKm} কিমি</span>

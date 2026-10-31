@@ -1,10 +1,13 @@
 /**
  * Web Audio API based sound synthesizer for Safar app.
- * Generates crisp, realistic notification sounds without external audio assets.
+ * Configured for maximum volume, clarity, and piercing auditory presence
+ * even in noisy roadside/outdoor traffic environments for drivers and passengers.
  */
 
 class SoundEffects {
   private ctx: AudioContext | null = null;
+  private compressor: DynamicsCompressorNode | null = null;
+  private masterGain: GainNode | null = null;
 
   private getContext(): AudioContext | null {
     if (typeof window === 'undefined') return null;
@@ -12,56 +15,53 @@ class SoundEffects {
       const AudioCtx = window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext;
       if (AudioCtx) {
         this.ctx = new AudioCtx();
+        // Create dynamic compressor + master gain for maximum perceived loudness without distortion
+        try {
+          this.compressor = this.ctx.createDynamicsCompressor();
+          this.compressor.threshold.setValueAtTime(-6, this.ctx.currentTime);
+          this.compressor.knee.setValueAtTime(8, this.ctx.currentTime);
+          this.compressor.ratio.setValueAtTime(12, this.ctx.currentTime);
+          this.compressor.attack.setValueAtTime(0.003, this.ctx.currentTime);
+          this.compressor.release.setValueAtTime(0.2, this.ctx.currentTime);
+
+          this.masterGain = this.ctx.createGain();
+          // Maximum safe volume boost (1.0 full scale)
+          this.masterGain.gain.setValueAtTime(1.0, this.ctx.currentTime);
+
+          this.compressor.connect(this.masterGain);
+          this.masterGain.connect(this.ctx.destination);
+        } catch {
+          // Fallback if compressor creation fails
+        }
       }
     }
     if (this.ctx && this.ctx.state === 'suspended') {
-      this.ctx.resume();
+      this.ctx.resume().catch(() => {});
     }
     return this.ctx;
   }
 
+  private getDestinationNode(ctx: AudioContext): AudioNode {
+    return this.compressor || ctx.destination;
+  }
+
   /**
-   * Pleasant ascending 2-tone chime when a driver accepts a passenger ride request.
+   * Safe mobile vibration helper (works on Android Chrome / PWA).
    */
-  playDriverMatchedChime() {
+  private triggerVibration(pattern: number[]) {
     try {
-      const ctx = this.getContext();
-      if (!ctx) return;
-
-      const now = ctx.currentTime;
-      
-      // Note 1: E5 (659.25 Hz)
-      const osc1 = ctx.createOscillator();
-      const gain1 = ctx.createGain();
-      osc1.type = 'sine';
-      osc1.frequency.setValueAtTime(587.33, now); // D5
-      osc1.frequency.exponentialRampToValueAtTime(880, now + 0.15); // A5
-      gain1.gain.setValueAtTime(0.18, now);
-      gain1.gain.exponentialRampToValueAtTime(0.001, now + 0.45);
-      osc1.connect(gain1);
-      gain1.connect(ctx.destination);
-      osc1.start(now);
-      osc1.stop(now + 0.45);
-
-      // Note 2: C#6 (1108.73 Hz) ringing accent
-      const osc2 = ctx.createOscillator();
-      const gain2 = ctx.createGain();
-      osc2.type = 'triangle';
-      osc2.frequency.setValueAtTime(1046.5, now + 0.12); // C6
-      osc2.frequency.exponentialRampToValueAtTime(1318.5, now + 0.28); // E6
-      gain2.gain.setValueAtTime(0.15, now + 0.12);
-      gain2.gain.exponentialRampToValueAtTime(0.001, now + 0.6);
-      osc2.connect(gain2);
-      gain2.connect(ctx.destination);
-      osc2.start(now + 0.12);
-      osc2.stop(now + 0.6);
+      if (typeof window !== 'undefined' && 'navigator' in window && typeof navigator.vibrate === 'function') {
+        navigator.vibrate(pattern);
+      }
     } catch {
-      // Audio playback fails silently if restricted by autoplay policy
+      // Ignore vibration error if not supported/permitted
     }
   }
 
   /**
-   * Driver incoming ride request alert chime.
+   * Driver incoming ride request alert siren/chime.
+   * Maximized for extreme clarity and loudness so motorcycle/auto drivers can hear it over traffic!
+   * Alternates punchy dual-tones (880Hz -> 1318Hz -> 1046Hz) with rich harmonic overtone mix.
    */
   playIncomingRideAlert() {
     try {
@@ -69,25 +69,110 @@ class SoundEffects {
       if (!ctx) return;
 
       const now = ctx.currentTime;
-      for (let i = 0; i < 3; i++) {
-        const osc = ctx.createOscillator();
-        const gain = ctx.createGain();
-        osc.type = 'sine';
-        const startTime = now + i * 0.18;
-        osc.frequency.setValueAtTime(784, startTime); // G5
-        osc.frequency.setValueAtTime(1046.5, startTime + 0.08); // C6
-        gain.gain.setValueAtTime(0.2, startTime);
-        gain.gain.exponentialRampToValueAtTime(0.001, startTime + 0.16);
-        osc.connect(gain);
-        gain.connect(ctx.destination);
-        osc.start(startTime);
-        osc.stop(startTime + 0.16);
-      }
-    } catch {}
+      const targetNode = this.getDestinationNode(ctx);
+
+      // Strong haptic vibration for mobile driver
+      this.triggerVibration([400, 150, 400, 150, 500]);
+
+      // 4 rapid, high-energy alarm pulses (Taxi Dispatch Alarm pattern)
+      const pulses = [
+        { freq1: 880, freq2: 1318.5, delay: 0 },
+        { freq1: 1046.5, freq2: 1567.98, delay: 0.16 },
+        { freq1: 880, freq2: 1318.5, delay: 0.32 },
+        { freq1: 1174.66, freq2: 1760, delay: 0.48 }
+      ];
+
+      pulses.forEach(({ freq1, freq2, delay }) => {
+        const startTime = now + delay;
+        const dur = 0.14;
+
+        // Primary tone: loud triangle wave (cuts through traffic noise with rich odd harmonics)
+        const oscPrimary = ctx.createOscillator();
+        const gainPrimary = ctx.createGain();
+        oscPrimary.type = 'triangle';
+        oscPrimary.frequency.setValueAtTime(freq1, startTime);
+        gainPrimary.gain.setValueAtTime(0.95, startTime);
+        gainPrimary.gain.exponentialRampToValueAtTime(0.01, startTime + dur);
+        oscPrimary.connect(gainPrimary);
+        gainPrimary.connect(targetNode);
+        oscPrimary.start(startTime);
+        oscPrimary.stop(startTime + dur);
+
+        // Secondary ringing overtone (sine wave for bright, piercing bell attack)
+        const oscBell = ctx.createOscillator();
+        const gainBell = ctx.createGain();
+        oscBell.type = 'sine';
+        oscBell.frequency.setValueAtTime(freq2, startTime);
+        gainBell.gain.setValueAtTime(0.85, startTime);
+        gainBell.gain.exponentialRampToValueAtTime(0.01, startTime + dur);
+        oscBell.connect(gainBell);
+        gainBell.connect(targetNode);
+        oscBell.start(startTime);
+        oscBell.stop(startTime + dur);
+      });
+    } catch {
+      // Audio playback fails silently if restricted by autoplay policy
+    }
   }
 
   /**
-   * Trip completed celebration fanfare chime.
+   * Loud, joyful 3-tone chime when a driver accepts a passenger ride request.
+   * Maximized volume (1.0) so passenger clearly hears driver confirmation.
+   */
+  playDriverMatchedChime() {
+    try {
+      const ctx = this.getContext();
+      if (!ctx) return;
+
+      const now = ctx.currentTime;
+      const targetNode = this.getDestinationNode(ctx);
+
+      // Pleasant haptic confirmation vibration
+      this.triggerVibration([250, 100, 250]);
+
+      // Ascending major chord tones: D5 (587.33Hz) -> A5 (880Hz) -> D6 (1174.66Hz) -> F#6 (1479.98Hz)
+      const notes = [
+        { freq: 587.33, start: 0, dur: 0.35, gain: 0.9 },
+        { freq: 880.0, start: 0.12, dur: 0.4, gain: 0.95 },
+        { freq: 1174.66, start: 0.24, dur: 0.55, gain: 1.0 },
+        { freq: 1479.98, start: 0.36, dur: 0.7, gain: 0.95 }
+      ];
+
+      notes.forEach(({ freq, start, dur, gain }) => {
+        const t = now + start;
+
+        // Warm melodic body
+        const osc = ctx.createOscillator();
+        const g = ctx.createGain();
+        osc.type = 'triangle';
+        osc.frequency.setValueAtTime(freq, t);
+        g.gain.setValueAtTime(gain, t);
+        g.gain.exponentialRampToValueAtTime(0.005, t + dur);
+        osc.connect(g);
+        g.connect(targetNode);
+        osc.start(t);
+        osc.stop(t + dur);
+
+        // Sparkling bell overtone
+        const bell = ctx.createOscillator();
+        const gBell = ctx.createGain();
+        bell.type = 'sine';
+        bell.frequency.setValueAtTime(freq * 2, t);
+        gBell.gain.setValueAtTime(gain * 0.45, t);
+        gBell.gain.exponentialRampToValueAtTime(0.005, t + (dur * 0.7));
+        bell.connect(gBell);
+        gBell.connect(targetNode);
+        bell.start(t);
+        bell.stop(t + (dur * 0.7));
+      });
+    } catch {
+      // Audio playback fails silently if restricted by autoplay policy
+    }
+  }
+
+  /**
+   * Loud celebration fanfare chime when trip is completed.
+   * Maximized volume (1.0).
    */
   playTripCompletedFanfare() {
     try {
@@ -95,19 +180,31 @@ class SoundEffects {
       if (!ctx) return;
 
       const now = ctx.currentTime;
-      const notes = [523.25, 659.25, 783.99, 1046.5]; // C5, E5, G5, C6
-      notes.forEach((freq, idx) => {
+      const targetNode = this.getDestinationNode(ctx);
+
+      this.triggerVibration([200, 100, 200, 100, 400]);
+
+      // C major triumphal fanfare: C5, E5, G5, C6, E6
+      const chords = [
+        { freq: 523.25, t: 0, dur: 0.2 },
+        { freq: 659.25, t: 0.1, dur: 0.2 },
+        { freq: 783.99, t: 0.2, dur: 0.25 },
+        { freq: 1046.5, t: 0.32, dur: 0.7 },
+        { freq: 1318.5, t: 0.32, dur: 0.7 }
+      ];
+
+      chords.forEach(({ freq, t, dur }) => {
         const osc = ctx.createOscillator();
         const gain = ctx.createGain();
-        osc.type = 'sine';
-        const t = now + idx * 0.1;
-        osc.frequency.setValueAtTime(freq, t);
-        gain.gain.setValueAtTime(0.2, t);
-        gain.gain.exponentialRampToValueAtTime(0.001, t + (idx === 3 ? 0.6 : 0.25));
+        osc.type = 'triangle';
+        const st = now + t;
+        osc.frequency.setValueAtTime(freq, st);
+        gain.gain.setValueAtTime(0.95, st);
+        gain.gain.exponentialRampToValueAtTime(0.005, st + dur);
         osc.connect(gain);
-        gain.connect(ctx.destination);
-        osc.start(t);
-        osc.stop(t + (idx === 3 ? 0.6 : 0.25));
+        gain.connect(targetNode);
+        osc.start(st);
+        osc.stop(st + dur);
       });
     } catch {}
   }

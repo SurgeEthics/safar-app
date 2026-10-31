@@ -9,6 +9,7 @@ export interface DriverIncomingAlertProps {
     passengerName: string;
     passengerPhone: string;
     pickupPoint: string;
+    pickupLandmark?: string;
     destination: string;
     category: string;
     distanceKm: number;
@@ -29,14 +30,20 @@ export const DriverIncomingAlert: React.FC<DriverIncomingAlertProps> = ({
   useEffect(() => {
     if (!request || request.status !== 'pending') return;
 
-    // Play ringing chime alert
+    // Play ringing chime alert immediately at highest volume
     sounds.playIncomingRideAlert();
+
+    // Ring repeating alarm every 2 seconds so driver cannot miss the request
+    const ringInterval = setInterval(() => {
+      sounds.playIncomingRideAlert();
+    }, 2000);
 
     setSecondsRemaining(15);
     const interval = setInterval(() => {
       setSecondsRemaining((prev) => {
         if (prev <= 1) {
           clearInterval(interval);
+          clearInterval(ringInterval);
           onDecline(request.id);
           return 0;
         }
@@ -44,7 +51,10 @@ export const DriverIncomingAlert: React.FC<DriverIncomingAlertProps> = ({
       });
     }, 1000);
 
-    return () => clearInterval(interval);
+    return () => {
+      clearInterval(interval);
+      clearInterval(ringInterval);
+    };
   }, [request?.id]);
 
   if (!request || request.status !== 'pending') return null;
@@ -94,6 +104,14 @@ export const DriverIncomingAlert: React.FC<DriverIncomingAlertProps> = ({
             <div className="min-w-0 w-full overflow-hidden">
               <PauseMarqueeText text={request.pickupPoint} className="text-xs font-bold text-emerald-300" pauseSec={1.5} />
             </div>
+            {request.pickupLandmark && (
+              <div className="flex items-center gap-1 text-[10.5px] text-amber-200 mt-1 bg-amber-500/15 px-2 py-0.5 rounded-lg border border-amber-400/25 min-w-0">
+                <span className="shrink-0 text-amber-300 font-extrabold text-[9px] bg-amber-400/25 px-1 py-0.2 rounded">২য় পরিচিত রেফারেন্স:</span>
+                <div className="min-w-0 flex-1 overflow-hidden">
+                  <PauseMarqueeText text={request.pickupLandmark} className="text-[10.5px] font-bold text-amber-100" pauseSec={1.5} />
+                </div>
+              </div>
+            )}
           </div>
         </div>
 
