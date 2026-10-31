@@ -223,10 +223,16 @@ export const PassengerRideCockpit: React.FC<PassengerRideCockpitProps> = ({
                 </div>
               </div>
 
-              <div className="text-[11px] text-emerald-200/80 mt-2 flex items-center gap-2 flex-wrap">
-                <span>দূরত্ব: <strong className="text-emerald-300 font-bold">{request.distanceKm} কিমি</strong></span>
-                <span>•</span>
-                <span className="truncate">গফরগাঁও পৌরসভা ও সংলগ্ন এলাকায় সক্রিয় চালক অনুসন্ধান চলছে...</span>
+              <div className="text-[11px] text-emerald-200/80 mt-2 flex items-center gap-2 flex-wrap min-w-0">
+                <span className="shrink-0">দূরত্ব: <strong className="text-emerald-300 font-bold">{request.distanceKm} কিমি</strong></span>
+                <span className="shrink-0">•</span>
+                <div className="min-w-0 flex-1 overflow-hidden">
+                  <PauseMarqueeText
+                    text="গফরগাঁও পৌরসভা ও সংলগ্ন এলাকায় সক্রিয় চালক অনুসন্ধান চলছে..."
+                    className="text-[11px] text-emerald-200 font-semibold"
+                    pauseSec={1.5}
+                  />
+                </div>
               </div>
             </div>
           </div>
@@ -256,15 +262,21 @@ export const PassengerRideCockpit: React.FC<PassengerRideCockpitProps> = ({
         <div className="mb-4 rounded-2xl bg-slate-900 text-white border-2 border-emerald-500 shadow-2xl p-4 sm:p-5 animate-in slide-in-from-top-3 relative overflow-hidden">
           {/* Top Status Bar with Dynamic Phase 1 & Phase 2 Badges */}
           <div className="flex flex-col sm:flex-row sm:items-center justify-between pb-3.5 mb-3.5 border-b border-slate-800 gap-2.5">
-            <div className="flex items-center gap-2 flex-wrap">
-              {/* Dynamic Status Badge */}
-              <div className="bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 px-3 py-1 rounded-full text-xs font-bold flex items-center gap-1.5 shadow-sm">
+            <div className="flex items-center gap-2 flex-wrap min-w-0 flex-1">
+              {/* Dynamic Status Badge with 1.5s Pause Marquee (No emojis) */}
+              <div className="bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 px-3 py-1 rounded-full text-xs font-bold flex items-center gap-1.5 shadow-sm max-w-[280px] xs:max-w-[340px] overflow-hidden">
                 <span className="w-2 h-2 rounded-full bg-emerald-400 animate-ping shrink-0" />
-                <span>
-                  {activeBooking.status === 'in_transit'
-                    ? 'গন্তব্যের দিকে যাত্রা চলছে'
-                    : 'চালক আপনার পিকআপের দিকে আসছেন'}
-                </span>
+                <div className="min-w-0 flex-1 overflow-hidden">
+                  <PauseMarqueeText
+                    text={
+                      activeBooking.status === 'in_transit'
+                        ? 'আল্লাহ্র উপর ভরসা করে যাত্রা শুরু করছি...'
+                        : 'পিকআপের দিকে রওনা'
+                    }
+                    className="text-xs font-bold text-emerald-300"
+                    pauseSec={1.5}
+                  />
+                </div>
               </div>
 
               {/* Ride Start Security OTP Code */}
@@ -276,26 +288,16 @@ export const PassengerRideCockpit: React.FC<PassengerRideCockpitProps> = ({
                     setTimeout(() => setCopiedOtp(false), 2000);
                   }
                 }}
-                className="bg-slate-950 text-amber-300 border border-amber-400/60 px-3 py-1 rounded-full text-xs font-mono font-black flex items-center gap-1.5 cursor-pointer hover:bg-slate-800 transition shadow-md"
+                className="bg-slate-950 text-amber-300 border border-amber-400/60 px-3 py-1 rounded-full text-xs font-mono font-black flex items-center gap-1.5 cursor-pointer hover:bg-slate-800 transition shadow-md shrink-0"
                 title="কপি করতে ক্লিক করুন (চালকের সাথে পিন মিলিয়ে গাড়িতে উঠবেন)"
               >
                 <Lock className="w-3 h-3 text-amber-400" />
                 <span>যাত্রা পিন: <b className="text-amber-200 tracking-wider text-sm">{activeBooking.otp || '৫২০১'}</b></span>
                 {copiedOtp && <span className="text-[10px] text-emerald-400">✓ কপিড</span>}
               </div>
-
-              {/* Live ETA & Distance Remaining */}
-              <div className="bg-slate-950/90 text-slate-200 border border-slate-700/80 px-3 py-1 rounded-full text-xs font-bold flex items-center gap-1.5 shadow-xs">
-                <Clock className="w-3.5 h-3.5 text-amber-400 shrink-0" />
-                <span>
-                  {activeBooking.status === 'in_transit'
-                    ? `গন্তব্যে বাকি: ~${toBengaliNumber(activeBooking.etaMinutes || 3)} মিনিট (${toBengaliNumber(activeBooking.distanceKm || 1.2)} কিমি)`
-                    : `বাকি: ${toBengaliNumber(activeBooking.etaMinutes || 4)} মিনিট (${toBengaliNumber(activeBooking.distanceKm || 1.5)} কিমি)`}
-                </span>
-              </div>
             </div>
 
-            <div className="flex items-center gap-2 text-xs">
+            <div className="flex items-center gap-2 text-xs shrink-0">
               <span className="text-slate-400">মোট ভাড়া:</span>
               <span className="text-lg font-black text-amber-300 bg-slate-950 px-2.5 py-0.5 rounded-lg border border-amber-400/40">
                 ৳ {activeBooking.fare && activeBooking.fare > 0 ? activeBooking.fare : 40}
@@ -416,7 +418,7 @@ export const PassengerRideCockpit: React.FC<PassengerRideCockpitProps> = ({
                 <span>ম্যাপে ট্র্যাক</span>
               </button>
 
-              {activeBooking.status === 'en_route' && (
+              {activeBooking.status !== 'in_transit' ? (
                 <button
                   type="button"
                   onClick={onStartRide}
@@ -425,9 +427,7 @@ export const PassengerRideCockpit: React.FC<PassengerRideCockpitProps> = ({
                   <Check className="w-4 h-4" />
                   <span>গাড়িতে উঠেছি</span>
                 </button>
-              )}
-
-              {activeBooking.status !== 'en_route' && (
+              ) : (
                 <button
                   type="button"
                   onClick={handleFinishAndShowReview}

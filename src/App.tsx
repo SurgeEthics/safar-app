@@ -5339,13 +5339,17 @@ export default function App() {
                           <span className="w-7 h-7 rounded-lg bg-amber-500 text-slate-950 flex items-center justify-center shrink-0 shadow-xs group-hover:bg-amber-600 transition">
                             <Car className="w-4 h-4 text-slate-950" />
                           </span>
-                          <div className="truncate">
-                            <span className="font-extrabold text-xs sm:text-sm text-amber-950 block leading-tight">
-                              যানবাহন ও ভাড়ার তালিকা
-                            </span>
-                            <span className="text-[10px] text-amber-800 font-semibold block leading-tight">
-                              বাহন অনুযায়ী নির্ধারিত ভাড়ার রেট
-                            </span>
+                          <div className="min-w-0 flex-1 overflow-hidden">
+                            <PauseMarqueeText
+                              text="যানবাহন ও ভাড়ার তালিকা"
+                              className="font-extrabold text-xs sm:text-sm text-amber-950 block leading-tight"
+                              pauseSec={1.5}
+                            />
+                            <PauseMarqueeText
+                              text="বাহন অনুযায়ী নির্ধারিত ভাড়ার রেট"
+                              className="text-[10px] text-amber-800 font-semibold block leading-tight mt-0.5"
+                              pauseSec={1.5}
+                            />
                           </div>
                         </div>
 
@@ -5714,16 +5718,21 @@ export default function App() {
                   return (
                     <div className="bg-gradient-to-br from-emerald-950 via-slate-900 to-teal-950 text-white rounded-3xl p-4 sm:p-5 border-2 border-emerald-400 shadow-xl mb-3.5 animate-in fade-in">
                       <div className="flex items-center justify-between pb-3 mb-3 border-b border-emerald-800/60 flex-wrap gap-2">
-                        <div className="flex items-center gap-2">
-                          <span className="w-3 h-3 rounded-full bg-emerald-400 animate-ping"></span>
-                          <span className="bg-emerald-500 text-slate-950 font-black text-xs px-2.5 py-0.5 rounded-full uppercase tracking-wider">
-                            চলমান ট্রিপ (Active Trip)
-                          </span>
-                          <span className="text-xs text-emerald-300 font-bold hidden sm:inline">
-                            যাত্রীর কাছে রওনা দিন
-                          </span>
+                        <div className="flex items-center gap-2 min-w-0 flex-1">
+                          <span className="w-3 h-3 rounded-full bg-emerald-400 animate-ping shrink-0"></span>
+                          <div className="min-w-0 flex-1 max-w-[280px] xs:max-w-[340px] overflow-hidden">
+                            <PauseMarqueeText
+                              text={
+                                (driverActiveTrip as any).status === 'in_transit'
+                                  ? 'আল্লাহ্র উপর ভরসা করে যাত্রা শুরু করছি...'
+                                  : 'পিকআপের দিকে রওনা'
+                              }
+                              className="text-xs font-bold text-emerald-300"
+                              pauseSec={1.5}
+                            />
+                          </div>
                         </div>
-                        <div className="flex items-center gap-2">
+                        <div className="flex items-center gap-2 shrink-0">
                           <span className="bg-amber-400 text-slate-950 font-black text-xs px-2.5 py-0.5 rounded-md">
                             নির্ধারিত ভাড়া: ৳ {driverActiveTrip.estFare}
                           </span>
@@ -7841,10 +7850,12 @@ export default function App() {
 
                           return (
                             <div className="flex items-center justify-between pt-1.5 border-t border-slate-100 text-[11px] gap-2">
-                              <div className="text-slate-600 min-w-0 flex-1 truncate">
-                                <span className="font-medium text-slate-700">{cleanModel}</span>
-                                <span className="text-slate-400 mx-1">•</span>
-                                <span className="font-bold text-slate-900 whitespace-nowrap inline-block">{cleanPlate}</span>
+                              <div className="min-w-0 flex-1 overflow-hidden">
+                                <PauseMarqueeText
+                                  text={`${cleanModel} • ${cleanPlate}`}
+                                  className="text-[11px] font-bold text-slate-800"
+                                  pauseSec={1.5}
+                                />
                               </div>
                               <a
                                 href={`tel:${trip.driverPhone}`}

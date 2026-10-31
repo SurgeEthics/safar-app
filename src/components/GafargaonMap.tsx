@@ -25,6 +25,7 @@ import { Stand, Driver, VehicleCategory } from '../types';
 import { LiveDriverLocation, LivePassengerLocation } from '../services/liveLocationService';
 import { toBengaliNumber, calculateDistanceKm } from '../utils/calculator';
 import { AutoMarqueeText } from './AutoMarqueeText';
+import { PauseMarqueeText } from './PauseMarqueeText';
 
 interface GafargaonMapProps {
   // Static/Fallback drivers & stands
@@ -605,29 +606,6 @@ export const GafargaonMap: React.FC<GafargaonMapProps> = ({
                   ${catDetails.symbol}
                 </div>
               `}
-            </div>
-
-            <!-- BOTTOM BADGE: Phase 1 (চালক আসছে) vs Phase 2 (গন্তব্যের দিকে যাত্রা চলছে) -->
-            <div style="
-              position: absolute;
-              bottom: -19px;
-              left: 50%;
-              transform: translateX(-50%);
-              background: ${isInTransit ? '#064e3b' : '#0f172a'};
-              color: ${isInTransit ? '#a7f3d0' : '#facc15'};
-              font-size: 9.5px;
-              font-weight: 800;
-              white-space: nowrap;
-              padding: 1.5px 7px;
-              border-radius: 10px;
-              border: 1px solid ${isInTransit ? '#34d399' : '#facc15'};
-              box-shadow: 0 2px 5px rgba(0,0,0,0.5);
-              display: flex;
-              align-items: center;
-              gap: 3px;
-            ">
-              <span style="display:inline-block; width:5px; height:5px; border-radius:50%; background:${isInTransit ? '#34d399' : '#facc15'}; animation: pulse 1s infinite;"></span>
-              ${isInTransit ? 'গন্তব্যের দিকে যাত্রা চলছে' : 'চালক আসছে'}
             </div>
           </div>
         `,
@@ -1285,9 +1263,21 @@ export const GafargaonMap: React.FC<GafargaonMapProps> = ({
               style={{ textShadow: '0 1px 3px rgba(0,0,0,0.95)' }}
             >
               <div className="flex items-center justify-between gap-1 mb-1">
-                <div className="flex items-center gap-1.5 text-emerald-400 font-extrabold text-[11px] truncate">
+                <div className="flex items-center gap-1.5 text-emerald-400 font-extrabold text-[11px] min-w-0 flex-1 overflow-hidden">
                   <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse shrink-0"></span>
-                  <span className="truncate">{activeBooking ? (isInTransit ? 'গন্তব্যের দিকে চলমান রাইড' : 'চালক পিকআপে আসছেন') : 'রুট প্ল্যান ও নির্ভুল দূরত্ব'}</span>
+                  <div className="min-w-0 flex-1 overflow-hidden">
+                    <PauseMarqueeText
+                      text={
+                        activeBooking
+                          ? (isInTransit
+                              ? 'আল্লাহ্র উপর ভরসা করে যাত্রা শুরু করছি...'
+                              : 'পিকআপের দিকে রওনা')
+                          : 'রুট প্ল্যান ও নির্ভুল দূরত্ব'
+                      }
+                      className="text-[11px] font-extrabold text-emerald-400"
+                      pauseSec={1.5}
+                    />
+                  </div>
                 </div>
                 <div className="flex items-center gap-0.5 shrink-0">
                   <button
@@ -1328,13 +1318,18 @@ export const GafargaonMap: React.FC<GafargaonMapProps> = ({
                 )}
               </div>
 
-              {/* Marquee Animated Full Route text */}
+              {/* Dynamic Route Info with PauseMarqueeText (Phase 1: চালক ➔ পিকআপ vs Phase 2: পিকআপ ➔ গন্তব্য) */}
               <div className="border-t border-white/20 pt-1.5 overflow-hidden w-full">
-                <AutoMarqueeText
-                  text={`A: ${effectivePickup} ➔ B: ${effectiveDest}`}
+                <PauseMarqueeText
+                  text={
+                    activeBooking
+                      ? (isInTransit
+                          ? `পিকআপ: ${effectivePickup} ➔ গন্তব্য: ${effectiveDest}`
+                          : `চালক ➔ পিকআপ: ${effectivePickup}`)
+                      : `পিকআপ (A): ${effectivePickup} ➔ গন্তব্য (B): ${effectiveDest}`
+                  }
                   className="text-[10.5px] font-bold text-slate-100"
-                  speed={32}
-                  pauseAtEndMs={1500}
+                  pauseSec={1.5}
                 />
               </div>
 
