@@ -461,10 +461,10 @@ export const PassengerRideCockpit: React.FC<PassengerRideCockpitProps> = ({
               <button
                 type="button"
                 onClick={onCancelBooking}
-                className="inline-flex items-center gap-1 bg-slate-800 hover:bg-red-600 text-slate-300 hover:text-white px-3 py-2 rounded-xl text-xs font-semibold cursor-pointer transition"
+                className="inline-flex items-center gap-1.5 bg-red-600 hover:bg-red-500 text-white font-bold px-3.5 py-2 rounded-xl text-xs sm:text-sm shadow-md cursor-pointer transition active:scale-95 shrink-0"
                 title="ট্রিপ বাতিল করুন"
               >
-                <X className="w-3.5 h-3.5" />
+                <X className="w-4 h-4 stroke-[2.5]" />
                 <span>বাতিল</span>
               </button>
             </div>

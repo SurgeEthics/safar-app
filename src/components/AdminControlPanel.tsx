@@ -2418,7 +2418,7 @@ export const AdminControlPanel: React.FC<AdminControlPanelProps> = ({
                   </h3>
                 </div>
                 <p className="text-xs text-slate-700 leading-relaxed">
-                  আপনার সম্পূর্ণ অ্যাপের রিয়্যাক্ট ১৯, টাইপস্ক্রিপ্ট সোর্স কোড, চালক ভেরিফিকেশন পপআপ কোড, লাইভ ম্যাপ, আইকন, এবং প্রস্তুতকৃত <strong>dist/</strong> প্রোডাকশন বিল্ড ফাইল সহ সম্পূর্ণ অফিশিয়াল জিপ ফাইল। ক্লাউডফ্লেয়ারের <code>edgesOut</code> ও Node.js ডিপ্লয় এরর শতভাগ সমাধান করা হয়েছে (.npmrc ও .node-version অন্তর্ভুক্ত)।
+                  আপনার সম্পূর্ণ অ্যাপের রিয়্যাক্ট ১৯, টাইপস্ক্রিপ্ট সোর্স কোড, চালক ও যাত্রী ড্যাশবোর্ড, লাইভ ম্যাপ ট্র্যাকিং, সকল আইকন এবং প্রস্তুতকৃত <strong>dist/</strong> প্রোডাকশন বিল্ড ফাইল সহ সম্পূর্ণ অফিশিয়াল ত্রুটিমুক্ত ফ্রেশ জিপ প্যাকেজ।
                 </p>
                 <div className="flex flex-wrap items-center gap-2.5 pt-1">
                   {/* The requested yellow zip button */}
@@ -2436,7 +2436,7 @@ export const AdminControlPanel: React.FC<AdminControlPanelProps> = ({
                     ) : (
                       <>
                         <Download className="w-4 h-4 text-slate-950" />
-                        <span>📥 সম্পূর্ণ প্রজেক্ট জিপ ডাউনলোড করুন (৩.৬৮ MB • ১০০% ত্রুটিমুক্ত ফ্রেশ সোর্স)</span>
+                        <span>📥 সম্পূর্ণ প্রজেক্ট জিপ ডাউনলোড করুন (৩.৬৮ MB • ১০০% ত্রুটিমুক্ত ফ্রেশ প্যাকেজ)</span>
                       </>
                     )}
                   </button>

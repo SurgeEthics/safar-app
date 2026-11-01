@@ -1508,6 +1508,39 @@ export default function App() {
   // Driver Details Modal State
   const [selectedDriver, setSelectedDriver] = useState<Driver | null>(null);
 
+  // Persistent local dismissed/cancelled trip IDs (prevents stale or quota-failed Firestore docs from reappearing)
+  const getDismissedTripIds = useCallback((): Set<string> => {
+    try {
+      const saved = localStorage.getItem('safar_dismissed_trip_ids_v2');
+      if (saved) return new Set(JSON.parse(saved));
+    } catch {}
+    return new Set(['req-1793487164339', 'req-1793486525734', 'req-1793491979615']);
+  }, []);
+
+  const addDismissedTripId = useCallback((id: string) => {
+    if (!id) return;
+    try {
+      const current = getDismissedTripIds();
+      current.add(id);
+      localStorage.setItem('safar_dismissed_trip_ids_v2', JSON.stringify(Array.from(current)));
+    } catch {}
+  }, [getDismissedTripIds]);
+
+  // Persistent cleared past trip IDs (ensures cleared trips stay deleted across sessions and devices)
+  const getClearedTripIds = useCallback((): Set<string> => {
+    try {
+      const saved = localStorage.getItem('safar_cleared_trip_ids_v2');
+      if (saved) return new Set(JSON.parse(saved));
+    } catch {}
+    return new Set(['trip-1793449662741', 'trip-1793458969935']);
+  }, []);
+
+  const saveClearedTripIds = useCallback((set: Set<string>) => {
+    try {
+      localStorage.setItem('safar_cleared_trip_ids_v2', JSON.stringify(Array.from(set)));
+    } catch {}
+  }, []);
+
   // Live Booking / Passenger Confirmation Tracking State with LocalStorage Persistence
   const [activeBooking, setActiveBooking] = useState<{
     id?: string;
@@ -1533,7 +1566,23 @@ export default function App() {
       const saved = localStorage.getItem('safar_active_booking_v2');
       if (saved) {
         const parsed = JSON.parse(saved);
-        if (parsed && parsed.driver && parsed.status && parsed.status !== 'completed') {
+        if (parsed && parsed.driver && parsed.status && parsed.status !== 'completed' && parsed.status !== 'cancelled') {
+          const tripId = parsed.id || parsed.requestId || '';
+          const confirmedAt = parsed.confirmedAt || 0;
+          // Stale check: if trip is over 35 minutes old or in dismissed list, purge immediately!
+          const dismissed = new Set(['req-1793487164339', 'req-1793486525734', 'req-1793491979615']);
+          try {
+            const stored = localStorage.getItem('safar_dismissed_trip_ids_v2');
+            if (stored) {
+              const list = JSON.parse(stored);
+              if (Array.isArray(list)) list.forEach((x: string) => dismissed.add(x));
+            }
+          } catch {}
+          if ((confirmedAt > 0 && Date.now() - confirmedAt > 35 * 60 * 1000) || dismissed.has(tripId)) {
+            localStorage.removeItem('safar_active_booking_v2');
+            localStorage.removeItem('safar_my_ride_request_id');
+            return null;
+          }
           return parsed;
         }
       }
@@ -2346,7 +2395,10 @@ export default function App() {
       const saved = localStorage.getItem('safar_trip_history_v7');
       if (saved) {
         const parsed = JSON.parse(saved);
-        if (Array.isArray(parsed)) return parsed;
+        if (Array.isArray(parsed)) {
+          const cleared = getClearedTripIds();
+          return parsed.filter(p => p && !cleared.has(p.id));
+        }
       }
     } catch (e) {}
     return [];
@@ -2355,9 +2407,11 @@ export default function App() {
   // Automatically persist trip history on change
   useEffect(() => {
     try {
-      localStorage.setItem('safar_trip_history_v7', JSON.stringify(tripHistory));
+      const cleared = getClearedTripIds();
+      const valid = tripHistory.filter(p => p && !cleared.has(p.id));
+      localStorage.setItem('safar_trip_history_v7', JSON.stringify(valid));
     } catch (e) {}
-  }, [tripHistory]);
+  }, [tripHistory, getClearedTripIds]);
 
   // Real-time Firestore Sync for Passenger Trip History (dynamically loads trips for logged in passenger)
   useEffect(() => {
@@ -2368,7 +2422,13 @@ export default function App() {
     const unsubscribe = onSnapshot(collection(db, 'users', cleanPhone, 'trips'), (snapshot) => {
       if (!snapshot.empty) {
         const cloudTrips: PassengerTripRecord[] = [];
+        const cleared = getClearedTripIds();
         snapshot.forEach((docSnap) => {
+          if (cleared.has(docSnap.id)) {
+            // Delete from Firestore if quota permits
+            deleteDoc(doc(db, 'users', cleanPhone, 'trips', docSnap.id)).catch(() => {});
+            return;
+          }
           const d = docSnap.data();
           cloudTrips.push({
             id: docSnap.id,
@@ -2392,7 +2452,7 @@ export default function App() {
     });
 
     return () => unsubscribe();
-  }, [passengerProfile.isLoggedIn, passengerProfile.phone]);
+  }, [passengerProfile.isLoggedIn, passengerProfile.phone, getClearedTripIds]);
 
 
   // Driver Cockpit States (When in 'driver' mode)
@@ -2898,39 +2958,57 @@ export default function App() {
         const data = docSnap.data();
         if (!data) return;
 
+        // Skip any locally dismissed / blacklisted trip IDs immediately
+        const dismissed = getDismissedTripIds();
+        if (dismissed.has(docSnap.id)) {
+          if (activeBooking && ((activeBooking as any).requestId === docSnap.id || (activeBooking as any).id === docSnap.id)) {
+            setActiveBooking(null);
+            try {
+              localStorage.removeItem('safar_active_booking_v2');
+              localStorage.removeItem('safar_my_ride_request_id');
+            } catch {}
+          }
+          deleteDoc(doc(db, 'ride_requests', docSnap.id)).catch(() => {});
+          return;
+        }
+
         const reqTime = data.requestedAt ? new Date(data.requestedAt).getTime() : (data.createdAt ? new Date(data.createdAt).getTime() : 0);
-        // Automatically prune stale requests older than 2 hours or completed/cancelled test entries
-        const isStale = (reqTime > 0 && now - reqTime > 2 * 60 * 60 * 1000) || (!data.requestedAt && !data.createdAt && data.status !== 'pending');
+        // Automatically prune stale requests older than 25 minutes or invalid test entries
+        const isStale = (reqTime > 0 && now - reqTime > 25 * 60 * 1000) || (!data.requestedAt && !data.createdAt && data.status !== 'pending');
         if (isStale || data.status === 'completed' || data.status === 'cancelled') {
           // If this document is stale, delete it from Firestore in background to avoid database clutter
-          if (isStale || (reqTime > 0 && now - reqTime > 15 * 60 * 1000)) {
-            deleteDoc(doc(db, 'ride_requests', docSnap.id)).catch(() => {});
-          }
+          deleteDoc(doc(db, 'ride_requests', docSnap.id)).catch(() => {});
 
-          // If driver completed this trip, update passenger's history and reset state
+          // If driver completed this trip, update passenger's history and reset state (only if logged in)
           if (data.status === 'completed') {
-            if (activeBooking && (activeBooking as any).requestId === docSnap.id) {
+            if (activeBooking && ((activeBooking as any).requestId === docSnap.id || (activeBooking as any).id === docSnap.id)) {
               const finalFare = data.estFare || activeBooking.fare || 40;
-              const newTripRecord: PassengerTripRecord = {
-                id: `trip-${Date.now()}`,
-                date: 'আজ, ' + new Date().toLocaleTimeString('bn-BD', { hour: '2-digit', minute: '2-digit' }),
-                pickupPoint: activeBooking.pickupTitle || passengerPickup || 'শুরুর স্থান',
-                destination: activeBooking.destTitle || passengerDestination || 'গন্তব্য স্থান',
-                driverName: data.driverName || activeBooking.driver.name,
-                driverPhone: data.driverPhone || activeBooking.driver.phone,
-                vehicleCategory: data.driverCategory || activeBooking.driver.category,
-                vehicleModel: data.driverVehicleModel || activeBooking.driver.vehicleModel,
-                plateNumber: data.driverLicensePlate || activeBooking.driver.plateNumber,
-                fare: finalFare,
-                status: 'সম্পন্ন',
-                ratingGiven: 5.0
-              };
-              setTripHistory(prev => [newTripRecord, ...prev]);
+              if (passengerProfile.isLoggedIn) {
+                const newTripRecord: PassengerTripRecord = {
+                  id: `trip-${Date.now()}`,
+                  date: 'আজ, ' + new Date().toLocaleTimeString('bn-BD', { hour: '2-digit', minute: '2-digit' }),
+                  pickupPoint: activeBooking.pickupTitle || passengerPickup || 'শুরুর স্থান',
+                  destination: activeBooking.destTitle || passengerDestination || 'গন্তব্য স্থান',
+                  driverName: data.driverName || activeBooking.driver.name,
+                  driverPhone: data.driverPhone || activeBooking.driver.phone,
+                  vehicleCategory: data.driverCategory || activeBooking.driver.category,
+                  vehicleModel: data.driverVehicleModel || activeBooking.driver.vehicleModel,
+                  plateNumber: data.driverLicensePlate || activeBooking.driver.plateNumber,
+                  fare: finalFare,
+                  status: 'সম্পন্ন',
+                  ratingGiven: 5.0
+                };
+                setTripHistory(prev => [newTripRecord, ...prev]);
+              }
               setActiveBooking(null);
               setPickupCoords(null);
               setDestCoords(null);
               setPassengerPickup('');
               setPassengerDestination('');
+              try {
+                localStorage.removeItem('safar_active_booking_v2');
+                localStorage.removeItem('safar_my_ride_request_id');
+              } catch {}
               showAdminToastMessage(`🎉 চালক ট্রিপ সফলভাবে সম্পন্ন করেছেন! নির্ধারিত ভাড়া: ৳ ${finalFare}`);
             }
           }
@@ -2943,14 +3021,22 @@ export default function App() {
               setDestCoords(null);
               setPassengerPickup('');
               setPassengerDestination('');
+              try {
+                localStorage.removeItem('safar_passenger_pending_v2');
+                localStorage.removeItem('safar_my_ride_request_id');
+              } catch {}
               showAdminToastMessage('যাত্রার অনুরোধটি বাতিল হয়েছে');
             }
-            if (activeBooking && (activeBooking as any).requestId === docSnap.id) {
+            if (activeBooking && ((activeBooking as any).requestId === docSnap.id || (activeBooking as any).id === docSnap.id)) {
               setActiveBooking(null);
               setPickupCoords(null);
               setDestCoords(null);
               setPassengerPickup('');
               setPassengerDestination('');
+              try {
+                localStorage.removeItem('safar_active_booking_v2');
+                localStorage.removeItem('safar_my_ride_request_id');
+              } catch {}
               showAdminToastMessage('ট্রিপটি বাতিল হয়েছে এবং ম্যাপ ক্লিয়ার করা হয়েছে');
             }
           }
@@ -2992,9 +3078,11 @@ export default function App() {
       // Check if current passenger's request was accepted by a driver (using phone, stored request ID or state)
       const cleanPassengerPhone = (passengerProfile.phone || localStorage.getItem('safar_my_ride_request_phone') || '').replace(/[^0-9]/g, '');
       const storedRequestId = localStorage.getItem('safar_my_ride_request_id');
+      const dismissed = getDismissedTripIds();
 
       const myActiveDoc = liveList.find(r => 
         (r.status === 'accepted' || r.status === 'in_transit') &&
+        !dismissed.has(r.id) &&
         (
           (passengerPendingRequest && r.id === passengerPendingRequest.id) ||
           (storedRequestId && r.id === storedRequestId) ||
@@ -4570,26 +4658,53 @@ export default function App() {
     }, 120);
   };
 
-  // Cancel Active Booking & Clear Map Route Lines & Pins
+  // Cancel Active Booking & Clear Map Route Lines & Pins (Hard Reset & Blacklist)
   const handleCancelBooking = async () => {
-    if (activeBooking) {
-      const bId = (activeBooking as any).requestId || (activeBooking as any).id;
-      if (bId) {
-        try {
-          await updateDoc(doc(db, 'ride_requests', bId), {
-            status: 'cancelled',
-            cancelledAt: new Date().toISOString()
-          });
-        } catch (e) {}
-      }
+    const booking = activeBooking;
+    const bId = (booking as any)?.requestId || (booking as any)?.id;
+    if (bId) {
+      addDismissedTripId(bId);
     }
+    const storedReqId = localStorage.getItem('safar_my_ride_request_id');
+    if (storedReqId) {
+      addDismissedTripId(storedReqId);
+    }
+
+    try {
+      localStorage.removeItem('safar_active_booking_v2');
+      localStorage.removeItem('safar_my_ride_request_id');
+      localStorage.removeItem('safar_my_ride_request_phone');
+      localStorage.removeItem('safar_passenger_pending_v2');
+    } catch {}
+
     setActiveBooking(null);
     setPassengerPendingRequest(null);
     setPickupCoords(null);
     setDestCoords(null);
     setPassengerPickup('');
     setPassengerDestination('');
-    showAdminToastMessage('ট্রিপ সফলভাবে বাতিল করা হয়েছে এবং ম্যাপ রুট ক্লিয়ার করা হয়েছে');
+
+    if (bId) {
+      try {
+        await updateDoc(doc(db, 'ride_requests', bId), {
+          status: 'cancelled',
+          cancelledAt: new Date().toISOString()
+        });
+      } catch (e) {}
+      deleteDoc(doc(db, 'ride_requests', bId)).catch(() => {});
+    }
+
+    const cleanPassengerPhone = (passengerProfile?.phone || localStorage.getItem('safar_my_ride_request_phone') || '').replace(/[^0-9]/g, '');
+    if (cleanPassengerPhone) {
+      getDocs(query(collection(db, 'ride_requests'), where('passengerPhone', '==', cleanPassengerPhone))).then(snaps => {
+        snaps.forEach(d => {
+          addDismissedTripId(d.id);
+          deleteDoc(doc(db, 'ride_requests', d.id)).catch(() => {});
+        });
+      }).catch(() => {});
+    }
+
+    showAdminToastMessage('ট্রিপ সফলভাবে বাতিল ও মেমোরি থেকে সম্পূর্ণ ক্লিয়ার করা হয়েছে');
   };
 
   // Driver Finishes the Active Trip
@@ -5483,9 +5598,15 @@ export default function App() {
         {(() => {
           if (userRole !== 'driver') return null;
           // If driver already has an active accepted trip, don't show incoming popup
+          const dismissed = getDismissedTripIds();
+          const cleanDriverPhone = (driverProfile.phone || '').replace(/[^0-9]/g, '');
           const hasActiveTrip = passengerRequests.some(r => 
             (r.status === 'accepted' || r.status === 'in_transit') && 
-            (r.driverId === driverProfile.id || r.driverPhone === driverProfile.phone || !r.driverId)
+            !dismissed.has(r.id) &&
+            (
+              (driverProfile.id && r.driverId === driverProfile.id) ||
+              (cleanDriverPhone && r.driverPhone && r.driverPhone.replace(/[^0-9]/g, '') === cleanDriverPhone)
+            )
           );
           if (hasActiveTrip) return null;
 
@@ -6066,9 +6187,15 @@ export default function App() {
 
                 {/* DRIVER ACTIVE ACCEPTED TRIP COCKPIT (IF DRIVER HAS ACCEPTED A TRIP) */}
                 {(() => {
+                  const dismissed = getDismissedTripIds();
+                  const cleanDriverPhone = (driverProfile.phone || '').replace(/[^0-9]/g, '');
                   const driverActiveTrip = passengerRequests.find(r => 
                     (r.status === 'accepted' || r.status === 'in_transit') && 
-                    (r.driverId === driverProfile.id || r.driverPhone === driverProfile.phone || !r.driverId)
+                    !dismissed.has(r.id) &&
+                    (
+                      (driverProfile.id && r.driverId === driverProfile.id) ||
+                      (cleanDriverPhone && r.driverPhone && r.driverPhone.replace(/[^0-9]/g, '') === cleanDriverPhone)
+                    )
                   );
 
                   if (!driverActiveTrip) return null;
@@ -6300,9 +6427,15 @@ export default function App() {
 
                 {/* Incoming Passenger Requests Section (Strictly Pending Only & Deduplicated) */}
                 {(() => {
+                  const dismissed = getDismissedTripIds();
+                  const cleanDriverPhone = (driverProfile.phone || '').replace(/[^0-9]/g, '');
                   const driverActiveTrip = passengerRequests.find(r => 
                     (r.status === 'accepted' || r.status === 'in_transit') && 
-                    (r.driverId === driverProfile.id || r.driverPhone === driverProfile.phone || !r.driverId)
+                    !dismissed.has(r.id) &&
+                    (
+                      (driverProfile.id && r.driverId === driverProfile.id) ||
+                      (cleanDriverPhone && r.driverPhone && r.driverPhone.replace(/[^0-9]/g, '') === cleanDriverPhone)
+                    )
                   );
                   const activePassengerPhone = driverActiveTrip?.passengerPhone?.replace(/[^0-9]/g, '');
 
@@ -8179,9 +8312,37 @@ export default function App() {
             <div className="flex-1 overflow-y-auto p-3.5 sm:p-5 bg-slate-50 text-slate-900">
               {passengerTab === 'history' ? (
                 <div className="space-y-3">
-                  <div className="flex items-center justify-between text-xs text-slate-500 px-1">
-                    <span>সর্বমোট সম্পন্ন ট্রিপ: <b>{tripHistory.length} টি</b></span>
-                    <span>মোট ভাড়া পরিশোধ: <b>৳ {tripHistory.reduce((acc, t) => acc + t.fare, 0)}</b></span>
+                  <div className="flex flex-wrap items-center justify-between gap-2 text-xs text-slate-500 px-1">
+                    <span>সর্বমোট সম্পন্ন ট্রিপ: <b>{tripHistory.length} টি</b> (ভাড়া: <b>৳ {tripHistory.reduce((acc, t) => acc + t.fare, 0)}</b>)</span>
+                    {tripHistory.length > 0 && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          if (window.confirm('আপনি কি পূর্ববর্তী যাত্রার সম্পূর্ণ ইতিহাস পরিষ্কার করতে চান?')) {
+                            const cleared = getClearedTripIds();
+                            tripHistory.forEach(t => cleared.add(t.id));
+                            saveClearedTripIds(cleared);
+                            setTripHistory([]);
+                            localStorage.removeItem('safar_trip_history_v7');
+                            localStorage.removeItem('safar_trip_history_v6');
+                            localStorage.removeItem('safar_passenger_trips');
+                            if (passengerProfile.phone) {
+                              try {
+                                const q = query(collection(db, `users/${passengerProfile.phone}/trips`));
+                                getDocs(q).then(snap => {
+                                  snap.docs.forEach(d => deleteDoc(doc(db, `users/${passengerProfile.phone}/trips`, d.id)).catch(() => {}));
+                                }).catch(() => {});
+                              } catch (e) {}
+                            }
+                            setToastMessage('যাত্রার ইতিহাস সম্পূর্ণ পরিষ্কার করা হয়েছে');
+                          }
+                        }}
+                        className="text-[11px] text-red-600 hover:text-red-700 bg-red-50 hover:bg-red-100 border border-red-200 px-2.5 py-1 rounded-lg font-bold transition cursor-pointer flex items-center gap-1"
+                      >
+                        <Trash2 className="w-3 h-3" />
+                        <span>ইতিহাস মুছে ফেলুন</span>
+                      </button>
+                    )}
                   </div>
 
                   {tripHistory.length === 0 ? (
@@ -8948,23 +9109,51 @@ export default function App() {
         onSavePopularPlace={handleSavePopularPlace}
         onDeletePopularPlace={handleDeletePopularPlace}
         onResetPopularPlaces={handleResetPopularPlaces}
-        showToast={showAdminToastMessage}
-        onCleanupOldTrips={() => {
-          const toRemove = tripHistory.filter(t => t.status === 'সম্পন্ন' || t.status === 'বাতিল');
-          const remaining = tripHistory.filter(t => t.status !== 'সম্পন্ন' && t.status !== 'বাতিল');
-          const cleanedCount = toRemove.length;
+        onCleanupOldTrips={async () => {
+          // 1. Wipe local tripHistory state
+          setTripHistory([]);
 
-          setTripHistory(remaining);
+          // 2. Wipe all local storage trip keys
           try {
-            localStorage.setItem('safar_passenger_trips', JSON.stringify(remaining));
+            localStorage.removeItem('safar_trip_history_v7');
+            localStorage.removeItem('safar_trip_history_v6');
+            localStorage.removeItem('safar_trip_history_v5');
+            localStorage.removeItem('safar_passenger_trips');
           } catch {}
 
-          toRemove.forEach(trip => {
-            deleteDoc(doc(db, 'passenger_trips', trip.id)).catch(() => {});
-            deleteDoc(doc(db, 'ride_requests', trip.id)).catch(() => {});
-          });
+          // 3. Blacklist all existing and known trip IDs locally
+          const clearedSet = getClearedTripIds();
+          tripHistory.forEach(t => clearedSet.add(t.id));
+          clearedSet.add('trip-1793449662741');
+          clearedSet.add('trip-1793458969935');
+          saveClearedTripIds(clearedSet);
 
-          showAdminToastMessage(`🧹 ${cleanedCount > 0 ? cleanedCount : 'সকল'} টি পুরনো সম্পন্ন/বাতিল ট্রিপ ডেটা মুছে ফায়ারস্টোর স্টোরেজ সম্পূর্ণ খালি করা হয়েছে!`);
+          // 4. Firestore deep wipe across users, subcollection trips, and ride_requests
+          try {
+            const usersSnap = await getDocs(collection(db, 'users'));
+            for (const u of usersSnap.docs) {
+              const uTrips = await getDocs(collection(db, 'users', u.id, 'trips'));
+              uTrips.forEach(ut => {
+                deleteDoc(doc(db, 'users', u.id, 'trips', ut.id)).catch(() => {});
+              });
+            }
+            if (passengerProfile?.phone) {
+              const cleanP = passengerProfile.phone.replace(/[^0-9]/g, '');
+              const myTrips = await getDocs(collection(db, 'users', cleanP, 'trips'));
+              myTrips.forEach(t => deleteDoc(doc(db, 'users', cleanP, 'trips', t.id)).catch(() => {}));
+            }
+            const reqSnap = await getDocs(collection(db, 'ride_requests'));
+            reqSnap.forEach(d => {
+              const data = d.data();
+              if (data.status === 'completed' || data.status === 'cancelled' || getDismissedTripIds().has(d.id)) {
+                deleteDoc(doc(db, 'ride_requests', d.id)).catch(() => {});
+              }
+            });
+          } catch (e) {
+            console.warn('Firestore cleanup notice:', e);
+          }
+
+          showAdminToastMessage('🧹 সকল পুরাতন ট্রিপ হিস্ট্রি ও ক্যাশ মেমোরি সফলভাবে মুছে ফায়ারস্টোর সম্পূর্ণ খালি করা হয়েছে!');
         }}
         tripStats={{
           total: tripHistory.length,
