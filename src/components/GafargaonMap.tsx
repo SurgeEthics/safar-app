@@ -68,6 +68,7 @@ interface GafargaonMapProps {
     driverName: string;
     driverPhone: string;
     driverCategory: string;
+    driverPhoto?: string;
     currentDriverLat: number;
     currentDriverLng: number;
     passengerLat: number;

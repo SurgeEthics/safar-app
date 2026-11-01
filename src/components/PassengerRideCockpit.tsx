@@ -33,7 +33,7 @@ export interface PassengerRideCockpitProps {
     category: string;
     distanceKm: number;
     estFare: number;
-    status: 'pending' | 'accepted' | 'declined' | 'completed' | 'cancelled';
+    status: 'pending' | 'accepted' | 'declined' | 'in_transit' | 'completed' | 'cancelled';
   } | null;
   activeBooking: {
     driver: {

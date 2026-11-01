@@ -1,16 +1,18 @@
 /**
- * Authentic Arabic Daf (دف - Duff / ১ মুখ খোলা ঢোল) Sound Synthesizer for Safar.
- * Produces pure acoustic Daf drum percussion (Dum & Tak strokes) with zero melodic/instrumental
- * background music, adhering strictly to traditional frame drum acoustics.
- * Used identically for both Driver and Passenger notification alarms.
+ * Authentic Arabic Daf (دف - Duff / ১ মুখ খোলা ঢোল) Acoustic Percussion Synthesizer for Safar.
+ * Produces pure acoustic Daf drum strikes (DUM & TAK) with zero melodic or instrumental background music.
+ * Used for both Driver and Passenger notification alerts.
+ * Features instant hard-cut stopping with master alarm gain isolation to prevent any audio leakage on Accept.
  */
 
 class SoundEffects {
   private ctx: AudioContext | null = null;
   private compressor: DynamicsCompressorNode | null = null;
   private masterGain: GainNode | null = null;
+  private alarmGain: GainNode | null = null;
   private activeInterval: any = null;
   private activeSources: (AudioNode & { stop?: (when?: number) => void })[] = [];
+  private isAlarmRinging = false;
 
   private getContext(): AudioContext | null {
     if (typeof window === 'undefined') return null;
@@ -19,18 +21,24 @@ class SoundEffects {
       if (AudioCtx) {
         this.ctx = new AudioCtx();
         try {
+          // Dynamic compression for high-punch acoustic drum transients without clipping
           this.compressor = this.ctx.createDynamicsCompressor();
-          this.compressor.threshold.setValueAtTime(-4, this.ctx.currentTime);
+          this.compressor.threshold.setValueAtTime(-3, this.ctx.currentTime);
           this.compressor.knee.setValueAtTime(6, this.ctx.currentTime);
-          this.compressor.ratio.setValueAtTime(14, this.ctx.currentTime);
+          this.compressor.ratio.setValueAtTime(12, this.ctx.currentTime);
           this.compressor.attack.setValueAtTime(0.002, this.ctx.currentTime);
-          this.compressor.release.setValueAtTime(0.15, this.ctx.currentTime);
+          this.compressor.release.setValueAtTime(0.12, this.ctx.currentTime);
 
+          // Dedicated alarm gain for instant 0ms hard mute
+          this.alarmGain = this.ctx.createGain();
+          this.alarmGain.gain.setValueAtTime(1.0, this.ctx.currentTime);
+
+          // Master output gain
           this.masterGain = this.ctx.createGain();
-          // Highest volume output
           this.masterGain.gain.setValueAtTime(1.0, this.ctx.currentTime);
 
-          this.compressor.connect(this.masterGain);
+          this.compressor.connect(this.alarmGain);
+          this.alarmGain.connect(this.masterGain);
           this.masterGain.connect(this.ctx.destination);
         } catch {
           // Fallback
@@ -48,25 +56,46 @@ class SoundEffects {
   }
 
   /**
-   * Stop any active sounds and repeating intervals immediately.
+   * STOP ALL ALARMS IMMEDIATELY (Hard mute on 1st click).
+   * Instantly stops intervals, mutes the alarm gain bus, kills active oscillators, and clears vibration.
    */
   stopAllAlarms() {
+    this.isAlarmRinging = false;
+
+    // 1. Clear any active repeating interval immediately
     if (this.activeInterval) {
       clearInterval(this.activeInterval);
       this.activeInterval = null;
     }
+
+    // 2. Immediately cut the alarm gain bus to 0 to kill any in-flight or scheduled drum hits
+    if (this.alarmGain && this.ctx) {
+      try {
+        this.alarmGain.gain.cancelScheduledValues(this.ctx.currentTime);
+        this.alarmGain.gain.setValueAtTime(0, this.ctx.currentTime);
+      } catch {}
+    }
+
+    // 3. Stop every registered audio source immediately
     try {
       this.activeSources.forEach(s => {
         try {
-          if (typeof s.stop === 'function') s.stop();
+          if (typeof s.stop === 'function') s.stop(0);
         } catch {}
       });
       this.activeSources = [];
     } catch {}
+
+    // 4. Cancel mobile vibration immediately
+    try {
+      if (typeof window !== 'undefined' && 'navigator' in window && typeof navigator.vibrate === 'function') {
+        navigator.vibrate(0);
+      }
+    } catch {}
   }
 
   /**
-   * Safe mobile vibration helper.
+   * Mobile haptic vibration helper.
    */
   private triggerVibration(pattern: number[]) {
     try {
@@ -91,10 +120,10 @@ class SoundEffects {
 
   /**
    * Synthesize an authentic acoustic Daf "DUM" (দুম - deep open bass stroke near center).
-   * Features genuine membrane resonance, decaying low thud, and wooden body acoustics.
+   * Features genuine animal-skin membrane resonance and decaying low thud in wooden frame.
    */
   private playDafDum(ctx: AudioContext, targetNode: AudioNode, startTime: number, volume = 1.0) {
-    // 1. Skin Impact Noise Transient (Attack thud)
+    // 1. Skin Impact Noise Transient (Attack punch)
     try {
       const noiseBuffer = this.createNoiseBuffer(ctx, 0.06);
       const noiseSource = ctx.createBufferSource();
@@ -103,7 +132,7 @@ class SoundEffects {
       noiseFilter.type = 'lowpass';
       noiseFilter.frequency.setValueAtTime(280, startTime);
       const noiseGain = ctx.createGain();
-      noiseGain.gain.setValueAtTime(0.85 * volume, startTime);
+      noiseGain.gain.setValueAtTime(0.9 * volume, startTime);
       noiseGain.gain.exponentialRampToValueAtTime(0.001, startTime + 0.05);
       noiseSource.connect(noiseFilter);
       noiseFilter.connect(noiseGain);
@@ -112,17 +141,17 @@ class SoundEffects {
       this.activeSources.push(noiseSource);
     } catch {}
 
-    // 2. Resonant Membrane Body (Fundamental deep pitch drop 135Hz -> 75Hz)
+    // 2. Resonant Membrane Body (Fundamental deep pitch drop 135Hz -> 72Hz)
     const osc = ctx.createOscillator();
     const gain = ctx.createGain();
     osc.type = 'sine';
     osc.frequency.setValueAtTime(135, startTime);
-    osc.frequency.exponentialRampToValueAtTime(75, startTime + 0.28);
+    osc.frequency.exponentialRampToValueAtTime(72, startTime + 0.28);
 
     gain.gain.setValueAtTime(1.0 * volume, startTime);
     gain.gain.exponentialRampToValueAtTime(0.005, startTime + 0.32);
 
-    // Resonant wooden shell filter
+    // Resonant wooden shell peaking filter
     const frameFilter = ctx.createBiquadFilter();
     frameFilter.type = 'peaking';
     frameFilter.frequency.setValueAtTime(95, startTime);
@@ -140,7 +169,7 @@ class SoundEffects {
 
   /**
    * Synthesize an authentic acoustic Daf "TAK" (তাক - sharp outer frame/rim edge snap).
-   * Crisp, loud skin-edge snap with short acoustic wooden ring.
+   * Crisp, loud skin-edge slap with short acoustic wooden ring.
    */
   private playDafTak(ctx: AudioContext, targetNode: AudioNode, startTime: number, volume = 0.95) {
     // 1. Sharp rim snap noise burst (high bandpass)
@@ -154,7 +183,7 @@ class SoundEffects {
       bandpass.Q.setValueAtTime(2.2, startTime);
 
       const noiseGain = ctx.createGain();
-      noiseGain.gain.setValueAtTime(0.9 * volume, startTime);
+      noiseGain.gain.setValueAtTime(0.95 * volume, startTime);
       noiseGain.gain.exponentialRampToValueAtTime(0.001, startTime + 0.045);
 
       noiseSource.connect(bandpass);
@@ -171,7 +200,7 @@ class SoundEffects {
     osc.frequency.setValueAtTime(540, startTime);
     osc.frequency.exponentialRampToValueAtTime(380, startTime + 0.09);
 
-    gain.gain.setValueAtTime(0.85 * volume, startTime);
+    gain.gain.setValueAtTime(0.9 * volume, startTime);
     gain.gain.exponentialRampToValueAtTime(0.005, startTime + 0.1);
 
     osc.connect(gain);
@@ -192,6 +221,13 @@ class SoundEffects {
       const ctx = this.getContext();
       if (!ctx) return;
 
+      // Re-enable alarm gain in case it was muted
+      if (this.alarmGain) {
+        this.alarmGain.gain.cancelScheduledValues(ctx.currentTime);
+        this.alarmGain.gain.setValueAtTime(1.0, ctx.currentTime);
+      }
+
+      this.isAlarmRinging = true;
       const now = ctx.currentTime;
       const targetNode = this.getDestinationNode(ctx);
 
@@ -217,10 +253,21 @@ class SoundEffects {
   }
 
   /**
-   * Passenger ride confirmation alert: Pure Arabic Daf drum rhythm.
+   * Gentle, brief confirmation sound when passenger gets matched with driver.
+   * Single soft double-tap (200ms) only, NOT the repeating Daf alarm!
    */
   playDriverMatchedChime() {
-    this.playArabicDafAlarm();
+    try {
+      const ctx = this.getContext();
+      if (!ctx) return;
+      if (this.alarmGain) {
+        this.alarmGain.gain.setValueAtTime(1.0, ctx.currentTime);
+      }
+      const now = ctx.currentTime;
+      const targetNode = this.getDestinationNode(ctx);
+      this.playDafDum(ctx, targetNode, now, 0.8);
+      this.playDafTak(ctx, targetNode, now + 0.16, 0.7);
+    } catch {}
   }
 
   /**
@@ -230,6 +277,9 @@ class SoundEffects {
     try {
       const ctx = this.getContext();
       if (!ctx) return;
+      if (this.alarmGain) {
+        this.alarmGain.gain.setValueAtTime(1.0, ctx.currentTime);
+      }
       const now = ctx.currentTime;
       const targetNode = this.getDestinationNode(ctx);
 

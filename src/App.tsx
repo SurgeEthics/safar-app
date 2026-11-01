@@ -132,7 +132,7 @@ export interface PassengerRideRequest {
   requestedAt: string;
   distanceKm: number;
   estFare: number;
-  status: 'pending' | 'accepted' | 'declined' | 'completed' | 'cancelled';
+  status: 'pending' | 'accepted' | 'declined' | 'in_transit' | 'completed' | 'cancelled';
   driverId?: string;
   driverName?: string;
   driverPhone?: string;
@@ -141,6 +141,8 @@ export interface PassengerRideRequest {
   driverLng?: number;
   driverVehicleModel?: string;
   driverLicensePlate?: string;
+  driverPlateNumber?: string;
+  driverPhoto?: string;
   driverRating?: number;
   otp?: string;
   pickupCoords?: { lat: number; lng: number };
@@ -1506,7 +1508,7 @@ export default function App() {
   // Driver Details Modal State
   const [selectedDriver, setSelectedDriver] = useState<Driver | null>(null);
 
-  // Live Booking / Passenger Confirmation Tracking State
+  // Live Booking / Passenger Confirmation Tracking State with LocalStorage Persistence
   const [activeBooking, setActiveBooking] = useState<{
     id?: string;
     requestId?: string;
@@ -1523,9 +1525,31 @@ export default function App() {
     status: 'en_route' | 'arrived' | 'in_transit' | 'completed';
     otp?: string;
     pickupTitle?: string;
+    pickupLandmark?: string;
     destTitle?: string;
     fare?: number;
-  } | null>(null);
+  } | null>(() => {
+    try {
+      const saved = localStorage.getItem('safar_active_booking_v2');
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (parsed && parsed.driver && parsed.status && parsed.status !== 'completed') {
+          return parsed;
+        }
+      }
+    } catch {}
+    return null;
+  });
+
+  useEffect(() => {
+    try {
+      if (activeBooking && activeBooking.status !== 'completed') {
+        localStorage.setItem('safar_active_booking_v2', JSON.stringify(activeBooking));
+      } else {
+        localStorage.removeItem('safar_active_booking_v2');
+      }
+    } catch {}
+  }, [activeBooking]);
 
   // Completed Trip Review & Rating Modal State
   const [completedTripReview, setCompletedTripReview] = useState<{
@@ -2387,6 +2411,8 @@ export default function App() {
     todayEarnings: number;
     driverPhoto?: string;
     isRegistered?: boolean;
+    lat?: number;
+    lng?: number;
   }>(() => {
     try {
       const saved = localStorage.getItem('safar_active_driver_profile_v6');
@@ -2963,10 +2989,21 @@ export default function App() {
       // Update Driver Cockpit list
       setPassengerRequests(liveList);
 
-      // Check if current passenger's pending request was accepted by a driver
-      if (passengerPendingRequest) {
-        const myActiveDoc = liveList.find(r => r.id === passengerPendingRequest.id);
-        if (myActiveDoc && (myActiveDoc.status === 'accepted' || myActiveDoc.status === 'in_transit') && myActiveDoc.driverId) {
+      // Check if current passenger's request was accepted by a driver (using phone, stored request ID or state)
+      const cleanPassengerPhone = (passengerProfile.phone || localStorage.getItem('safar_my_ride_request_phone') || '').replace(/[^0-9]/g, '');
+      const storedRequestId = localStorage.getItem('safar_my_ride_request_id');
+
+      const myActiveDoc = liveList.find(r => 
+        (r.status === 'accepted' || r.status === 'in_transit') &&
+        (
+          (passengerPendingRequest && r.id === passengerPendingRequest.id) ||
+          (storedRequestId && r.id === storedRequestId) ||
+          (cleanPassengerPhone && r.passengerPhone && r.passengerPhone.replace(/[^0-9]/g, '') === cleanPassengerPhone)
+        )
+      );
+
+      if (myActiveDoc && myActiveDoc.driverId) {
+        if (!activeBooking || (activeBooking as any).requestId !== myActiveDoc.id) {
           const matchedDriver: Driver = drivers.find(d => d.id === myActiveDoc.driverId) || {
             id: myActiveDoc.driverId,
             name: myActiveDoc.driverName || 'ভেরিফাইড চালক',
@@ -2996,7 +3033,7 @@ export default function App() {
           setPickupCoords(pCoords);
           setDestCoords(dCoords);
 
-          setActiveBooking({
+          const newBooking = {
             id: myActiveDoc.id,
             requestId: myActiveDoc.id,
             driver: matchedDriver,
@@ -3009,14 +3046,21 @@ export default function App() {
             confirmedAt: Date.now(),
             etaMinutes: Math.max(2, Math.round(myActiveDoc.distanceKm * 2.5)),
             distanceKm: myActiveDoc.distanceKm,
-            status: (myActiveDoc.status === 'in_transit' ? 'in_transit' : 'en_route'),
+            status: (myActiveDoc.status === 'in_transit' ? 'in_transit' : 'en_route') as 'en_route' | 'in_transit',
             otp: myActiveDoc.otp || '5201',
             pickupTitle: myActiveDoc.pickupPoint,
             pickupLandmark: myActiveDoc.pickupLandmark || '',
             destTitle: myActiveDoc.destination,
             fare: myActiveDoc.estFare
-          });
+          };
+
+          setActiveBooking(newBooking);
           setPassengerPendingRequest(null);
+          try {
+            localStorage.setItem('safar_active_booking_v2', JSON.stringify(newBooking));
+            localStorage.removeItem('safar_passenger_pending_v2');
+          } catch {}
+
           try {
             sounds.playDriverMatchedChime();
           } catch {}
@@ -3338,6 +3382,24 @@ export default function App() {
     };
 
     setPassengerPendingRequest(newRequest);
+    try {
+      localStorage.setItem('safar_my_ride_request_id', newRequest.id);
+      localStorage.setItem('safar_my_ride_request_phone', newRequest.passengerPhone);
+      localStorage.setItem('safar_passenger_pending_v2', JSON.stringify(newRequest));
+    } catch {}
+
+    // First purge any older pending requests from this same passenger in Firestore to avoid duplicate clutter
+    getDocs(query(
+      collection(db, 'ride_requests'),
+      where('passengerPhone', '==', newRequest.passengerPhone),
+      where('status', '==', 'pending')
+    )).then((oldSnaps) => {
+      oldSnaps.forEach((d) => {
+        if (d.id !== newRequest.id) {
+          deleteDoc(doc(db, 'ride_requests', d.id)).catch(() => {});
+        }
+      });
+    }).catch(() => {});
 
     // Sync to Firestore for real-time broadcast to all drivers
     setDoc(doc(db, 'ride_requests', newRequest.id), {
@@ -3417,15 +3479,25 @@ export default function App() {
   };
 
   // Driver accepts request (Real-Time Firestore Update)
+  const isAcceptingRef = useRef<{ [id: string]: boolean }>({});
+
   const handleDriverAcceptRequest = async (requestId: string) => {
+    if (isAcceptingRef.current[requestId]) return;
+    isAcceptingRef.current[requestId] = true;
+
     // 1. Immediately stop any ringing Daf alarms
     sounds.stopAllAlarms();
 
-    // 2. Immediately clear passenger pending request from local state & storage
-    setPassengerPendingRequest(null);
-    try {
-      localStorage.removeItem('safar_passenger_pending_v2');
-    } catch {}
+    const targetReq = passengerRequests.find(r => r.id === requestId)
+      || (passengerPendingRequest?.id === requestId ? passengerPendingRequest : null);
+    const targetPassengerPhone = targetReq?.passengerPhone || '';
+
+    // Immediately dismiss alert modal for this request and passenger
+    setDismissedAlertIds(prev => ({
+      ...prev,
+      [requestId]: true,
+      ...(targetPassengerPhone ? { [targetPassengerPhone]: true } : {})
+    }));
 
     if (!liveGps.isTracking) {
       startGpsTracking();
@@ -3476,7 +3548,7 @@ export default function App() {
           isOnline: true,
           vehicleModel: 'সিএনজি',
           licenseNumber: 'BRTA-GAF',
-          plateNumber: drivers[0]?.plateNumber || 'ময়মনসিংহ-থ-১৭-৯০০১',
+          plateNumber: (drivers[0] as any)?.plateNumber || 'ময়মনসিংহ-থ-১৭-৯০০১',
           driverPhoto: '',
           licenseType: 'পেশাদার (Professional)',
           nidNumber: '19886112345678901',
@@ -3490,25 +3562,74 @@ export default function App() {
     const otpCode = String(Math.floor(1000 + Math.random() * 9000));
     const reqRef = doc(db, 'ride_requests', requestId);
 
-    // 3. Optimistically update local passengerRequests immediately on 1st click
+    // 2. Optimistically update local passengerRequests immediately on 1st click
     // so the driver active trip cockpit opens instantly without lag!
-    setPassengerRequests(prev => prev.map(r => r.id === requestId ? {
-      ...r,
-      status: 'accepted',
-      driverId: activeDriver.id,
-      driverName: activeDriver.name,
-      driverPhone: activeDriver.phone,
-      driverCategory: activeDriver.category,
-      driverLat: activeDriver.lat,
-      driverLng: activeDriver.lng,
-      driverVehicleModel: activeDriver.vehicleModel,
-      driverLicensePlate: activeDriver.plateNumber || activeDriver.licenseNumber,
-      driverPlateNumber: activeDriver.plateNumber,
-      driverPhoto: activeDriver.driverPhoto,
-      driverRating: activeDriver.rating,
-      otp: otpCode,
-      acceptedAt: new Date().toISOString()
-    } : r));
+    // And eliminate any duplicate pending requests for this passenger from the waiting list!
+    setPassengerRequests(prev => prev.map(r => {
+      if (r.id === requestId) {
+        return {
+          ...r,
+          status: 'accepted',
+          driverId: activeDriver.id,
+          driverName: activeDriver.name,
+          driverPhone: activeDriver.phone,
+          driverCategory: activeDriver.category,
+          driverLat: activeDriver.lat,
+          driverLng: activeDriver.lng,
+          driverVehicleModel: activeDriver.vehicleModel,
+          driverLicensePlate: activeDriver.plateNumber || activeDriver.licenseNumber,
+          driverPlateNumber: activeDriver.plateNumber,
+          driverPhoto: activeDriver.driverPhoto,
+          driverRating: activeDriver.rating,
+          otp: otpCode,
+          acceptedAt: new Date().toISOString()
+        };
+      }
+      if (targetPassengerPhone && r.passengerPhone === targetPassengerPhone && r.status === 'pending') {
+        return { ...r, status: 'cancelled' };
+      }
+      return r;
+    }));
+
+    // 3. Passenger Side Confirmation: If this device is also the passenger, set activeBooking immediately
+    // so switching back to Passenger Mode NEVER loses the driver confirmation!
+    const cleanTargetPhone = targetPassengerPhone.replace(/[^0-9]/g, '');
+    const cleanPassengerProfilePhone = (passengerProfile?.phone || '').replace(/[^0-9]/g, '');
+    const isThisPassenger = (passengerPendingRequest?.id === requestId) ||
+      (cleanTargetPhone && cleanPassengerProfilePhone && cleanTargetPhone === cleanPassengerProfilePhone);
+
+    if (isThisPassenger) {
+      const pCoords = targetReq?.pickupCoords || resolveLocationCoordinates(targetReq?.pickupPoint || '', false, stands) || { lat: 24.4536, lng: 90.5479 };
+      const dCoords = targetReq?.destCoords || resolveLocationCoordinates(targetReq?.destination || '', true, stands) || { lat: 24.4515, lng: 90.5535 };
+      const newBooking = {
+        id: requestId,
+        requestId: requestId,
+        driver: activeDriver,
+        passengerLat: pCoords.lat,
+        passengerLng: pCoords.lng,
+        destLat: dCoords.lat,
+        destLng: dCoords.lng,
+        currentDriverLat: activeDriver.lat,
+        currentDriverLng: activeDriver.lng,
+        confirmedAt: Date.now(),
+        etaMinutes: Math.max(2, Math.round((targetReq?.distanceKm || 1.2) * 2.5)),
+        distanceKm: targetReq?.distanceKm || 1.2,
+        status: 'en_route' as const,
+        otp: otpCode,
+        pickupTitle: targetReq?.pickupPoint || 'পিকআপ স্থান',
+        pickupLandmark: targetReq?.pickupLandmark || '',
+        destTitle: targetReq?.destination || 'গন্তব্য স্থান',
+        fare: targetReq?.estFare || 40
+      };
+      setActiveBooking(newBooking);
+      setPickupCoords(pCoords);
+      setDestCoords(dCoords);
+      setPassengerPendingRequest(null);
+      try {
+        localStorage.setItem('safar_active_booking_v2', JSON.stringify(newBooking));
+        localStorage.removeItem('safar_passenger_pending_v2');
+      } catch {}
+    }
 
     // 4. Open map & smooth-scroll to Driver Active Trip Cockpit
     setShowDriverInlineMap(true);
@@ -3517,7 +3638,7 @@ export default function App() {
       if (cockpitEl) {
         cockpitEl.scrollIntoView({ behavior: 'smooth', block: 'center' });
       }
-    }, 150);
+    }, 120);
 
     try {
       await runTransaction(db, async (transaction) => {
@@ -3526,6 +3647,9 @@ export default function App() {
           throw new Error('NOT_FOUND');
         }
         const data = sfDoc.data();
+        if (data.status === 'accepted' && (data.driverId === activeDriver.id || data.driverPhone === activeDriver.phone)) {
+          return;
+        }
         if (data.status !== 'pending' && data.driverId !== activeDriver.id) {
           throw new Error('ALREADY_ACCEPTED');
         }
@@ -3547,10 +3671,22 @@ export default function App() {
         });
       });
 
+      // Also clean up any other pending requests from this passenger in Firestore
+      if (targetPassengerPhone) {
+        getDocs(query(
+          collection(db, 'ride_requests'),
+          where('passengerPhone', '==', targetPassengerPhone),
+          where('status', '==', 'pending')
+        )).then((snaps) => {
+          snaps.forEach((d) => {
+            if (d.id !== requestId) {
+              updateDoc(doc(db, 'ride_requests', d.id), { status: 'cancelled', cancelledAt: new Date().toISOString() }).catch(() => {});
+            }
+          });
+        }).catch(() => {});
+      }
+
       showAdminToastMessage(`🎉 ট্রিপ সফলভাবে গ্রহণ করা হয়েছে! যাত্রীর কাছে রওনা দিন।`);
-      try {
-        sounds.playDriverMatchedChime();
-      } catch {}
     } catch (err: any) {
       if (err?.message === 'ALREADY_ACCEPTED') {
         showAdminToastMessage('⚠️ দুঃখিত! অন্য একজন চালক ইতিমধ্যে ট্রিপটি গ্রহণ করেছেন।');
@@ -3570,16 +3706,20 @@ export default function App() {
             driverLat: activeDriver.lat,
             driverLng: activeDriver.lng,
             driverVehicleModel: activeDriver.vehicleModel,
-            driverLicensePlate: activeDriver.licenseNumber,
+            driverLicensePlate: activeDriver.plateNumber || activeDriver.licenseNumber,
             driverRating: activeDriver.rating,
             otp: otpCode,
             acceptedAt: new Date().toISOString()
           });
           showAdminToastMessage('🎉 ট্রিপ সফলভাবে গ্রহণ করা হয়েছে! যাত্রীর কাছে রওনা দিন।');
         } catch (e) {
-          setPassengerRequests(prev => prev.filter(r => r.id !== requestId));
+          // Keep local state
         }
       }
+    } finally {
+      setTimeout(() => {
+        delete isAcceptingRef.current[requestId];
+      }, 2000);
     }
   };
 
@@ -4351,6 +4491,8 @@ export default function App() {
   // Handle Passenger Confirm Ride with Live Distance & ETA calculation
   // Handle Passenger Confirm Ride with Live Distance, ETA & Automatic State/History Sync
   const handleConfirmRide = (driver: Driver) => {
+    const pTitle = passengerPickup || (selectedStand !== 'all' ? selectedStand : 'গফরগাঁও লাইভ অবস্থান');
+    const dTitle = passengerDestination || driver.standName || 'উপজেলা স্বাস্থ্য কমপ্লেক্স';
     const pLat = pickupCoords?.lat || passengerLocation.lat || 24.4536;
     const pLng = pickupCoords?.lng || passengerLocation.lng || 90.5479;
     const resolvedDest = destCoords || resolveLocationCoordinates(dTitle, true, stands) || { lat: 24.4515, lng: 90.5535 };
@@ -4359,9 +4501,6 @@ export default function App() {
     const dist = calculateDistanceKm(driver.lat, driver.lng, pLat, pLng);
     const eta = calculateEtaMinutes(dist, driver.approxSpeedKmh);
     const estFare = Math.max(35, Math.round(dist * (driver.category === 'bike' ? 22 : driver.category === 'cng' ? 26 : driver.category === 'ambulance' ? 60 : 35)));
-
-    const pTitle = passengerPickup || (selectedStand !== 'all' ? selectedStand : 'গফরগাঁও লাইভ অবস্থান');
-    const dTitle = passengerDestination || driver.standName || 'উপজেলা স্বাস্থ্য কমপ্লেক্স';
     const validFare = (estFare && estFare > 0) ? estFare : (categories.find(c => c.id === driver.category)?.baseFare || 40);
 
     let landmarkRef = passengerPickupLandmark;
@@ -5005,9 +5144,9 @@ export default function App() {
 
   return (
     <div className="min-h-screen bg-slate-100 flex flex-col selection:bg-emerald-600 selection:text-white font-['Hind_Siliguri',sans-serif]">
-      {/* App Launch Splash Screen (Matching IMG-12 with centered logo & Arabic Dua) */}
+      {/* App Launch Splash Screen (Matching IMG-13 with centered logo & Arabic Dua) */}
       {showAppSplash && (
-        <SplashScreen onFinish={() => setShowAppSplash(false)} durationMs={1800} />
+        <SplashScreen onFinish={() => setShowAppSplash(false)} durationMs={3000} />
       )}
 
       {/* PWA 1-Tap Mobile Install Banner & Viral Share Modal */}
@@ -6159,45 +6298,70 @@ export default function App() {
                   );
                 })()}
 
-                {/* Incoming Passenger Requests Section (Strictly Pending Only) */}
-                <div className="bg-white rounded-2xl border border-slate-200 p-3 sm:p-4 shadow-xs mb-3">
-                  <div className="flex items-center justify-between pb-2 mb-2.5 border-b border-slate-100 flex-wrap gap-2">
-                    <div className="flex items-center gap-2">
-                      <Users className="w-4 h-4 text-emerald-600" />
-                      <h3 className="font-bold text-slate-900 text-xs sm:text-sm">
-                        আগত যাত্রার অনুরোধসমূহ (প্যাসেঞ্জার রিকোয়েস্ট)
-                      </h3>
-                      <span className="bg-emerald-100 text-emerald-900 text-[10px] font-black px-2 py-0.5 rounded-full">
-                        {passengerRequests.filter(r => r.status === 'pending').length} টি অপেক্ষমাণ
-                      </span>
-                    </div>
+                {/* Incoming Passenger Requests Section (Strictly Pending Only & Deduplicated) */}
+                {(() => {
+                  const driverActiveTrip = passengerRequests.find(r => 
+                    (r.status === 'accepted' || r.status === 'in_transit') && 
+                    (r.driverId === driverProfile.id || r.driverPhone === driverProfile.phone || !r.driverId)
+                  );
+                  const activePassengerPhone = driverActiveTrip?.passengerPhone?.replace(/[^0-9]/g, '');
 
-                    <div className="flex items-center gap-2">
-                      <button
-                        type="button"
-                        onClick={handlePurgeStaleRequests}
-                        className="text-[10px] text-slate-500 hover:text-red-600 px-2.5 py-1 bg-slate-100 hover:bg-red-50 rounded-lg font-bold transition-all cursor-pointer flex items-center gap-1"
-                        title="ডাটাবেস থেকে সকল পুরাতন টেস্ট ডেটা সাফ করুন"
-                      >
-                        <Trash2 className="w-3 h-3 text-red-500" />
-                        <span>পুরানো টেস্ট ডেটা সাফ করুন</span>
-                      </button>
-                      <span className="text-[11px] text-slate-500 hidden sm:inline">
-                        চালকের ভূমিকা: যাত্রীকে সরাসরি কল দিন এবং ট্রিপ <b>কনফার্ম</b> করুন
-                      </span>
-                    </div>
-                  </div>
+                  // Deduplicate & strictly filter pending requests
+                  const seenPhones = new Set<string>();
+                  const filteredPendingRequests = passengerRequests.filter(req => {
+                    if (req.status !== 'pending') return false;
+                    const cleanPhone = req.passengerPhone?.replace(/[^0-9]/g, '');
+                    // Exclude if it's the active trip
+                    if (driverActiveTrip && req.id === driverActiveTrip.id) return false;
+                    // Exclude if driver is currently on trip with this exact passenger!
+                    if (activePassengerPhone && cleanPhone && cleanPhone === activePassengerPhone) return false;
+                    // Deduplicate: if multiple pending requests exist from same phone, keep only the latest one
+                    if (cleanPhone) {
+                      if (seenPhones.has(cleanPhone)) return false;
+                      seenPhones.add(cleanPhone);
+                    }
+                    return true;
+                  });
 
-                  {/* Request Cards Grid (Strictly Pending Only) */}
-                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-2.5">
-                    {passengerRequests.filter(r => r.status === 'pending').length === 0 ? (
-                      <div className="col-span-full py-8 text-center bg-slate-50 rounded-xl border border-dashed border-slate-200">
-                        <Users className="w-8 h-8 text-slate-300 mx-auto mb-1.5" />
-                        <p className="text-xs font-bold text-slate-600">বর্তমানে কোনো অপেক্ষমাণ যাত্রার অনুরোধ নেই</p>
-                        <p className="text-[11px] text-slate-400 mt-0.5">নতুন কোনো যাত্রী পিকআপ ও গন্তব্য নির্ধারণ করে অনুরোধ পাঠালে তা সাথে সাথে এখানে ভেসে উঠবে</p>
+                  return (
+                    <div className="bg-white rounded-2xl border border-slate-200 p-3 sm:p-4 shadow-xs mb-3">
+                      <div className="flex items-center justify-between pb-2 mb-2.5 border-b border-slate-100 flex-wrap gap-2">
+                        <div className="flex items-center gap-2">
+                          <Users className="w-4 h-4 text-emerald-600" />
+                          <h3 className="font-bold text-slate-900 text-xs sm:text-sm">
+                            আগত যাত্রার অনুরোধসমূহ (প্যাসেঞ্জার রিকোয়েস্ট)
+                          </h3>
+                          <span className="bg-emerald-100 text-emerald-900 text-[10px] font-black px-2 py-0.5 rounded-full">
+                            {filteredPendingRequests.length} টি অপেক্ষমাণ
+                          </span>
+                        </div>
+
+                        <div className="flex items-center gap-2">
+                          <button
+                            type="button"
+                            onClick={handlePurgeStaleRequests}
+                            className="text-[10px] text-slate-500 hover:text-red-600 px-2.5 py-1 bg-slate-100 hover:bg-red-50 rounded-lg font-bold transition-all cursor-pointer flex items-center gap-1"
+                            title="ডাটাবেস থেকে সকল পুরাতন টেস্ট ডেটা সাফ করুন"
+                          >
+                            <Trash2 className="w-3 h-3 text-red-500" />
+                            <span>পুরানো টেস্ট ডেটা সাফ করুন</span>
+                          </button>
+                          <span className="text-[11px] text-slate-500 hidden sm:inline">
+                            চালকের ভূমিকা: যাত্রীকে সরাসরি কল দিন এবং ট্রিপ <b>কনফার্ম</b> করুন
+                          </span>
+                        </div>
                       </div>
-                    ) : (
-                      passengerRequests.filter(r => r.status === 'pending').map((req) => (
+
+                      {/* Request Cards Grid (Strictly Pending Only) */}
+                      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-2.5">
+                        {filteredPendingRequests.length === 0 ? (
+                          <div className="col-span-full py-8 text-center bg-slate-50 rounded-xl border border-dashed border-slate-200">
+                            <Users className="w-8 h-8 text-slate-300 mx-auto mb-1.5" />
+                            <p className="text-xs font-bold text-slate-600">বর্তমানে কোনো অপেক্ষমাণ যাত্রার অনুরোধ নেই</p>
+                            <p className="text-[11px] text-slate-400 mt-0.5">নতুন কোনো যাত্রী পিকআপ ও গন্তব্য নির্ধারণ করে অনুরোধ পাঠালে তা সাথে সাথে এখানে ভেসে উঠবে</p>
+                          </div>
+                        ) : (
+                          filteredPendingRequests.map((req) => (
                         <div 
                           key={req.id}
                           className="p-3 rounded-xl border bg-white border-slate-200 hover:border-emerald-300 shadow-xs transition-all"
@@ -6273,6 +6437,8 @@ export default function App() {
                     )}
                   </div>
                 </div>
+              );
+            })()}
 
                 {/* Chalok Cockpit Dedicated Guidance & Tips */}
                 <div className="bg-gradient-to-r from-emerald-950 via-slate-900 to-emerald-900 rounded-2xl p-4 text-white border border-emerald-500/40 shadow-xs mb-3">
