@@ -77,9 +77,6 @@
     },
     "/passengers/{passengerId}": {
       "description": "Passenger profile, addresses and emergency contacts"
-    },
-    "/users/{userId}": {
-      "description": "User profiles and passenger role data"
     }
   }
 }

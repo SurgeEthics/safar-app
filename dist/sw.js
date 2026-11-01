@@ -90,10 +90,10 @@ define(['./workbox-afac4cd2'], (function (workbox) { 'use strict';
     "revision": "b939c8f0cf4bf04e5f824257d38bc4ce"
   }, {
     "url": "pwa-192x192.png",
-    "revision": "e93d1b2ef00e870bcc528a64cf254c1f"
+    "revision": "968e2740b061116784f61b61304a0e07"
   }, {
     "url": "index.html",
-    "revision": "43f4339eb411687269c5a1ca7d2a06a5"
+    "revision": "de68f0e7eb0dc94115174efcf5205ca9"
   }, {
     "url": "icon.svg",
     "revision": "2656b652288f2dc2146deee1452b7349"
@@ -102,15 +102,15 @@ define(['./workbox-afac4cd2'], (function (workbox) { 'use strict';
     "revision": "c48568c4b5a6df7bf2c0bc060531dba0"
   }, {
     "url": "favicon.ico",
-    "revision": "b0a0ce0b545bba4ac7cfe0b6ecf350c1"
+    "revision": "c91f4713b49633cff485a7bee25c82b4"
   }, {
     "url": "apple-touch-icon.png",
     "revision": "9c56b5edc561a53f807b294c64b4234f"
   }, {
-    "url": "assets/index-CHzHdFJD.css",
+    "url": "assets/index-wHUwKuXq.js",
     "revision": null
   }, {
-    "url": "assets/index-Bwla_Uxr.js",
+    "url": "assets/index-BMF2mEb7.css",
     "revision": null
   }, {
     "url": "assets/drivers/tasnimul_kabeer.png",
@@ -120,10 +120,10 @@ define(['./workbox-afac4cd2'], (function (workbox) { 'use strict';
     "revision": "9c56b5edc561a53f807b294c64b4234f"
   }, {
     "url": "favicon.ico",
-    "revision": "b0a0ce0b545bba4ac7cfe0b6ecf350c1"
+    "revision": "c91f4713b49633cff485a7bee25c82b4"
   }, {
     "url": "pwa-192x192.png",
-    "revision": "e93d1b2ef00e870bcc528a64cf254c1f"
+    "revision": "968e2740b061116784f61b61304a0e07"
   }, {
     "url": "pwa-512x512.png",
     "revision": "b939c8f0cf4bf04e5f824257d38bc4ce"
@@ -132,7 +132,7 @@ define(['./workbox-afac4cd2'], (function (workbox) { 'use strict';
     "revision": "424b0ddeffc660c348dde536838f238f"
   }, {
     "url": "manifest.webmanifest",
-    "revision": "a251e6e6916522a47dcfb9569d248601"
+    "revision": "28884cb39ce6d01034507bc3e2dc82ea"
   }], {});
   workbox.cleanupOutdatedCaches();
   workbox.registerRoute(new workbox.NavigationRoute(workbox.createHandlerBoundToURL("index.html"), {

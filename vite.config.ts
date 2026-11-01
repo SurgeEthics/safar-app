@@ -15,7 +15,7 @@ export default defineConfig(() => {
         includeAssets: ['favicon.ico', 'apple-touch-icon.png'],
         manifest: {
           id: '/',
-          name: 'بِسْمِ اللّٰهِ، تَوَكَّلْتُ عَلَى اللّٰهِ',
+          name: 'সফর',
           short_name: 'সফর',
           description: 'স্মার্ট ট্রান্সপোর্ট এন্ড ইমারজেন্সি সার্ভিস',
           theme_color: '#059669',
