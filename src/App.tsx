@@ -71,6 +71,7 @@ import { sounds } from './utils/audio';
 import { toBengaliNumber } from './utils/calculator';
 import { PassengerRideCockpit } from './components/PassengerRideCockpit';
 import { DriverIncomingAlert } from './components/DriverIncomingAlert';
+import { SplashScreen } from './components/SplashScreen';
 import { AdminControlPanel, AppCustomSettings } from './components/AdminControlPanel';
 import { AutoMarqueeText } from './components/AutoMarqueeText';
 import { PauseMarqueeText } from './components/PauseMarqueeText';
@@ -2840,6 +2841,11 @@ export default function App() {
     return null;
   });
 
+  // Track dismissed incoming driver alert IDs so driver doesn't see rejected/accepted popups again
+  const [dismissedAlertIds, setDismissedAlertIds] = useState<Record<string, boolean>>({});
+  // Splash screen state matching IMG-12
+  const [showAppSplash, setShowAppSplash] = useState(true);
+
   useEffect(() => {
     try {
       if (passengerPendingRequest) {
@@ -3412,6 +3418,15 @@ export default function App() {
 
   // Driver accepts request (Real-Time Firestore Update)
   const handleDriverAcceptRequest = async (requestId: string) => {
+    // 1. Immediately stop any ringing Daf alarms
+    sounds.stopAllAlarms();
+
+    // 2. Immediately clear passenger pending request from local state & storage
+    setPassengerPendingRequest(null);
+    try {
+      localStorage.removeItem('safar_passenger_pending_v2');
+    } catch {}
+
     if (!liveGps.isTracking) {
       startGpsTracking();
     }
@@ -3475,6 +3490,35 @@ export default function App() {
     const otpCode = String(Math.floor(1000 + Math.random() * 9000));
     const reqRef = doc(db, 'ride_requests', requestId);
 
+    // 3. Optimistically update local passengerRequests immediately on 1st click
+    // so the driver active trip cockpit opens instantly without lag!
+    setPassengerRequests(prev => prev.map(r => r.id === requestId ? {
+      ...r,
+      status: 'accepted',
+      driverId: activeDriver.id,
+      driverName: activeDriver.name,
+      driverPhone: activeDriver.phone,
+      driverCategory: activeDriver.category,
+      driverLat: activeDriver.lat,
+      driverLng: activeDriver.lng,
+      driverVehicleModel: activeDriver.vehicleModel,
+      driverLicensePlate: activeDriver.plateNumber || activeDriver.licenseNumber,
+      driverPlateNumber: activeDriver.plateNumber,
+      driverPhoto: activeDriver.driverPhoto,
+      driverRating: activeDriver.rating,
+      otp: otpCode,
+      acceptedAt: new Date().toISOString()
+    } : r));
+
+    // 4. Open map & smooth-scroll to Driver Active Trip Cockpit
+    setShowDriverInlineMap(true);
+    setTimeout(() => {
+      const cockpitEl = document.getElementById('safar-driver-active-trip-cockpit');
+      if (cockpitEl) {
+        cockpitEl.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      }
+    }, 150);
+
     try {
       await runTransaction(db, async (transaction) => {
         const sfDoc = await transaction.get(reqRef);
@@ -3482,7 +3526,7 @@ export default function App() {
           throw new Error('NOT_FOUND');
         }
         const data = sfDoc.data();
-        if (data.status !== 'pending') {
+        if (data.status !== 'pending' && data.driverId !== activeDriver.id) {
           throw new Error('ALREADY_ACCEPTED');
         }
         transaction.update(reqRef, {
@@ -3531,7 +3575,7 @@ export default function App() {
             otp: otpCode,
             acceptedAt: new Date().toISOString()
           });
-          showAdminToastMessage('ট্রিপ সফলভাবে গ্রহণ করা হয়েছে! যাত্রীর কাছে রওনা দিন।');
+          showAdminToastMessage('🎉 ট্রিপ সফলভাবে গ্রহণ করা হয়েছে! যাত্রীর কাছে রওনা দিন।');
         } catch (e) {
           setPassengerRequests(prev => prev.filter(r => r.id !== requestId));
         }
@@ -4961,6 +5005,11 @@ export default function App() {
 
   return (
     <div className="min-h-screen bg-slate-100 flex flex-col selection:bg-emerald-600 selection:text-white font-['Hind_Siliguri',sans-serif]">
+      {/* App Launch Splash Screen (Matching IMG-12 with centered logo & Arabic Dua) */}
+      {showAppSplash && (
+        <SplashScreen onFinish={() => setShowAppSplash(false)} durationMs={1800} />
+      )}
+
       {/* PWA 1-Tap Mobile Install Banner & Viral Share Modal */}
       <PWAInstallBanner customAppUrl={appCustomSettings.customAppUrl} />
       
@@ -5292,19 +5341,40 @@ export default function App() {
         )}
 
         {/* DRIVER INCOMING RIDE REQUEST POPUP */}
-        {userRole === 'driver' && passengerPendingRequest && (
-          <DriverIncomingAlert
-            request={passengerPendingRequest}
-            onAccept={(reqId) => {
-              handleDriverAcceptRequest(reqId);
-              showAdminToastMessage('যাত্রার অনুরোধ গ্রহণ করা হয়েছে!');
-            }}
-            onDecline={() => {
-              handleCancelPassengerPendingRequest();
-              showAdminToastMessage('অনুরোধ প্রত্যাখ্যান করা হয়েছে');
-            }}
-          />
-        )}
+        {(() => {
+          if (userRole !== 'driver') return null;
+          // If driver already has an active accepted trip, don't show incoming popup
+          const hasActiveTrip = passengerRequests.some(r => 
+            (r.status === 'accepted' || r.status === 'in_transit') && 
+            (r.driverId === driverProfile.id || r.driverPhone === driverProfile.phone || !r.driverId)
+          );
+          if (hasActiveTrip) return null;
+
+          // Find pending request not yet dismissed
+          const incoming = passengerRequests.find(r => r.status === 'pending' && !dismissedAlertIds[r.id])
+            || (passengerPendingRequest?.status === 'pending' && !dismissedAlertIds[passengerPendingRequest.id] ? passengerPendingRequest : null);
+
+          if (!incoming) return null;
+
+          return (
+            <DriverIncomingAlert
+              key={incoming.id}
+              request={incoming}
+              onAccept={(reqId) => {
+                setDismissedAlertIds(prev => ({ ...prev, [reqId]: true }));
+                setPassengerPendingRequest(null);
+                sounds.stopAllAlarms();
+                handleDriverAcceptRequest(reqId);
+              }}
+              onDecline={(reqId) => {
+                setDismissedAlertIds(prev => ({ ...prev, [reqId]: true }));
+                setPassengerPendingRequest(null);
+                sounds.stopAllAlarms();
+                handleDriverDeclineRequest(reqId);
+              }}
+            />
+          );
+        })()}
 
         {/* ============================================================== */}
         {/* PASSENGER RIDE PLANNER & BOOKING HUB (SHOWN IN PASSENGER MODE) */}
@@ -5865,7 +5935,7 @@ export default function App() {
                   if (!driverActiveTrip) return null;
 
                   return (
-                    <div className="bg-gradient-to-br from-emerald-950 via-slate-900 to-teal-950 text-white rounded-3xl p-4 sm:p-5 border-2 border-emerald-400 shadow-xl mb-3.5 animate-in fade-in">
+                    <div id="safar-driver-active-trip-cockpit" className="bg-gradient-to-br from-emerald-950 via-slate-900 to-teal-950 text-white rounded-3xl p-4 sm:p-5 border-2 border-emerald-400 shadow-xl mb-3.5 animate-in fade-in">
                       <div className="flex items-center justify-between pb-3 mb-3 border-b border-emerald-800/60 flex-wrap gap-2">
                         <div className="flex items-center gap-2 min-w-0 flex-1">
                           <span className="w-3 h-3 rounded-full bg-emerald-400 animate-ping shrink-0"></span>

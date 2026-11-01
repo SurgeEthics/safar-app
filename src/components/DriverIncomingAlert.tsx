@@ -1,5 +1,5 @@
-import React, { useState, useEffect } from 'react';
-import { Bell, MapPin, Navigation, Clock, Check, X, Shield, PhoneCall } from 'lucide-react';
+import React, { useState, useEffect, useRef } from 'react';
+import { Bell, MapPin, Navigation, Check, X } from 'lucide-react';
 import { sounds } from '../utils/audio';
 import { PauseMarqueeText } from './PauseMarqueeText';
 
@@ -26,24 +26,50 @@ export const DriverIncomingAlert: React.FC<DriverIncomingAlertProps> = ({
   onDecline
 }) => {
   const [secondsRemaining, setSecondsRemaining] = useState(15);
+  const [isDismissed, setIsDismissed] = useState(false);
+  const [isProcessing, setIsProcessing] = useState(false);
+
+  const ringIntervalRef = useRef<any>(null);
+  const countdownIntervalRef = useRef<any>(null);
+
+  // Clear all running timers and stop Daf alarm sound
+  const cleanupTimersAndAudio = () => {
+    if (ringIntervalRef.current) {
+      clearInterval(ringIntervalRef.current);
+      ringIntervalRef.current = null;
+    }
+    if (countdownIntervalRef.current) {
+      clearInterval(countdownIntervalRef.current);
+      countdownIntervalRef.current = null;
+    }
+    sounds.stopAllAlarms();
+  };
 
   useEffect(() => {
-    if (!request || request.status !== 'pending') return;
+    if (!request || request.status !== 'pending') {
+      cleanupTimersAndAudio();
+      setIsDismissed(true);
+      return;
+    }
 
-    // Play ringing chime alert immediately at highest volume
+    setIsDismissed(false);
+    setIsProcessing(false);
+    setSecondsRemaining(15);
+
+    // 1. Play authentic Arabic Daf rhythm alarm immediately
     sounds.playIncomingRideAlert();
 
-    // Ring repeating alarm every 2 seconds so driver cannot miss the request
-    const ringInterval = setInterval(() => {
+    // 2. Repeat Daf rhythm every 2.2 seconds until accepted, declined, or timed out
+    ringIntervalRef.current = setInterval(() => {
       sounds.playIncomingRideAlert();
-    }, 2000);
+    }, 2200);
 
-    setSecondsRemaining(15);
-    const interval = setInterval(() => {
+    // 3. 15-second countdown timer
+    countdownIntervalRef.current = setInterval(() => {
       setSecondsRemaining((prev) => {
         if (prev <= 1) {
-          clearInterval(interval);
-          clearInterval(ringInterval);
+          cleanupTimersAndAudio();
+          setIsDismissed(true);
           onDecline(request.id);
           return 0;
         }
@@ -52,12 +78,41 @@ export const DriverIncomingAlert: React.FC<DriverIncomingAlertProps> = ({
     }, 1000);
 
     return () => {
-      clearInterval(interval);
-      clearInterval(ringInterval);
+      cleanupTimersAndAudio();
     };
   }, [request?.id]);
 
-  if (!request || request.status !== 'pending') return null;
+  // Handle Driver 1st-Click Accept
+  const handleAccept = (e: React.MouseEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    if (isProcessing || isDismissed || !request) return;
+
+    // Immediately stop alarm sound and clear repeating intervals
+    cleanupTimersAndAudio();
+
+    // Immediately dismiss modal on 1st click to prevent double clicks or confusion
+    setIsProcessing(true);
+    setIsDismissed(true);
+
+    // Call parent handler
+    onAccept(request.id);
+  };
+
+  // Handle Driver Decline
+  const handleDecline = (e: React.MouseEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    if (isProcessing || isDismissed || !request) return;
+
+    cleanupTimersAndAudio();
+    setIsProcessing(true);
+    setIsDismissed(true);
+
+    onDecline(request.id);
+  };
+
+  if (!request || request.status !== 'pending' || isDismissed) return null;
 
   const progressPercent = (secondsRemaining / 15) * 100;
 
@@ -138,8 +193,9 @@ export const DriverIncomingAlert: React.FC<DriverIncomingAlertProps> = ({
       <div className="flex items-center gap-2">
         <button
           type="button"
-          onClick={() => onDecline(request.id)}
-          className="flex-1 py-2.5 bg-slate-800 hover:bg-slate-700 text-slate-300 font-bold rounded-xl text-xs flex items-center justify-center gap-1.5 cursor-pointer transition"
+          onClick={handleDecline}
+          disabled={isProcessing}
+          className="flex-1 py-2.5 bg-slate-800 hover:bg-slate-700 disabled:opacity-50 text-slate-300 font-bold rounded-xl text-xs flex items-center justify-center gap-1.5 cursor-pointer transition"
         >
           <X className="w-4 h-4 text-slate-400" />
           <span>প্রত্যাখ্যান</span>
@@ -147,11 +203,12 @@ export const DriverIncomingAlert: React.FC<DriverIncomingAlertProps> = ({
 
         <button
           type="button"
-          onClick={() => onAccept(request.id)}
-          className="flex-2 py-2.5 bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-black rounded-xl text-xs sm:text-sm flex items-center justify-center gap-1.5 shadow-lg shadow-emerald-500/20 cursor-pointer transition active:scale-95"
+          onClick={handleAccept}
+          disabled={isProcessing}
+          className="flex-2 py-2.5 bg-emerald-500 hover:bg-emerald-400 disabled:opacity-50 text-slate-950 font-black rounded-xl text-xs sm:text-sm flex items-center justify-center gap-1.5 shadow-lg shadow-emerald-500/20 cursor-pointer transition active:scale-95"
         >
           <Check className="w-4 h-4 text-slate-950" />
-          <span>অনুরোধ গ্রহণ করুন (Accept)</span>
+          <span>{isProcessing ? 'গ্রহণ করা হচ্ছে...' : 'অনুরোধ গ্রহণ করুন (Accept)'}</span>
         </button>
       </div>
     </div>

@@ -1,13 +1,16 @@
 /**
- * Web Audio API based sound synthesizer for Safar app.
- * Configured for maximum volume, clarity, and piercing auditory presence
- * even in noisy roadside/outdoor traffic environments for drivers and passengers.
+ * Authentic Arabic Daf (دف - Duff / ১ মুখ খোলা ঢোল) Sound Synthesizer for Safar.
+ * Produces pure acoustic Daf drum percussion (Dum & Tak strokes) with zero melodic/instrumental
+ * background music, adhering strictly to traditional frame drum acoustics.
+ * Used identically for both Driver and Passenger notification alarms.
  */
 
 class SoundEffects {
   private ctx: AudioContext | null = null;
   private compressor: DynamicsCompressorNode | null = null;
   private masterGain: GainNode | null = null;
+  private activeInterval: any = null;
+  private activeSources: (AudioNode & { stop?: (when?: number) => void })[] = [];
 
   private getContext(): AudioContext | null {
     if (typeof window === 'undefined') return null;
@@ -15,23 +18,22 @@ class SoundEffects {
       const AudioCtx = window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext;
       if (AudioCtx) {
         this.ctx = new AudioCtx();
-        // Create dynamic compressor + master gain for maximum perceived loudness without distortion
         try {
           this.compressor = this.ctx.createDynamicsCompressor();
-          this.compressor.threshold.setValueAtTime(-6, this.ctx.currentTime);
-          this.compressor.knee.setValueAtTime(8, this.ctx.currentTime);
-          this.compressor.ratio.setValueAtTime(12, this.ctx.currentTime);
-          this.compressor.attack.setValueAtTime(0.003, this.ctx.currentTime);
-          this.compressor.release.setValueAtTime(0.2, this.ctx.currentTime);
+          this.compressor.threshold.setValueAtTime(-4, this.ctx.currentTime);
+          this.compressor.knee.setValueAtTime(6, this.ctx.currentTime);
+          this.compressor.ratio.setValueAtTime(14, this.ctx.currentTime);
+          this.compressor.attack.setValueAtTime(0.002, this.ctx.currentTime);
+          this.compressor.release.setValueAtTime(0.15, this.ctx.currentTime);
 
           this.masterGain = this.ctx.createGain();
-          // Maximum safe volume boost (1.0 full scale)
+          // Highest volume output
           this.masterGain.gain.setValueAtTime(1.0, this.ctx.currentTime);
 
           this.compressor.connect(this.masterGain);
           this.masterGain.connect(this.ctx.destination);
         } catch {
-          // Fallback if compressor creation fails
+          // Fallback
         }
       }
     }
@@ -46,166 +48,199 @@ class SoundEffects {
   }
 
   /**
-   * Safe mobile vibration helper (works on Android Chrome / PWA).
+   * Stop any active sounds and repeating intervals immediately.
+   */
+  stopAllAlarms() {
+    if (this.activeInterval) {
+      clearInterval(this.activeInterval);
+      this.activeInterval = null;
+    }
+    try {
+      this.activeSources.forEach(s => {
+        try {
+          if (typeof s.stop === 'function') s.stop();
+        } catch {}
+      });
+      this.activeSources = [];
+    } catch {}
+  }
+
+  /**
+   * Safe mobile vibration helper.
    */
   private triggerVibration(pattern: number[]) {
     try {
       if (typeof window !== 'undefined' && 'navigator' in window && typeof navigator.vibrate === 'function') {
         navigator.vibrate(pattern);
       }
+    } catch {}
+  }
+
+  /**
+   * Generate an acoustic noise buffer for drum transient skin/rim strike.
+   */
+  private createNoiseBuffer(ctx: AudioContext, duration = 0.08): AudioBuffer {
+    const bufferSize = Math.floor(ctx.sampleRate * duration);
+    const buffer = ctx.createBuffer(1, bufferSize, ctx.sampleRate);
+    const data = buffer.getChannelData(0);
+    for (let i = 0; i < bufferSize; i++) {
+      data[i] = Math.random() * 2 - 1;
+    }
+    return buffer;
+  }
+
+  /**
+   * Synthesize an authentic acoustic Daf "DUM" (দুম - deep open bass stroke near center).
+   * Features genuine membrane resonance, decaying low thud, and wooden body acoustics.
+   */
+  private playDafDum(ctx: AudioContext, targetNode: AudioNode, startTime: number, volume = 1.0) {
+    // 1. Skin Impact Noise Transient (Attack thud)
+    try {
+      const noiseBuffer = this.createNoiseBuffer(ctx, 0.06);
+      const noiseSource = ctx.createBufferSource();
+      noiseSource.buffer = noiseBuffer;
+      const noiseFilter = ctx.createBiquadFilter();
+      noiseFilter.type = 'lowpass';
+      noiseFilter.frequency.setValueAtTime(280, startTime);
+      const noiseGain = ctx.createGain();
+      noiseGain.gain.setValueAtTime(0.85 * volume, startTime);
+      noiseGain.gain.exponentialRampToValueAtTime(0.001, startTime + 0.05);
+      noiseSource.connect(noiseFilter);
+      noiseFilter.connect(noiseGain);
+      noiseGain.connect(targetNode);
+      noiseSource.start(startTime);
+      this.activeSources.push(noiseSource);
+    } catch {}
+
+    // 2. Resonant Membrane Body (Fundamental deep pitch drop 135Hz -> 75Hz)
+    const osc = ctx.createOscillator();
+    const gain = ctx.createGain();
+    osc.type = 'sine';
+    osc.frequency.setValueAtTime(135, startTime);
+    osc.frequency.exponentialRampToValueAtTime(75, startTime + 0.28);
+
+    gain.gain.setValueAtTime(1.0 * volume, startTime);
+    gain.gain.exponentialRampToValueAtTime(0.005, startTime + 0.32);
+
+    // Resonant wooden shell filter
+    const frameFilter = ctx.createBiquadFilter();
+    frameFilter.type = 'peaking';
+    frameFilter.frequency.setValueAtTime(95, startTime);
+    frameFilter.Q.setValueAtTime(3.5, startTime);
+    frameFilter.gain.setValueAtTime(6, startTime);
+
+    osc.connect(frameFilter);
+    frameFilter.connect(gain);
+    gain.connect(targetNode);
+
+    osc.start(startTime);
+    osc.stop(startTime + 0.33);
+    this.activeSources.push(osc);
+  }
+
+  /**
+   * Synthesize an authentic acoustic Daf "TAK" (তাক - sharp outer frame/rim edge snap).
+   * Crisp, loud skin-edge snap with short acoustic wooden ring.
+   */
+  private playDafTak(ctx: AudioContext, targetNode: AudioNode, startTime: number, volume = 0.95) {
+    // 1. Sharp rim snap noise burst (high bandpass)
+    try {
+      const noiseBuffer = this.createNoiseBuffer(ctx, 0.05);
+      const noiseSource = ctx.createBufferSource();
+      noiseSource.buffer = noiseBuffer;
+      const bandpass = ctx.createBiquadFilter();
+      bandpass.type = 'bandpass';
+      bandpass.frequency.setValueAtTime(1600, startTime);
+      bandpass.Q.setValueAtTime(2.2, startTime);
+
+      const noiseGain = ctx.createGain();
+      noiseGain.gain.setValueAtTime(0.9 * volume, startTime);
+      noiseGain.gain.exponentialRampToValueAtTime(0.001, startTime + 0.045);
+
+      noiseSource.connect(bandpass);
+      bandpass.connect(noiseGain);
+      noiseGain.connect(targetNode);
+      noiseSource.start(startTime);
+      this.activeSources.push(noiseSource);
+    } catch {}
+
+    // 2. High-pitch frame ring (triangle wave at 540Hz)
+    const osc = ctx.createOscillator();
+    const gain = ctx.createGain();
+    osc.type = 'triangle';
+    osc.frequency.setValueAtTime(540, startTime);
+    osc.frequency.exponentialRampToValueAtTime(380, startTime + 0.09);
+
+    gain.gain.setValueAtTime(0.85 * volume, startTime);
+    gain.gain.exponentialRampToValueAtTime(0.005, startTime + 0.1);
+
+    osc.connect(gain);
+    gain.connect(targetNode);
+
+    osc.start(startTime);
+    osc.stop(startTime + 0.11);
+    this.activeSources.push(osc);
+  }
+
+  /**
+   * Play an authentic Arabic Daf drum rhythm phrase:
+   * Pattern: DUM ... TAK ... TAK ... DUM ... TAK!
+   * Strictly acoustic frame drum percussion (১ মুখ খোলা ঢোল), zero instrumental music.
+   */
+  playArabicDafAlarm() {
+    try {
+      const ctx = this.getContext();
+      if (!ctx) return;
+
+      const now = ctx.currentTime;
+      const targetNode = this.getDestinationNode(ctx);
+
+      // Mobile haptic vibration sync
+      this.triggerVibration([350, 120, 150, 100, 350]);
+
+      // Rhythmic strokes: DUM (0.00s) -> TAK (0.22s) -> TAK (0.38s) -> DUM (0.58s) -> TAK (0.80s)
+      this.playDafDum(ctx, targetNode, now, 1.0);
+      this.playDafTak(ctx, targetNode, now + 0.22, 0.95);
+      this.playDafTak(ctx, targetNode, now + 0.38, 0.9);
+      this.playDafDum(ctx, targetNode, now + 0.58, 1.0);
+      this.playDafTak(ctx, targetNode, now + 0.80, 0.98);
     } catch {
-      // Ignore vibration error if not supported/permitted
+      // Audio playback fails silently if restricted
     }
   }
 
   /**
-   * Driver incoming ride request alert siren/chime.
-   * Maximized for extreme clarity and loudness so motorcycle/auto drivers can hear it over traffic!
-   * Alternates punchy dual-tones (880Hz -> 1318Hz -> 1046Hz) with rich harmonic overtone mix.
+   * Driver incoming ride request alert: Pure Arabic Daf drum rhythm.
    */
   playIncomingRideAlert() {
-    try {
-      const ctx = this.getContext();
-      if (!ctx) return;
-
-      const now = ctx.currentTime;
-      const targetNode = this.getDestinationNode(ctx);
-
-      // Strong haptic vibration for mobile driver
-      this.triggerVibration([400, 150, 400, 150, 500]);
-
-      // 4 rapid, high-energy alarm pulses (Taxi Dispatch Alarm pattern)
-      const pulses = [
-        { freq1: 880, freq2: 1318.5, delay: 0 },
-        { freq1: 1046.5, freq2: 1567.98, delay: 0.16 },
-        { freq1: 880, freq2: 1318.5, delay: 0.32 },
-        { freq1: 1174.66, freq2: 1760, delay: 0.48 }
-      ];
-
-      pulses.forEach(({ freq1, freq2, delay }) => {
-        const startTime = now + delay;
-        const dur = 0.14;
-
-        // Primary tone: loud triangle wave (cuts through traffic noise with rich odd harmonics)
-        const oscPrimary = ctx.createOscillator();
-        const gainPrimary = ctx.createGain();
-        oscPrimary.type = 'triangle';
-        oscPrimary.frequency.setValueAtTime(freq1, startTime);
-        gainPrimary.gain.setValueAtTime(0.95, startTime);
-        gainPrimary.gain.exponentialRampToValueAtTime(0.01, startTime + dur);
-        oscPrimary.connect(gainPrimary);
-        gainPrimary.connect(targetNode);
-        oscPrimary.start(startTime);
-        oscPrimary.stop(startTime + dur);
-
-        // Secondary ringing overtone (sine wave for bright, piercing bell attack)
-        const oscBell = ctx.createOscillator();
-        const gainBell = ctx.createGain();
-        oscBell.type = 'sine';
-        oscBell.frequency.setValueAtTime(freq2, startTime);
-        gainBell.gain.setValueAtTime(0.85, startTime);
-        gainBell.gain.exponentialRampToValueAtTime(0.01, startTime + dur);
-        oscBell.connect(gainBell);
-        gainBell.connect(targetNode);
-        oscBell.start(startTime);
-        oscBell.stop(startTime + dur);
-      });
-    } catch {
-      // Audio playback fails silently if restricted by autoplay policy
-    }
+    this.playArabicDafAlarm();
   }
 
   /**
-   * Loud, joyful 3-tone chime when a driver accepts a passenger ride request.
-   * Maximized volume (1.0) so passenger clearly hears driver confirmation.
+   * Passenger ride confirmation alert: Pure Arabic Daf drum rhythm.
    */
   playDriverMatchedChime() {
-    try {
-      const ctx = this.getContext();
-      if (!ctx) return;
-
-      const now = ctx.currentTime;
-      const targetNode = this.getDestinationNode(ctx);
-
-      // Pleasant haptic confirmation vibration
-      this.triggerVibration([250, 100, 250]);
-
-      // Ascending major chord tones: D5 (587.33Hz) -> A5 (880Hz) -> D6 (1174.66Hz) -> F#6 (1479.98Hz)
-      const notes = [
-        { freq: 587.33, start: 0, dur: 0.35, gain: 0.9 },
-        { freq: 880.0, start: 0.12, dur: 0.4, gain: 0.95 },
-        { freq: 1174.66, start: 0.24, dur: 0.55, gain: 1.0 },
-        { freq: 1479.98, start: 0.36, dur: 0.7, gain: 0.95 }
-      ];
-
-      notes.forEach(({ freq, start, dur, gain }) => {
-        const t = now + start;
-
-        // Warm melodic body
-        const osc = ctx.createOscillator();
-        const g = ctx.createGain();
-        osc.type = 'triangle';
-        osc.frequency.setValueAtTime(freq, t);
-        g.gain.setValueAtTime(gain, t);
-        g.gain.exponentialRampToValueAtTime(0.005, t + dur);
-        osc.connect(g);
-        g.connect(targetNode);
-        osc.start(t);
-        osc.stop(t + dur);
-
-        // Sparkling bell overtone
-        const bell = ctx.createOscillator();
-        const gBell = ctx.createGain();
-        bell.type = 'sine';
-        bell.frequency.setValueAtTime(freq * 2, t);
-        gBell.gain.setValueAtTime(gain * 0.45, t);
-        gBell.gain.exponentialRampToValueAtTime(0.005, t + (dur * 0.7));
-        bell.connect(gBell);
-        gBell.connect(targetNode);
-        bell.start(t);
-        bell.stop(t + (dur * 0.7));
-      });
-    } catch {
-      // Audio playback fails silently if restricted by autoplay policy
-    }
+    this.playArabicDafAlarm();
   }
 
   /**
-   * Loud celebration fanfare chime when trip is completed.
-   * Maximized volume (1.0).
+   * Trip completed alert: Pure acoustic double Daf cadence.
    */
   playTripCompletedFanfare() {
     try {
       const ctx = this.getContext();
       if (!ctx) return;
-
       const now = ctx.currentTime;
       const targetNode = this.getDestinationNode(ctx);
 
-      this.triggerVibration([200, 100, 200, 100, 400]);
+      this.triggerVibration([200, 100, 200, 100, 350]);
 
-      // C major triumphal fanfare: C5, E5, G5, C6, E6
-      const chords = [
-        { freq: 523.25, t: 0, dur: 0.2 },
-        { freq: 659.25, t: 0.1, dur: 0.2 },
-        { freq: 783.99, t: 0.2, dur: 0.25 },
-        { freq: 1046.5, t: 0.32, dur: 0.7 },
-        { freq: 1318.5, t: 0.32, dur: 0.7 }
-      ];
-
-      chords.forEach(({ freq, t, dur }) => {
-        const osc = ctx.createOscillator();
-        const gain = ctx.createGain();
-        osc.type = 'triangle';
-        const st = now + t;
-        osc.frequency.setValueAtTime(freq, st);
-        gain.gain.setValueAtTime(0.95, st);
-        gain.gain.exponentialRampToValueAtTime(0.005, st + dur);
-        osc.connect(gain);
-        gain.connect(targetNode);
-        osc.start(st);
-        osc.stop(st + dur);
-      });
+      // Double celebratory Daf roll
+      this.playDafDum(ctx, targetNode, now, 1.0);
+      this.playDafTak(ctx, targetNode, now + 0.18, 0.95);
+      this.playDafDum(ctx, targetNode, now + 0.36, 1.0);
+      this.playDafTak(ctx, targetNode, now + 0.52, 1.0);
+      this.playDafDum(ctx, targetNode, now + 0.72, 1.0);
     } catch {}
   }
 }

@@ -93,7 +93,7 @@ define(['./workbox-afac4cd2'], (function (workbox) { 'use strict';
     "revision": "e93d1b2ef00e870bcc528a64cf254c1f"
   }, {
     "url": "index.html",
-    "revision": "5d47337cfed79e0166a53025f33f07a6"
+    "revision": "43f4339eb411687269c5a1ca7d2a06a5"
   }, {
     "url": "icon.svg",
     "revision": "2656b652288f2dc2146deee1452b7349"
@@ -107,10 +107,10 @@ define(['./workbox-afac4cd2'], (function (workbox) { 'use strict';
     "url": "apple-touch-icon.png",
     "revision": "9c56b5edc561a53f807b294c64b4234f"
   }, {
-    "url": "assets/index-BthOsUKn.css",
+    "url": "assets/index-CHzHdFJD.css",
     "revision": null
   }, {
-    "url": "assets/index-1-0OiUXH.js",
+    "url": "assets/index-Bwla_Uxr.js",
     "revision": null
   }, {
     "url": "assets/drivers/tasnimul_kabeer.png",
@@ -132,7 +132,7 @@ define(['./workbox-afac4cd2'], (function (workbox) { 'use strict';
     "revision": "424b0ddeffc660c348dde536838f238f"
   }, {
     "url": "manifest.webmanifest",
-    "revision": "28884cb39ce6d01034507bc3e2dc82ea"
+    "revision": "a251e6e6916522a47dcfb9569d248601"
   }], {});
   workbox.cleanupOutdatedCaches();
   workbox.registerRoute(new workbox.NavigationRoute(workbox.createHandlerBoundToURL("index.html"), {
