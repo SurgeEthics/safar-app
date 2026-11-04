@@ -34,11 +34,14 @@ with zipfile.ZipFile(output_zip, 'w', zipfile.ZIP_DEFLATED) as zf:
             zf.write(full_path, arcname)
             count += 1
 
-# Copy to secondary and to dist
+# Copy to secondary, final, and to dist
 shutil.copyfile(output_zip, secondary_zip)
+final_zip = 'public/safar-gafargaon-final.zip'
+shutil.copyfile(output_zip, final_zip)
 if os.path.exists('dist'):
     shutil.copyfile(output_zip, os.path.join('dist', 'safar-gafargaon-clean-source.zip'))
     shutil.copyfile(output_zip, os.path.join('dist', 'safar-gafargaon-latest.zip'))
+    shutil.copyfile(output_zip, os.path.join('dist', 'safar-gafargaon-final.zip'))
 
 size_mb = os.path.getsize(output_zip) / (1024 * 1024)
 print(f"Archive successfully created: {output_zip} ({size_mb:.2f} MB, {count} files)")

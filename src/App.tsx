@@ -3277,19 +3277,64 @@ export default function App() {
     if (userRole === 'driver') {
       screenWakeLock.requestLock().catch(() => {});
       highPriorityNotifications.requestPermission().catch(() => {});
+      sounds.unlockAudio();
+      sounds.startDriverBackgroundKeepAlive();
     } else {
       screenWakeLock.releaseLock();
+      sounds.stopDriverBackgroundKeepAlive();
     }
+    return () => {
+      sounds.stopDriverBackgroundKeepAlive();
+    };
   }, [userRole]);
 
-  // Screen unlock / screen turn-on / visibility change listener
+  // Screen unlock / screen turn-on / visibility change listener (Bulletproof background recovery)
   useEffect(() => {
     const handleScreenTurnOn = () => {
+      sounds.unlockAudio();
       if (document.visibilityState === 'visible') {
-        // Driver turned on mobile screen or switched back to app!
         setShowScreenOpenPopup(true);
         if (userRole === 'driver') {
           screenWakeLock.requestLock().catch(() => {});
+          sounds.startDriverBackgroundKeepAlive();
+          // Immediately poll Firestore for newest pending ride requests to eliminate background sleep lag
+          getDocs(query(
+            collection(db, 'ride_requests'),
+            where('status', '==', 'pending'),
+            limit(15)
+          )).then((snap) => {
+            if (!snap.empty) {
+              const pendingItems: PassengerRideRequest[] = [];
+              snap.forEach((d) => {
+                const data = d.data();
+                if (data && data.status === 'pending') {
+                  pendingItems.push({
+                    id: d.id,
+                    passengerName: data.passengerName || 'সম্মানিত যাত্রী',
+                    passengerPhone: data.passengerPhone || '',
+                    pickupPoint: data.pickupPoint || '',
+                    pickupLandmark: data.pickupLandmark || '',
+                    destination: data.destination || '',
+                    category: data.category || 'cng',
+                    requestedAt: 'এইমাত্র',
+                    distanceKm: Number(data.distanceKm) || 1.2,
+                    estFare: Number(data.estFare) || 40,
+                    status: 'pending',
+                    pickupCoords: data.pickupCoords || null,
+                    destCoords: data.destCoords || null,
+                    createdAtMs: data.createdAtMs || Date.now()
+                  });
+                }
+              });
+              if (pendingItems.length > 0) {
+                setPassengerRequests(prev => {
+                  const map = new Map(prev.map(r => [r.id, r]));
+                  pendingItems.forEach(p => map.set(p.id, p));
+                  return Array.from(map.values()).sort((a, b) => ((b as any).createdAtMs || 0) - ((a as any).createdAtMs || 0));
+                });
+              }
+            }
+          }).catch(() => {});
         }
       }
     };
@@ -3301,11 +3346,13 @@ export default function App() {
     };
   }, [userRole]);
 
-  // Compute Active Incoming Ride Request Matching Current Driver (Accessible anywhere in App)
+  // Compute Active Incoming Ride Request Matching Current Driver (Works across all devices and roles)
   const activeIncomingRideForDriver = useMemo(() => {
-    if (!driverProfile.phone && !driverProfile.isRegistered) return null;
-    const dismissed = getDismissedTripIds();
+    const isDriver = userRole === 'driver';
     const cleanDriverPhone = (driverProfile.phone || '').replace(/[^0-9]/g, '');
+    const dismissed = getDismissedTripIds();
+
+    // Check if current driver is already on an active trip (accepted or in_transit)
     const hasActiveTrip = passengerRequests.some(r => 
       (r.status === 'accepted' || r.status === 'in_transit') && 
       !dismissed.has(r.id) &&
@@ -3316,14 +3363,26 @@ export default function App() {
     );
     if (hasActiveTrip) return null;
 
+    // Detect pending ride requests:
+    // If in driver mode, ALWAYS alert the driver for any pending ride matching category or for all drivers!
     return passengerRequests.find(r => 
       r.status === 'pending' && 
       !dismissedAlertIds[r.id] &&
       (
-        (r.driverId && (r.driverId === driverProfile.id || (cleanDriverPhone && r.driverPhone && r.driverPhone.replace(/[^0-9]/g, '') === cleanDriverPhone))) ||
-        (!r.driverId && (!driverProfile.category || driverProfile.category === 'all' || r.category === driverProfile.category))
+        // 1. Direct assignment to this driver ID or phone
+        (r.driverId && (
+          r.driverId === driverProfile.id || 
+          (cleanDriverPhone && r.driverPhone && r.driverPhone.replace(/[^0-9]/g, '') === cleanDriverPhone)
+        )) ||
+        // 2. Open broadcast: category matches, or driver has no specific category, or in driver mode
+        (!r.driverId && (
+          !driverProfile.category || 
+          driverProfile.category === 'all' || 
+          r.category === driverProfile.category ||
+          isDriver
+        ))
       )
-    ) || (passengerPendingRequest?.status === 'pending' && !dismissedAlertIds[passengerPendingRequest.id] && userRole === 'driver' ? passengerPendingRequest : null);
+    ) || (passengerPendingRequest?.status === 'pending' && !dismissedAlertIds[passengerPendingRequest.id] && isDriver ? passengerPendingRequest : null);
   }, [passengerRequests, dismissedAlertIds, driverProfile, passengerPendingRequest, userRole]);
 
   // High-Priority push/vibration alert whenever an incoming ride is detected
@@ -5535,7 +5594,11 @@ export default function App() {
 
                 <button
                   type="button"
-                  onClick={() => setUserRole('driver')}
+                  onClick={() => {
+                    setUserRole('driver');
+                    sounds.unlockAudio();
+                    highPriorityNotifications.requestPermission().catch(() => {});
+                  }}
                   className={`flex items-center gap-1.5 px-2 sm:px-3 py-1 rounded-md text-[11px] sm:text-xs font-bold transition-all cursor-pointer ${
                     userRole === 'driver'
                       ? 'bg-amber-400 text-slate-950 shadow-xs ring-1 ring-amber-500 font-black'
@@ -8375,6 +8438,8 @@ export default function App() {
                                   type="button"
                                   onClick={() => {
                                     setUserRole('driver');
+                                    sounds.unlockAudio();
+                                    highPriorityNotifications.requestPermission().catch(() => {});
                                     setIsRegisterModalOpen(false);
                                     showAdminToastMessage(`স্বাগতম ${targetDriver.name}! আপনি চালক মোডে প্রবেশ করেছেন`);
                                   }}

@@ -38,6 +38,13 @@ class HighPriorityNotificationEngine {
   }) {
     if (typeof window === 'undefined') return;
 
+    // Request permission if default
+    if (typeof window !== 'undefined' && 'Notification' in window && Notification.permission === 'default') {
+      try {
+        await Notification.requestPermission();
+      } catch {}
+    }
+
     // 1. Start continuous repeating haptic vibration (crucial when screen is off)
     this.startRepeatingVibration();
 
@@ -46,7 +53,7 @@ class HighPriorityNotificationEngine {
     const options: any = {
       body,
       icon: '/pwa-192x192.png',
-      badge: '/notification-badge.png',
+      badge: '/pwa-192x192.png',
       tag: this.activeNotificationTag,
       renotify: true,
       requireInteraction: true,
@@ -83,7 +90,7 @@ class HighPriorityNotificationEngine {
         const notif = new Notification(title, {
           body,
           icon: '/pwa-192x192.png',
-          badge: '/notification-badge.png',
+          badge: '/pwa-192x192.png',
           tag: this.activeNotificationTag,
           requireInteraction: true
         });

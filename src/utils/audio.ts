@@ -17,6 +17,7 @@ class SoundEffects {
   private pauseTimeout: any = null;
   private voiceAlertBuffer: AudioBuffer | null = null;
   private isPreloadingVoice = false;
+  private keepAliveInterval: any = null;
 
   /**
    * Pre-fetch and decode the authentic Bengali Male voice alert into memory.
@@ -39,6 +40,66 @@ class SoundEffects {
       .finally(() => {
         this.isPreloadingVoice = false;
       });
+  }
+
+  /**
+   * Unlocks AudioContext and HTML5 audio element on any user interaction (tap, touch, click).
+   * This completely bypasses mobile browser autoplay restrictions.
+   */
+  unlockAudio() {
+    if (typeof window === 'undefined') return;
+    const ctx = this.getContext();
+    if (ctx && ctx.state === 'suspended') {
+      ctx.resume().catch(() => {});
+    }
+    this.preloadVoiceAlert();
+    try {
+      const dummy = new Audio('/driver_voice_male.mp3');
+      dummy.volume = 0.001;
+      const p = dummy.play();
+      if (p !== undefined) {
+        p.then(() => {
+          dummy.pause();
+          dummy.currentTime = 0;
+        }).catch(() => {});
+      }
+    } catch {}
+  }
+
+  /**
+   * Keeps active background audio session on Android Chrome and iOS Safari while in Driver Mode.
+   * Mobile OS will NEVER suspend Firestore connections or tab execution while audio session is active.
+   */
+  startDriverBackgroundKeepAlive() {
+    if (typeof window === 'undefined' || this.keepAliveInterval) return;
+    const ctx = this.getContext();
+    if (ctx && ctx.state === 'suspended') {
+      ctx.resume().catch(() => {});
+    }
+
+    this.keepAliveInterval = setInterval(() => {
+      try {
+        if (!this.ctx || this.ctx.state === 'closed') return;
+        if (this.ctx.state === 'suspended') {
+          this.ctx.resume().catch(() => {});
+        }
+        const osc = this.ctx.createOscillator();
+        const gain = this.ctx.createGain();
+        osc.frequency.setValueAtTime(25, this.ctx.currentTime);
+        gain.gain.setValueAtTime(0.0001, this.ctx.currentTime);
+        osc.connect(gain);
+        gain.connect(this.ctx.destination);
+        osc.start(this.ctx.currentTime);
+        osc.stop(this.ctx.currentTime + 0.1);
+      } catch {}
+    }, 12000);
+  }
+
+  stopDriverBackgroundKeepAlive() {
+    if (this.keepAliveInterval) {
+      clearInterval(this.keepAliveInterval);
+      this.keepAliveInterval = null;
+    }
   }
 
   private getContext(): AudioContext | null {
@@ -321,6 +382,13 @@ class SoundEffects {
         }, 1000);
       };
 
+      // Safety timeout: 5.5s (voice is 4.65s) to guarantee 1s pause + Duff alarm triggers under all conditions
+      const safetyTimer = setTimeout(() => {
+        if (!hasFinished) {
+          finishAndPause();
+        }
+      }, 5500);
+
       // 1. If Web Audio buffer is preloaded and ready, play instantly via AudioContext (0ms lag, loud 1.8x punch)
       const ctx = this.getContext();
       if (ctx && this.voiceAlertBuffer) {
@@ -334,7 +402,10 @@ class SoundEffects {
           gain.gain.setValueAtTime(1.8, ctx.currentTime);
           source.connect(gain);
           gain.connect(this.getDestinationNode(ctx));
-          source.onended = finishAndPause;
+          source.onended = () => {
+            clearTimeout(safetyTimer);
+            finishAndPause();
+          };
           source.start(0);
           this.activeSources.push(source);
           return true;
@@ -346,25 +417,21 @@ class SoundEffects {
       audio.volume = 1.0;
       this.currentVoiceAudio = audio;
 
-      audio.onended = finishAndPause;
+      audio.onended = () => {
+        clearTimeout(safetyTimer);
+        finishAndPause();
+      };
       audio.onerror = () => {
-        // Fallback: proceed to 1s pause and Daf drums, NEVER use robotic female voice
+        clearTimeout(safetyTimer);
         finishAndPause();
       };
 
       const playPromise = audio.play();
       if (playPromise !== undefined) {
         playPromise.catch(() => {
-          finishAndPause();
+          // If browser policy blocks HTML5 audio, allow safetyTimer to trigger finishAndPause
         });
       }
-
-      // Safety timeout: 5.5s (voice is 4.65s) to guarantee pause + Duff alarm triggers
-      setTimeout(() => {
-        if (!hasFinished) {
-          finishAndPause();
-        }
-      }, 5500);
 
       return true;
     } catch {
