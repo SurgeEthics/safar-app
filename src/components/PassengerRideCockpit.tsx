@@ -63,11 +63,11 @@ export interface PassengerRideCockpitProps {
   } | null;
   onCancelRequest: () => void;
   onCancelBooking: () => void;
+  onDismissCockpit?: () => void;
   onDriverArrived?: () => void;
   onStartRide?: () => void;
   onCompleteRide: (fare: number) => void;
   onSubmitReview: (driverId: string, rating: number, tags: string[], feedback: string) => void;
-  onDismissCockpit?: () => void;
   onFocusMap: () => void;
   categoryBengaliName?: string;
 }
@@ -80,7 +80,6 @@ export const PassengerRideCockpit: React.FC<PassengerRideCockpitProps> = ({
   onStartRide,
   onCompleteRide,
   onSubmitReview,
-  onDismissCockpit,
   onFocusMap,
   categoryBengaliName = 'অটো'
 }) => {
@@ -161,7 +160,18 @@ export const PassengerRideCockpit: React.FC<PassengerRideCockpitProps> = ({
       );
     }
     setShowReviewModal(false);
-    if (onDismissCockpit) onDismissCockpit();
+  };
+
+  const handleSkipReview = () => {
+    if (activeBooking) {
+      onSubmitReview(
+        activeBooking.driver.id,
+        5,
+        [],
+        'পরিশোধ সম্পন্ন'
+      );
+    }
+    setShowReviewModal(false);
   };
 
   return (
@@ -624,10 +634,7 @@ export const PassengerRideCockpit: React.FC<PassengerRideCockpitProps> = ({
             <div className="flex items-center gap-2 pt-2">
               <button
                 type="button"
-                onClick={() => {
-                  setShowReviewModal(false);
-                  if (onDismissCockpit) onDismissCockpit();
-                }}
+                onClick={handleSkipReview}
                 className="flex-1 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold rounded-xl text-xs cursor-pointer transition"
               >
                 পরে দেব

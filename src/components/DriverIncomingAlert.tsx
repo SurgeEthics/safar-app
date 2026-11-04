@@ -99,10 +99,10 @@ export const DriverIncomingAlert: React.FC<DriverIncomingAlertProps> = ({
         startDafRhythm();
       });
 
-      // Safety fallback: ensure Duff drum begins ringing if audio is blocked (8.2s)
+      // Safety fallback: ensure Duff drum begins ringing if audio is blocked (6.0s)
       voiceTimeoutRef.current = setTimeout(() => {
         startDafRhythm();
-      }, 8200);
+      }, 6000);
     }
 
     // 2. 25-second countdown timer

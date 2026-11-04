@@ -10,7 +10,7 @@ self.addEventListener('notificationclick', (event) => {
   
   const targetUrl = action === 'accept'
     ? `/?openDriverTrip=${requestId}&role=driver&action=accept`
-    : (data.url || `/?openDriverTrip=${requestId}&role=driver`);
+    : `/?openDriverTrip=${requestId}&role=driver&action=open`;
 
   event.waitUntil(
     self.clients.matchAll({ type: 'window', includeUncontrolled: true }).then((clientList) => {

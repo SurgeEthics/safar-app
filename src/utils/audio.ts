@@ -15,6 +15,31 @@ class SoundEffects {
   private isAlarmRinging = false;
   private currentVoiceAudio: HTMLAudioElement | null = null;
   private pauseTimeout: any = null;
+  private voiceAlertBuffer: AudioBuffer | null = null;
+  private isPreloadingVoice = false;
+
+  /**
+   * Pre-fetch and decode the authentic Bengali Male voice alert into memory.
+   * Ensures 0ms latency and eliminates any browser network or autoplay delay.
+   */
+  preloadVoiceAlert() {
+    if (typeof window === 'undefined' || this.voiceAlertBuffer || this.isPreloadingVoice) return;
+    this.isPreloadingVoice = true;
+    fetch('/driver_voice_male.mp3')
+      .then(res => res.arrayBuffer())
+      .then(arrayBuffer => {
+        const ctx = this.getContext();
+        if (ctx) {
+          return ctx.decodeAudioData(arrayBuffer).then(decoded => {
+            this.voiceAlertBuffer = decoded;
+          });
+        }
+      })
+      .catch(() => {})
+      .finally(() => {
+        this.isPreloadingVoice = false;
+      });
+  }
 
   private getContext(): AudioContext | null {
     if (typeof window === 'undefined') return null;
@@ -268,9 +293,11 @@ class SoundEffects {
   }
 
   /**
-   * Loud, clear, dignified human male voice announcement in Bengali:
+   * Loud, clear, dignified Bangladeshi Bengali MALE voice announcement for drivers:
    * "সফর অ্যাপের সম্মানিত চালক, আপনার একটি নতুন যাত্রার অনুরোধ এসেছে।"
-   * Followed by a strict 1-second pause before the loud Arabic Daf drum rhythm alarm begins!
+   * Strictly uses authentic male voice studio recording '/driver_voice_male.mp3'.
+   * Followed by a strict 1.0 second pause of silence before the loud Arabic Daf drum rhythm alarm begins!
+   * Zero robotic tone and zero female voice!
    */
   speakDriverVoiceAlert(onEnd?: () => void): boolean {
     if (typeof window === 'undefined') {
@@ -279,18 +306,7 @@ class SoundEffects {
     }
 
     try {
-      if (this.currentVoiceAudio) {
-        try {
-          this.currentVoiceAudio.pause();
-          this.currentVoiceAudio.currentTime = 0;
-        } catch {}
-        this.currentVoiceAudio = null;
-      }
-
-      if (this.pauseTimeout) {
-        clearTimeout(this.pauseTimeout);
-        this.pauseTimeout = null;
-      }
+      this.stopVoiceAndPause();
 
       let hasFinished = false;
       const finishAndPause = () => {
@@ -305,86 +321,70 @@ class SoundEffects {
         }, 1000);
       };
 
-      // 1. Play high-fidelity male Bengali announcement file
+      // 1. If Web Audio buffer is preloaded and ready, play instantly via AudioContext (0ms lag, loud 1.8x punch)
+      const ctx = this.getContext();
+      if (ctx && this.voiceAlertBuffer) {
+        try {
+          if (ctx.state === 'suspended') {
+            ctx.resume().catch(() => {});
+          }
+          const source = ctx.createBufferSource();
+          source.buffer = this.voiceAlertBuffer;
+          const gain = ctx.createGain();
+          gain.gain.setValueAtTime(1.8, ctx.currentTime);
+          source.connect(gain);
+          gain.connect(this.getDestinationNode(ctx));
+          source.onended = finishAndPause;
+          source.start(0);
+          this.activeSources.push(source);
+          return true;
+        } catch (e) {}
+      }
+
+      // 2. Play via HTML5 Audio element with loud broadcast volume
       const audio = new Audio('/driver_voice_male.mp3');
       audio.volume = 1.0;
       this.currentVoiceAudio = audio;
 
       audio.onended = finishAndPause;
       audio.onerror = () => {
-        // Fallback to Web Speech if audio loading fails
-        this.speakDriverVoiceWebSpeechFallback(onEnd);
+        // Fallback: proceed to 1s pause and Daf drums, NEVER use robotic female voice
+        finishAndPause();
       };
 
       const playPromise = audio.play();
       if (playPromise !== undefined) {
         playPromise.catch(() => {
-          // If browser blocked audio without user gesture, try Web Speech fallback
-          this.speakDriverVoiceWebSpeechFallback(onEnd);
+          finishAndPause();
         });
       }
 
-      // Safety timeout (8.0s) to guarantee pause + Duff alarm triggers
+      // Safety timeout: 5.5s (voice is 4.65s) to guarantee pause + Duff alarm triggers
       setTimeout(() => {
         if (!hasFinished) {
           finishAndPause();
         }
-      }, 8000);
+      }, 5500);
 
       return true;
     } catch {
-      return this.speakDriverVoiceWebSpeechFallback(onEnd);
+      if (onEnd) onEnd();
+      return false;
     }
   }
 
-  /**
-   * Web Speech API fallback for device environments where audio asset is unreachable
-   */
-  private speakDriverVoiceWebSpeechFallback(onEnd?: () => void): boolean {
-    if (typeof window === 'undefined' || !('speechSynthesis' in window)) {
-      if (onEnd) onEnd();
-      return false;
+  private stopVoiceAndPause() {
+    if (this.currentVoiceAudio) {
+      try {
+        this.currentVoiceAudio.pause();
+        this.currentVoiceAudio.currentTime = 0;
+      } catch {}
+      this.currentVoiceAudio = null;
     }
 
-    try {
-      window.speechSynthesis.cancel();
-      const text = 'সফর অ্যাপের সম্মানিত চালক, আপনার একটি নতুন যাত্রার অনুরোধ এসেছে।';
-      const utterance = new SpeechSynthesisUtterance(text);
-      utterance.lang = 'bn-BD';
-      utterance.rate = 0.92;
-      utterance.pitch = 0.85; // Deep masculine tone
-      utterance.volume = 1.0;
-
-      const voices = window.speechSynthesis.getVoices();
-      const maleBnVoice = voices.find(v => 
-        (v.lang && (v.lang.toLowerCase().startsWith('bn') || v.lang.toLowerCase().includes('bd'))) &&
-        (v.name.toLowerCase().includes('male') || !v.name.toLowerCase().includes('female'))
-      ) || voices.find(v => v.lang && v.lang.toLowerCase().startsWith('bn'));
-
-      if (maleBnVoice) {
-        utterance.voice = maleBnVoice;
-      }
-
-      let finished = false;
-      const done = () => {
-        if (!finished) {
-          finished = true;
-          this.pauseTimeout = setTimeout(() => {
-            this.pauseTimeout = null;
-            if (onEnd) onEnd();
-          }, 1000);
-        }
-      };
-
-      utterance.onend = done;
-      utterance.onerror = done;
-      setTimeout(() => { if (!finished) done(); }, 6000);
-
-      window.speechSynthesis.speak(utterance);
-      return true;
-    } catch {
-      if (onEnd) onEnd();
-      return false;
+    if (this.pauseTimeout) {
+      clearTimeout(this.pauseTimeout);
+      this.pauseTimeout = null;
     }
   }
 

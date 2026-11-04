@@ -51,7 +51,7 @@ class HighPriorityNotificationEngine {
       renotify: true,
       requireInteraction: true,
       silent: false,
-      vibrate: [500, 200, 500, 200, 800, 300, 500],
+      vibrate: [600, 200, 600, 200, 800, 300, 600],
       data: {
         requestId: request.id,
         url: `/?openDriverTrip=${request.id}&role=driver`
@@ -62,10 +62,12 @@ class HighPriorityNotificationEngine {
       ]
     };
 
-    // 2. Try Service Worker showNotification first (Standard for Android Chrome & PWA)
+    // 2. Try Service Worker showNotification first with 1200ms timeout race (no waiting or freezing)
     if ('serviceWorker' in navigator) {
       try {
-        const registration = await navigator.serviceWorker.ready;
+        const swReadyPromise = navigator.serviceWorker.ready;
+        const timeoutPromise = new Promise<null>((resolve) => setTimeout(() => resolve(null), 1200));
+        const registration = await Promise.race([swReadyPromise, timeoutPromise]);
         if (registration && typeof registration.showNotification === 'function') {
           await registration.showNotification(title, options);
           return;
@@ -88,7 +90,7 @@ class HighPriorityNotificationEngine {
         notif.onclick = () => {
           window.focus();
           notif.close();
-          window.location.href = `/?openDriverTrip=${request.id}&role=driver`;
+          window.location.href = `/?openDriverTrip=${request.id}&role=driver&action=open`;
         };
       }
     } catch {}
