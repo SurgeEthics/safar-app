@@ -1,46 +1,45 @@
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
-
-    // Drivers collection (Viewable by all passengers, editable by admin/drivers)
-    match /drivers/{driverId} {
-      allow read: if true;
-      allow write: if true;
-    }
-
-    // Stands collection (Viewable by all, editable from Super Admin Control Panel)
-    match /stands/{standId} {
-      allow read: if true;
-      allow write: if true;
-    }
-
-    // Categories collection (Viewable by all, editable from Super Admin Control Panel)
+    
+    // 1. Vehicle Categories (CNG, Auto, Bike, Ambulance, etc.)
     match /categories/{categoryId} {
       allow read: if true;
-      allow write: if true;
+      allow write: if true; // In production, restrict to authenticated admin
     }
 
-    // App Settings collection (Colors, themes, density, widgets, URLs)
-    match /settings/{settingId} {
+    // 2. Transport Stands (গফরগাঁও রেল স্টেশন স্ট্যান্ড, নতুন বাজার, ইত্যাদি)
+    match /stands/{standId} {
       allow read: if true;
-      allow write: if true;
+      allow write: if true; // In production, restrict to authenticated admin
     }
 
-    // Hotlines collection (Hospital, Fire, Police, National emergency numbers)
-    match /hotlines/{hotlineId} {
+    // 3. Driver Profiles & Live Status
+    match /drivers/{driverId} {
       allow read: if true;
-      allow write: if true;
+      allow create, update: if true;
+      allow delete: if true;
     }
 
-    // Ride Requests collection (Passengers create, drivers update status)
-    match /ride_requests/{requestId} {
-      allow read: if true;
-      allow write: if true;
+    // 4. Ride Bookings & Instant Requests
+    match /bookingRequests/{bookingId} {
+      allow read, create, update, delete: if true;
     }
 
-    // Admins collection
-    match /admins/{adminId} {
+    // 5. Trip History
+    match /trips/{tripId} {
       allow read, write: if true;
+    }
+
+    // 6. Global App Settings, Marquee Announcements, and Emergency Contacts
+    match /settings/{docId} {
+      allow read: if true;
+      allow write: if true;
+    }
+
+    // Catch-all
+    match /{document=**} {
+      allow read, write: if false;
     }
   }
 }
