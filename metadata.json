@@ -1,6 +1,0 @@
-{
-  "name": "সফর - গফরগাঁও স্মার্ট ট্রান্সপোর্ট",
-  "description": "স্মার্ট ট্রান্সপোর্ট এন্ড ইমারজেন্সি সার্ভিস",
-  "requestFramePermissions": ["geolocation"],
-  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
-}
