@@ -3385,10 +3385,13 @@ export default function App() {
     ) || (passengerPendingRequest?.status === 'pending' && !dismissedAlertIds[passengerPendingRequest.id] && isDriver ? passengerPendingRequest : null);
   }, [passengerRequests, dismissedAlertIds, driverProfile, passengerPendingRequest, userRole]);
 
-  // High-Priority push/vibration alert whenever an incoming ride is detected
+  // High-Priority push/vibration alert whenever an incoming ride is detected in background / screen off
   useEffect(() => {
     if (activeIncomingRideForDriver) {
-      highPriorityNotifications.showIncomingRideAlert(activeIncomingRideForDriver).catch(() => {});
+      // Only show system status bar notification if app is in background or screen is off
+      if (typeof document !== 'undefined' && document.visibilityState !== 'visible') {
+        highPriorityNotifications.showIncomingRideAlert(activeIncomingRideForDriver).catch(() => {});
+      }
     } else {
       highPriorityNotifications.clearIncomingRideAlert().catch(() => {});
     }

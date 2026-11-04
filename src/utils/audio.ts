@@ -369,11 +369,17 @@ class SoundEffects {
     try {
       this.stopVoiceAndPause();
 
+      // Trigger loud clear speech haptic vibration
+      this.triggerVibration([500, 200, 500, 200, 500]);
+
       let hasFinished = false;
       const finishAndPause = () => {
         if (hasFinished) return;
         hasFinished = true;
         this.currentVoiceAudio = null;
+
+        // Distinct rhythmic vibration pulse during the 1.0 second pause
+        this.triggerVibration([300, 200, 300]);
 
         // Exactly 1.0 second (1000ms) pause after speech completes before Duff drum rings
         this.pauseTimeout = setTimeout(() => {
@@ -382,37 +388,25 @@ class SoundEffects {
         }, 1000);
       };
 
-      // Safety timeout: 5.5s (voice is 4.65s) to guarantee 1s pause + Duff alarm triggers under all conditions
+      // Safety timeout: 5.5s (voice duration is ~4.68s) to guarantee 1s pause + Duff alarm triggers
       const safetyTimer = setTimeout(() => {
         if (!hasFinished) {
           finishAndPause();
         }
       }, 5500);
 
-      // 1. If Web Audio buffer is preloaded and ready, play instantly via AudioContext (0ms lag, loud 1.8x punch)
       const ctx = this.getContext();
-      if (ctx && this.voiceAlertBuffer) {
-        try {
-          if (ctx.state === 'suspended') {
-            ctx.resume().catch(() => {});
-          }
-          const source = ctx.createBufferSource();
-          source.buffer = this.voiceAlertBuffer;
-          const gain = ctx.createGain();
-          gain.gain.setValueAtTime(1.8, ctx.currentTime);
-          source.connect(gain);
-          gain.connect(this.getDestinationNode(ctx));
-          source.onended = () => {
-            clearTimeout(safetyTimer);
-            finishAndPause();
-          };
-          source.start(0);
-          this.activeSources.push(source);
-          return true;
-        } catch (e) {}
+      if (ctx) {
+        if (ctx.state === 'suspended') {
+          ctx.resume().catch(() => {});
+        }
+        if (this.alarmGain) {
+          this.alarmGain.gain.cancelScheduledValues(ctx.currentTime);
+          this.alarmGain.gain.setValueAtTime(1.8, ctx.currentTime);
+        }
       }
 
-      // 2. Play via HTML5 Audio element with loud broadcast volume
+      // 1. Play via HTML5 Audio element with loud broadcast volume (most compatible across mobile Android & iOS)
       const audio = new Audio('/driver_voice_male.mp3');
       audio.volume = 1.0;
       this.currentVoiceAudio = audio;
@@ -422,6 +416,24 @@ class SoundEffects {
         finishAndPause();
       };
       audio.onerror = () => {
+        // Fallback to Web Audio if HTML5 audio fails
+        if (ctx && this.voiceAlertBuffer) {
+          try {
+            const source = ctx.createBufferSource();
+            source.buffer = this.voiceAlertBuffer;
+            const gain = ctx.createGain();
+            gain.gain.setValueAtTime(1.8, ctx.currentTime);
+            source.connect(gain);
+            gain.connect(this.masterGain || ctx.destination);
+            source.onended = () => {
+              clearTimeout(safetyTimer);
+              finishAndPause();
+            };
+            source.start(0);
+            this.activeSources.push(source);
+            return;
+          } catch (e) {}
+        }
         clearTimeout(safetyTimer);
         finishAndPause();
       };
@@ -429,7 +441,25 @@ class SoundEffects {
       const playPromise = audio.play();
       if (playPromise !== undefined) {
         playPromise.catch(() => {
-          // If browser policy blocks HTML5 audio, allow safetyTimer to trigger finishAndPause
+          // If browser policy blocks HTML5 audio element, try Web Audio buffer
+          if (ctx && this.voiceAlertBuffer) {
+            try {
+              const source = ctx.createBufferSource();
+              source.buffer = this.voiceAlertBuffer;
+              const gain = ctx.createGain();
+              gain.gain.setValueAtTime(1.8, ctx.currentTime);
+              source.connect(gain);
+              gain.connect(this.masterGain || ctx.destination);
+              source.onended = () => {
+                clearTimeout(safetyTimer);
+                finishAndPause();
+              };
+              source.start(0);
+              this.activeSources.push(source);
+              return;
+            } catch (e) {}
+          }
+          // Otherwise safetyTimer guarantees progression
         });
       }
 

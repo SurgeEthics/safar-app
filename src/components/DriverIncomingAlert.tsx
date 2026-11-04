@@ -65,15 +65,18 @@ export const DriverIncomingAlert: React.FC<DriverIncomingAlertProps> = ({
     setIsProcessing(false);
     setSecondsRemaining(25);
 
-    // 0. Trigger High-Priority OS/Mobile & Service Worker Notification with continuous vibration (works with screen off)
-    highPriorityNotifications.showIncomingRideAlert({
-      id: request.id,
-      pickupPoint: request.pickupPoint,
-      destination: request.destination,
-      estFare: request.estFare,
-      distanceKm: request.distanceKm,
-      passengerName: request.passengerName
-    });
+    // 0. Only trigger system status-bar notification if the app is in background or screen is off.
+    // When the driver is actively looking at the app on screen, showing a duplicate system notification creates annoying clutter!
+    if (typeof document !== 'undefined' && document.visibilityState !== 'visible') {
+      highPriorityNotifications.showIncomingRideAlert({
+        id: request.id,
+        pickupPoint: request.pickupPoint,
+        destination: request.destination,
+        estFare: request.estFare,
+        distanceKm: request.distanceKm,
+        passengerName: request.passengerName
+      });
+    }
 
     // 1. Audio Sequence:
     // If opened from notification, skip voice announcement and continue vibration + Duff alarm immediately.
